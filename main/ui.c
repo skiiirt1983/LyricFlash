@@ -385,8 +385,8 @@ static void build_wifi_password(void)
     lv_textarea_set_max_length(wifi_password_input, 63);
     lv_obj_set_style_text_font(wifi_password_input, &lv_font_montserrat_18, 0);
     lv_obj_t *keyboard = lv_keyboard_create(screen);
-    lv_obj_set_size(keyboard, 390, 213);
-    lv_obj_align(keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_size(keyboard, 330, 167);
+    lv_obj_align(keyboard, LV_ALIGN_CENTER, 0, 78);
     lv_keyboard_set_textarea(keyboard, wifi_password_input);
     lv_obj_add_event_cb(keyboard, on_wifi_password_done, LV_EVENT_READY, NULL);
     lv_obj_add_event_cb(keyboard, on_wifi_password_done, LV_EVENT_CANCEL, NULL);
@@ -594,8 +594,8 @@ static void build_weather_location(void)
     lv_textarea_set_max_length(weather_location_input, LF_WEATHER_CITY_MAX);
     lv_obj_set_style_text_font(weather_location_input, &lv_font_montserrat_18, 0);
     lv_obj_t *keyboard = lv_keyboard_create(screen);
-    lv_obj_set_size(keyboard, 390, 218);
-    lv_obj_align(keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_size(keyboard, 330, 167);
+    lv_obj_align(keyboard, LV_ALIGN_CENTER, 0, 78);
     lv_keyboard_set_textarea(keyboard, weather_location_input);
     lv_obj_add_event_cb(keyboard, on_weather_city_keyboard, LV_EVENT_READY, NULL);
     lv_obj_add_event_cb(keyboard, on_weather_city_keyboard, LV_EVENT_CANCEL, NULL);
