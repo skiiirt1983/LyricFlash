@@ -305,7 +305,7 @@ static void build_home(void)
     make_base();
     lf_clock_clear();
     label(screen, "LYRICFLASH", 56, &lv_font_montserrat_24, prefs->text_color);
-    label(screen, "ALPHA 0.5", 103, &lv_font_montserrat_20, 0xB7C7D7);
+    label(screen, "ALPHA 0.7", 103, &lv_font_montserrat_20, 0xB7C7D7);
     battery_status = label(screen, "BATTERY", 151, &lv_font_montserrat_20, 0xDCE8F0);
     button(screen, "LYRICS", 242, 82, 0, 0, 0xA8D6FF, on_preview, NULL);
     label(screen, "Mic off", 302, system_font(), 0xB9CADB);
