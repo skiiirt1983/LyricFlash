@@ -27,6 +27,13 @@ static lv_obj_t *btn(lv_obj_t *parent,const char *caption,int x,int y,
     lv_obj_align(b,LV_ALIGN_CENTER,x,y);
     lv_obj_set_style_radius(b,18,0);
     lv_obj_set_style_bg_color(b,lv_color_hex(0x9BCFFA),0);
+    lv_obj_set_style_bg_grad_color(b,lv_color_hex(0x578CC7),0);
+    lv_obj_set_style_bg_grad_dir(b,LV_GRAD_DIR_VER,0);
+    lv_obj_set_style_border_width(b,2,0);
+    lv_obj_set_style_border_color(b,lv_color_hex(0xA3D7F7),0);
+    lv_obj_set_style_transform_width(b,-4,LV_STATE_PRESSED);
+    lv_obj_set_style_transform_height(b,-4,LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(b,lv_color_hex(0xC9EDFF),LV_STATE_PRESSED);
     lv_obj_add_event_cb(b,cb,LV_EVENT_CLICKED,NULL);
     lv_obj_t *text=lv_label_create(b);
     lv_label_set_text(text,caption);
