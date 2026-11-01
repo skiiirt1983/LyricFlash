@@ -1,8 +1,12 @@
 #include "network.h"
+#include "cJSON.h"
 #include "image_policy.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_netif.h"
+#include "esp_netif_sntp.h"
+#include <time.h>
+#include <stdlib.h>
 #include "esp_event.h"
 #include "esp_random.h"
 #include "esp_ota_ops.h"
@@ -24,9 +28,135 @@ static char address[32] = "Offline";
 static char ap_ssid[33];
 static char ap_pass[16];
 static char ota_pin[10];
+static uint8_t ota_pin_attempts;
 static TickType_t ota_expiry;
 static httpd_handle_t server;
+static bool time_sync_started;
+static void reboot_task(void *arg);
 
+/* Scan completion runs on the ESP event task, UI reads on the LVGL task. */
+static portMUX_TYPE wifi_scan_mux = portMUX_INITIALIZER_UNLOCKED;
+static lf_wifi_ap_t wifi_scan_list[LF_WIFI_MAX_RESULTS];
+static size_t wifi_scan_count;
+static int wifi_scan_state; /* 0 idle, 1 running, 2 ready, -1 failed */
+
+static void wifi_scan_done(void)
+{
+    wifi_ap_record_t records[LF_WIFI_MAX_RESULTS] = {0};
+    uint16_t found = LF_WIFI_MAX_RESULTS;
+    esp_err_t err = esp_wifi_scan_get_ap_records(&found, records);
+    lf_wifi_ap_t entries[LF_WIFI_MAX_RESULTS] = {0};
+    size_t count = 0;
+    if (err == ESP_OK) {
+        for (uint16_t i = 0; i < found && count < LF_WIFI_MAX_RESULTS; i++) {
+            if (!records[i].ssid[0]) continue; /* Hide non-broadcast SSIDs. */
+            char name[33] = {0};
+            memcpy(name, records[i].ssid, 32);
+            bool duplicate = false;
+            for (size_t j = 0; j < count; j++) {
+                if (strcmp(entries[j].ssid, name) == 0) { duplicate = true; break; }
+            }
+            if (duplicate) continue;
+            strlcpy(entries[count].ssid, name, sizeof(entries[count].ssid));
+            entries[count].rssi = records[i].rssi;
+            entries[count].secured = records[i].authmode != WIFI_AUTH_OPEN;
+            count++;
+        }
+    }
+    portENTER_CRITICAL(&wifi_scan_mux);
+    wifi_scan_count = count;
+    memcpy(wifi_scan_list, entries, sizeof(entries));
+    wifi_scan_state = err == ESP_OK ? 2 : -1;
+    portEXIT_CRITICAL(&wifi_scan_mux);
+}
+
+bool lf_network_scan_start(void)
+{
+    portENTER_CRITICAL(&wifi_scan_mux);
+    if (wifi_scan_state == 1) {
+        portEXIT_CRITICAL(&wifi_scan_mux);
+        return false;
+    }
+    wifi_scan_count = 0;
+    wifi_scan_state = 1;
+    portEXIT_CRITICAL(&wifi_scan_mux);
+    /* ESP-IDF cannot scan in AP-only mode. Keep the fallback setup AP
+       available while enabling the STA interface for an asynchronous scan. */
+    esp_err_t err = ESP_OK;
+    if (in_ap) err = esp_wifi_set_mode(WIFI_MODE_APSTA);
+    if (err == ESP_OK) err = esp_wifi_scan_start(NULL, false);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Wi-Fi scan could not start: %s", esp_err_to_name(err));
+        portENTER_CRITICAL(&wifi_scan_mux);
+        wifi_scan_state = -1;
+        portEXIT_CRITICAL(&wifi_scan_mux);
+        return false;
+    }
+    return true;
+}
+
+int lf_network_scan_results(lf_wifi_ap_t *out, size_t max, size_t *count)
+{
+    if (!count || (max && !out)) return -1;
+    portENTER_CRITICAL(&wifi_scan_mux);
+    int state = wifi_scan_state;
+    size_t copied = wifi_scan_count < max ? wifi_scan_count : max;
+    if (out && copied) memcpy(out, wifi_scan_list, copied * sizeof(*out));
+    *count = copied;
+    portEXIT_CRITICAL(&wifi_scan_mux);
+    return state;
+}
+
+/* Save selection from the on-device screen, then restart the normal
+   STA startup path. Credentials are never printed in ESP logs. */
+bool lf_network_save_wifi(const char *ssid, const char *password)
+{
+    if (!ssid || !password) return false;
+    size_t sn = strlen(ssid), pn = strlen(password);
+    if (!sn || sn > 32 || pn > 63 || (pn > 0 && pn < 8)) return false;
+    nvs_handle_t h;
+    if (nvs_open("lf_network", NVS_READWRITE, &h) != ESP_OK) return false;
+    esp_err_t e = nvs_set_str(h, "ssid", ssid);
+    if (e == ESP_OK) e = nvs_set_str(h, "password", password);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    if (e != ESP_OK) return false;
+    return true;
+}
+
+void lf_network_restart(void)
+{
+    xTaskCreate(reboot_task, "lf_wifi_reboot", 2048, NULL, 3, NULL);
+}
+
+bool lf_network_is_connected(void)
+{
+    return !in_ap && connected_event &&
+           (xEventGroupGetBits(connected_event) & LF_CONNECTED);
+}
+
+/* Pacific Time is the Alpha default. Later versions can expose time zone
+   as a user setting. NTP needs Wi-Fi but does not require a cloud account. */
+static void start_time_sync(void)
+{
+    setenv("TZ", "PST8PDT,M3.2.0,M11.1.0", 1);
+    tzset();
+    if (time_sync_started) return;
+    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    esp_err_t err = esp_netif_sntp_init(&config);
+    if (err == ESP_OK) time_sync_started = true;
+    else ESP_LOGW(TAG, "Time sync unavailable: %s", esp_err_to_name(err));
+}
+bool lf_network_connected_ssid(char *out, size_t size)
+{
+    if (!out || !size) return false;
+    out[0] = 0;
+    if (!lf_network_is_connected()) return false;
+    wifi_ap_record_t ap = {0};
+    if (esp_wifi_sta_get_ap_info(&ap) != ESP_OK) return false;
+    snprintf(out, size, "%.32s", (const char *)ap.ssid);
+    return out[0] != 0;
+}
 static bool nvs_wifi_load(char *ssid, size_t ns, char *pass, size_t np)
 {
     nvs_handle_t h;
@@ -40,8 +170,12 @@ static bool nvs_wifi_load(char *ssid, size_t ns, char *pass, size_t np)
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
-    if(base==WIFI_EVENT && id==WIFI_EVENT_STA_DISCONNECTED && !in_ap)
+    if(base==WIFI_EVENT && id==WIFI_EVENT_SCAN_DONE) wifi_scan_done();
+    if(base==WIFI_EVENT && id==WIFI_EVENT_STA_DISCONNECTED && !in_ap) {
+        xEventGroupClearBits(connected_event, LF_CONNECTED);
+        strlcpy(address, "Offline", sizeof(address));
         esp_wifi_connect();
+    }
     if(base==IP_EVENT && id==IP_EVENT_STA_GOT_IP) {
         const ip_event_got_ip_t *got=(const ip_event_got_ip_t *)data;
         snprintf(address,sizeof(address),IPSTR,IP2STR(&got->ip_info.ip));
@@ -56,7 +190,9 @@ static bool pin_matches(httpd_req_t *req)
     if(httpd_req_get_hdr_value_str(req,"X-LyricFlash-PIN",pin,sizeof(pin))!=ESP_OK)
         return false;
     /* No OTA unless explicitly armed from the device touchscreen. */
-    return lf_network_ota_armed() && strcmp(pin,ota_pin)==0;
+    if (!lf_network_ota_armed() || ota_pin_attempts >= 5) return false;
+    ota_pin_attempts++;
+    return strcmp(pin,ota_pin)==0;
 }
 static void reboot_task(void *arg)
 {
@@ -64,12 +200,22 @@ static void reboot_task(void *arg)
 }
 static const char home_page[] =
 "<!doctype html><html lang='en'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-"<title>LyricFlash Device</title><style>body{font:16px system-ui;background:#0d1518;color:#edf5f7;max-width:500px;margin:35px auto;padding:20px}"
-"button,input{font:inherit;padding:12px;border-radius:12px;box-sizing:border-box;width:100%;margin:6px 0}"
-"button{background:#86e3ae;border:0;color:#071b12;font-weight:700}input{background:#1b272c;color:white;border:1px solid #4c626a}"
-"section{border:1px solid #34464b;border-radius:20px;padding:20px;margin:16px 0}</style>"
-"<h1>LyricFlash</h1><p>ESP32-S3 / Local device manager</p>"
-"<section><h2>Wi-Fi setup</h2><input id='ssid' placeholder='2.4GHz Wi-Fi name'>"
+"<title>LyricFlash Device</title><meta name='theme-color' content='#050910'>"
+"<style>*{box-sizing:border-box}body{font:16px system-ui,sans-serif;"
+"background:radial-gradient(circle at 15% 0%,#102d56,#050910 52%);"
+"color:#f0f6ff;max-width:560px;margin:35px auto;padding:20px;line-height:1.55}"
+"h1{letter-spacing:.08em;color:#62b5ff;margin-bottom:0}p{color:#aabbd4}"
+"h2{font-size:20px;margin-top:0;color:#eaf5ff}"
+"button,input,select{font:inherit;padding:14px;border-radius:12px;width:100%;margin:7px 0}"
+"button{background:#62b5ff;border:1px solid #8fc8ff;color:#07182d;font-weight:750;cursor:pointer}"
+"button:hover{background:#91ccff}button:focus-visible,input:focus-visible{outline:2px solid #9cd6ff;outline-offset:2px}"
+"input,select{background:#0b1525;color:#f0f6ff;border:1px solid #395780}"
+"section{background:#101824;border:1px solid #293b58;border-radius:19px;padding:23px;margin:20px 0}"
+"#msg{color:#a8d7ff;overflow-wrap:anywhere}</style>"
+"<h1>LYRICFLASH</h1><p>ESP32-S3 / Local device manager</p>"
+"<section><h2>Wi-Fi setup</h2><p>Select your 2.4 GHz network or type its name.</p>"
+"<button onclick='scan()'>Scan nearby Wi-Fi</button><select id='networks' onchange='pick()'>"
+"<option value=''>Choose a network</option></select><input id='ssid' placeholder='Wi-Fi name'>"
 "<input id='pass' type='password' placeholder='Wi-Fi password'>"
 "<button onclick='save()'>Save Wi-Fi &amp; restart</button></section>"
 "<section><h2>Firmware update</h2><p>Tap <b>ARM OTA</b> on the device, then enter the PIN shown on screen.</p>"
@@ -77,6 +223,12 @@ static const char home_page[] =
 "<input id='bin' type='file' accept='.bin,application/octet-stream'>"
 "<button onclick='update()'>Install application-only OTA firmware</button></section>"
 "<p id='msg' role='status'></p><script>const msg=t=>document.getElementById('msg').textContent=t;"
+"function pick(){const n=document.getElementById('networks');if(n.value)document.getElementById('ssid').value=n.value;}"
+"async function scan(){msg('Scanning Wi-Fi...');try{await fetch('/api/wifi-scan?refresh=1');poll(0);}catch(e){msg('Scan unavailable');}}"
+"async function poll(attempt){try{let r=await fetch('/api/wifi-scan');let d=await r.json();if(d.state==='scanning'&&attempt<16){setTimeout(()=>poll(attempt+1),650);return;}"
+"let select=document.getElementById('networks');select.replaceChildren(new Option('Choose a network',''));"
+"for(let n of d.networks||[])select.add(new Option(n.ssid+(n.secured?' [secured]':' [open]'),n.ssid));"
+"msg(d.state==='ready'?(d.networks.length+' networks found'):'Scan failed. Try again.');}catch(e){msg('Scan unavailable');}}"
 "async function save(){let r=await fetch('/wifi',{method:'POST',headers:{'Content-Type':'application/json'},"
 "body:JSON.stringify({ssid:document.getElementById('ssid').value,password:document.getElementById('pass').value})});msg(await r.text());}"
 "async function update(){let f=document.getElementById('bin').files[0];if(!f)return msg('Choose an OTA .bin file first');"
@@ -91,7 +243,7 @@ static esp_err_t handle_home(httpd_req_t *req)
 static esp_err_t handle_info(httpd_req_t *req)
 {
     char out[220];
-    snprintf(out,sizeof(out),"{\"app\":\"LyricFlash\",\"version\":\"0.3.0-alpha\",\"mode\":\"%s\",\"address\":\"%s\",\"ota_armed\":%s}",
+    snprintf(out,sizeof(out),"{\"app\":\"LyricFlash\",\"version\":\"0.5.0-alpha\",\"mode\":\"%s\",\"address\":\"%s\",\"ota_armed\":%s}",
         in_ap?"ap":"station",address,lf_network_ota_armed()?"true":"false");
     httpd_resp_set_type(req,"application/json");
     return httpd_resp_sendstr(req,out);
@@ -102,7 +254,7 @@ static esp_err_t handle_device(httpd_req_t *req)
     esp_wifi_get_mac(in_ap?WIFI_IF_AP:WIFI_IF_STA,mac);
     char response[220];
     snprintf(response,sizeof(response),
-        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.3.0-alpha\","
+        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.5.0-alpha\","
         "\"device_id\":\"LF-%02X%02X%02X\",\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\"}",
         mac[3],mac[4],mac[5],mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
     httpd_resp_set_type(req,"application/json");
@@ -119,8 +271,45 @@ static esp_err_t handle_wifi(httpd_req_t *req)
     extern bool lf_wifi_parse_and_save(const char *body);
     if(!lf_wifi_parse_and_save(json)){httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Wi-Fi name or password invalid");return ESP_FAIL;}
     httpd_resp_sendstr(req,"Saved. ESP32 restarting; connect to your home Wi-Fi.");
-    xTaskCreate(reboot_task,"lf_reboot",2048,NULL,3,NULL);
+    lf_network_restart();
     return ESP_OK;
+}
+/* GET /api/wifi-scan: starts a scan or returns the latest results.
+   Result is transient, never includes saved Wi-Fi passwords. */
+static esp_err_t handle_scan(httpd_req_t *req)
+{
+    lf_wifi_ap_t networks[LF_WIFI_MAX_RESULTS] = {0};
+    size_t count = 0;
+    int state = lf_network_scan_results(networks, LF_WIFI_MAX_RESULTS, &count);
+    char query[28] = {0};
+    (void)httpd_req_get_url_query_str(req, query, sizeof query);
+    if (state != 1 && strcmp(query, "refresh=1") == 0) {
+        if (lf_network_scan_start()) {
+            state = 1;
+            count = 0;
+        }
+    }
+    cJSON *root = cJSON_CreateObject();
+    cJSON *items = cJSON_AddArrayToObject(root, "networks");
+    cJSON_AddStringToObject(root, "state", state == 1 ? "scanning" :
+                                        state == 2 ? "ready" : "error");
+    if (state == 2 && items) {
+        for (size_t i = 0; i < count; ++i) {
+            cJSON *item = cJSON_CreateObject();
+            if (!item) break;
+            cJSON_AddStringToObject(item, "ssid", networks[i].ssid);
+            cJSON_AddBoolToObject(item, "secured", networks[i].secured);
+            cJSON_AddNumberToObject(item, "rssi", networks[i].rssi);
+            cJSON_AddItemToArray(items, item);
+        }
+    }
+    char *json = root ? cJSON_PrintUnformatted(root) : NULL;
+    cJSON_Delete(root);
+    if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Scan response failed");
+    httpd_resp_set_type(req, "application/json");
+    esp_err_t status = httpd_resp_sendstr(req, json);
+    free(json);
+    return status;
 }
 static esp_err_t handle_update(httpd_req_t *req)
 {
@@ -173,6 +362,7 @@ static bool serve(void)
         {.uri="/api/info",.method=HTTP_GET,.handler=handle_info},
         {.uri="/api/device",.method=HTTP_GET,.handler=handle_device},
         {.uri="/wifi",.method=HTTP_POST,.handler=handle_wifi},
+        {.uri="/api/wifi-scan",.method=HTTP_GET,.handler=handle_scan},
         {.uri="/update",.method=HTTP_POST,.handler=handle_update}
     };
     for(size_t i=0;i<sizeof(routes)/sizeof(routes[0]);i++)
@@ -183,13 +373,13 @@ const char *lf_network_address(void){return address;}
 const char *lf_network_ap_ssid(void){return ap_ssid;}
 const char *lf_network_ap_password(void){return ap_pass;}
 const char *lf_network_ota_pin(void){return ota_pin;}
-void lf_network_arm_ota(void){ota_expiry=xTaskGetTickCount()+pdMS_TO_TICKS(120000);}
+void lf_network_arm_ota(void){ota_pin_attempts=0;ota_expiry=xTaskGetTickCount()+pdMS_TO_TICKS(120000);}
 bool lf_network_ota_armed(void){return ota_expiry && (int32_t)(ota_expiry-xTaskGetTickCount())>0;}
 
 bool lf_network_start(void)
 {
     uint32_t seed=esp_random();
-    snprintf(ota_pin,sizeof ota_pin,"%08" PRIu32,seed%100000000u);
+    snprintf(ota_pin,sizeof ota_pin,"%04" PRIu32,seed%10000u);
     if(!connected_event) connected_event=xEventGroupCreate();
     if(!connected_event) return false;
     if(esp_netif_init()!=ESP_OK) return false;
@@ -216,6 +406,7 @@ bool lf_network_start(void)
             EventBits_t bits=xEventGroupWaitBits(connected_event,LF_CONNECTED,pdFALSE,pdFALSE,pdMS_TO_TICKS(12000));
             if(bits & LF_CONNECTED){
                 ESP_LOGI(TAG,"Connected to configured Wi-Fi at %s",address);
+                start_time_sync();
                 return serve();
             }
         }
@@ -227,7 +418,7 @@ bool lf_network_start(void)
     uint8_t mac[6]={0};
     esp_wifi_get_mac(WIFI_IF_STA,mac);
     snprintf(ap_ssid,sizeof ap_ssid,"LyricFlash-%02X%02X",mac[4],mac[5]);
-    snprintf(ap_pass,sizeof ap_pass,"LF%010" PRIu32,(uint32_t)(esp_random()%1000000000u));
+    snprintf(ap_pass,sizeof ap_pass,"LF%06" PRIu32,(uint32_t)(esp_random()%1000000u));
     wifi_config_t apcfg={0};
     strlcpy((char *)apcfg.ap.ssid,ap_ssid,sizeof(apcfg.ap.ssid));
     strlcpy((char *)apcfg.ap.password,ap_pass,sizeof(apcfg.ap.password));
