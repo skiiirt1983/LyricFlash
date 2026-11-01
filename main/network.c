@@ -329,7 +329,7 @@ bool lf_network_start(void)
     uint8_t mac[6]={0};
     esp_wifi_get_mac(WIFI_IF_STA,mac);
     snprintf(ap_ssid,sizeof ap_ssid,"LyricFlash-%02X%02X",mac[4],mac[5]);
-    snprintf(ap_pass,sizeof ap_pass,"LF%010" PRIu32,(uint32_t)(esp_random()%1000000000u));
+    snprintf(ap_pass,sizeof ap_pass,"LF%06" PRIu32,(uint32_t)(esp_random()%1000000u));
     wifi_config_t apcfg={0};
     strlcpy((char *)apcfg.ap.ssid,ap_ssid,sizeof(apcfg.ap.ssid));
     strlcpy((char *)apcfg.ap.password,ap_pass,sizeof(apcfg.ap.password));
