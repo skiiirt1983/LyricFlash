@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-#define LF_CONFIG_SCHEMA 4U
+#define LF_CONFIG_SCHEMA 5U
 #define LF_CONFIG_NS "lyric_ui"
 
 typedef struct {
@@ -16,7 +16,18 @@ typedef struct {
     uint32_t accent_color;     // 24-bit RRGGBB
     int32_t timing_offset_ms;  // -10000 .. +10000
     uint8_t line_spacing_px;  // 0 .. 24
-    uint8_t clock_face;       // 0 diver, 1 midnight, 2 classic, 3 retro LCD, 4 sundial
+    uint8_t clock_face;       // 0 diver, 1 midnight, 2 classic, 3 retro LCD, 4 sundial, 5 basic
+    /* Basic face is an additional independent, persistently styled option. */
+    uint8_t basic_font_style;    // 0 .. 4 typographic presets
+    uint8_t basic_font_size;     // 0 .. 100 slider
+    uint8_t basic_ring_mode;     // 0 solid, 1 two-tone, 2 three-tone
+    uint8_t basic_show_date;     // 0 .. 1
+    uint8_t basic_weather;       // 0 .. 1
+    uint32_t basic_background;   // 24-bit RGB
+    uint32_t basic_foreground;   // 24-bit RGB
+    uint32_t basic_ring_a;
+    uint32_t basic_ring_b;
+    uint32_t basic_ring_c;
     uint8_t show_progress;    // 0 .. 1
 } lf_settings_t;
 
