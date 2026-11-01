@@ -20,3 +20,7 @@ CONFIG_LV_FONT_MONTSERRAT_26=y
 # ESP-IDF 5.5.4: rollback requires a rollback-enabled bootloader.
 # This default does NOT alter the bootloader already installed by PrintSphere via app-only OTA.
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+CONFIG_LV_FONT_MONTSERRAT_36=y
+CONFIG_LV_FONT_MONTSERRAT_40=y
+CONFIG_LV_FONT_MONTSERRAT_48=y
