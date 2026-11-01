@@ -88,7 +88,6 @@ static void add_hour_markers(lv_obj_t *parent)
         int x = (int)(cosf(a) * 158.f);
         int y = (int)(sinf(a) * 158.f);
         if (i == 12) {
-            round_panel; /* retain simple dial geometry without an image asset */
             for (int j = -1; j <= 1; j += 2) {
                 lv_obj_t *mark = lv_obj_create(parent);
                 lv_obj_remove_flag(mark, LV_OBJ_FLAG_SCROLLABLE);
