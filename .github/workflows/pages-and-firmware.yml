@@ -1,0 +1,71 @@
+name: LyricFlash USB Build and Pages
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'main/**'
+      - 'partitions.csv'
+      - 'sdkconfig.defaults'
+      - '.github/workflows/pages-and-firmware.yml'
+      - 'tools/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test source
+        run: bash tests/run_tests.sh
+      - name: Compile firmware
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.4
+          target: esp32s3
+      - name: Merge bootloader partition table and app
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.4
+          target: esp32s3
+          command: idf.py merge-bin -o lyricflash-full.bin -f raw
+      - name: Validate and prepare site
+        run: |
+          python3 tools/check_build.py build/lyricflash.bin
+          python3 tools/validate_full_image.py build/lyricflash-full.bin build/lyricflash.bin
+          mkdir -p _site/beta/firmware
+          cp -a docs/. _site/
+          cp build/lyricflash-full.bin _site/beta/firmware/lyricflash-full.bin
+          cp build/lyricflash.bin _site/beta/firmware/lyricflash-ota.bin
+          python3 tools/prepare_site.py _site
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LyricFlash-Alpha-0.3-USB-UNTESTED
+          path: _site/beta/firmware/
+      - uses: actions/configure-pages@v5
+        if: github.ref == 'refs/heads/main'
+      - uses: actions/upload-pages-artifact@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: _site
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
