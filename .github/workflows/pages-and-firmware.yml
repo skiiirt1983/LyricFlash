@@ -47,7 +47,7 @@ jobs:
           python3 tools/prepare_site.py _site
       - uses: actions/upload-artifact@v4
         with:
-          name: LyricFlash-Alpha-0.4-OTA-UNTESTED
+          name: LyricFlash-Alpha-0.5-OTA-UNTESTED
           path: _site/beta/firmware/lyricflash-ota.bin
       - uses: actions/configure-pages@v5
         if: github.ref == 'refs/heads/main'
