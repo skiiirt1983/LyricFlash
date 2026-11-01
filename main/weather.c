@@ -17,6 +17,9 @@ static portMUX_TYPE weather_mux = portMUX_INITIALIZER_UNLOCKED;
 static lf_weather_config_t config = {.enabled = false, .interval_minutes = 30, .city = ""};
 static char weather_strip[68];
 static char weather_details[256];
+static int weather_temperature;
+static int weather_code;
+static bool weather_numeric_valid;
 static uint32_t config_generation;
 static TaskHandle_t weather_task;
 
@@ -100,7 +103,7 @@ static const char *condition(int code)
     return "WEATHER";
 }
 static bool fetch_weather(const char *city, char *result, size_t cap,
-                          char *details, size_t details_cap)
+                          char *details, size_t details_cap, int *out_temp, int *out_code)
 {
     char encoded[3 * (LF_WEATHER_CITY_MAX + 1)] = {0};
     if (!encode_city(city, encoded, sizeof encoded)) return false;
@@ -140,6 +143,8 @@ static bool fetch_weather(const char *city, char *result, size_t cap,
         double t = temp->valuedouble;
         int rounded = (int)(t < 0 ? t - 0.5 : t + 0.5);
         snprintf(result, cap, "%s  %dC  %s", short_name, rounded, condition(code->valueint));
+        if (out_temp) *out_temp = rounded;
+        if (out_code) *out_code = code->valueint;
     }
     if (valid && details && details_cap) {
         cJSON *feels = cJSON_GetObjectItemCaseSensitive(current, "apparent_temperature");
@@ -213,8 +218,20 @@ bool lf_weather_save_config(const lf_weather_config_t *next)
     set_strip("");
     portENTER_CRITICAL(&weather_mux);
     weather_details[0] = 0;
+    weather_numeric_valid = false;
     portEXIT_CRITICAL(&weather_mux);
     return true;
+}
+bool lf_weather_get_current(int *temp_c, int *wmo_code)
+{
+    portENTER_CRITICAL(&weather_mux);
+    bool valid = weather_numeric_valid;
+    if (valid) {
+        if (temp_c) *temp_c = weather_temperature;
+        if (wmo_code) *wmo_code = weather_code;
+    }
+    portEXIT_CRITICAL(&weather_mux);
+    return valid;
 }
 void lf_weather_get_detail(char *out, size_t max)
 {
@@ -253,7 +270,9 @@ static void worker(void *arg)
                    (int32_t)(xTaskGetTickCount() - next_poll) >= 0) {
             char reading[68] = {0};
             char detailed[256] = {0};
-            bool ok = fetch_weather(c.city, reading, sizeof reading, detailed, sizeof detailed);
+            int t=0, code=0;
+            bool ok = fetch_weather(c.city, reading, sizeof reading,
+                                    detailed, sizeof detailed, &t, &code);
             /* A changed configuration must not display a stale result. */
             portENTER_CRITICAL(&weather_mux);
             bool unchanged = config_generation == generation;
@@ -263,6 +282,11 @@ static void worker(void *arg)
                 portENTER_CRITICAL(&weather_mux);
                 snprintf(weather_details, sizeof weather_details, "%s",
                          ok ? detailed : "Weather unavailable. Check Wi-Fi and the selected city.");
+                if (ok) {
+                    weather_temperature = t;
+                    weather_code = code;
+                    weather_numeric_valid = true;
+                }
                 portEXIT_CRITICAL(&weather_mux);
             }
             uint32_t delay_ms = ok ? ((uint32_t)c.interval_minutes * 60000U) : 60000U;
