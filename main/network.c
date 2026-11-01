@@ -27,6 +27,7 @@ static char address[32] = "Offline";
 static char ap_ssid[33];
 static char ap_pass[16];
 static char ota_pin[10];
+static uint8_t ota_pin_attempts;
 static TickType_t ota_expiry;
 static httpd_handle_t server;
 static bool time_sync_started;
@@ -119,8 +120,12 @@ bool lf_network_save_wifi(const char *ssid, const char *password)
     if (e == ESP_OK) e = nvs_commit(h);
     nvs_close(h);
     if (e != ESP_OK) return false;
-    xTaskCreate(reboot_task, "lf_wifi_reboot", 2048, NULL, 3, NULL);
     return true;
+}
+
+void lf_network_restart(void)
+{
+    xTaskCreate(reboot_task, "lf_wifi_reboot", 2048, NULL, 3, NULL);
 }
 
 bool lf_network_is_connected(void)
@@ -184,7 +189,9 @@ static bool pin_matches(httpd_req_t *req)
     if(httpd_req_get_hdr_value_str(req,"X-LyricFlash-PIN",pin,sizeof(pin))!=ESP_OK)
         return false;
     /* No OTA unless explicitly armed from the device touchscreen. */
-    return lf_network_ota_armed() && strcmp(pin,ota_pin)==0;
+    if (!lf_network_ota_armed() || ota_pin_attempts >= 5) return false;
+    ota_pin_attempts++;
+    return strcmp(pin,ota_pin)==0;
 }
 static void reboot_task(void *arg)
 {
@@ -255,8 +262,45 @@ static esp_err_t handle_wifi(httpd_req_t *req)
     extern bool lf_wifi_parse_and_save(const char *body);
     if(!lf_wifi_parse_and_save(json)){httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Wi-Fi name or password invalid");return ESP_FAIL;}
     httpd_resp_sendstr(req,"Saved. ESP32 restarting; connect to your home Wi-Fi.");
-    xTaskCreate(reboot_task,"lf_reboot",2048,NULL,3,NULL);
+    lf_network_restart();
     return ESP_OK;
+}
+/* GET /api/wifi-scan: starts a scan or returns the latest results.
+   Result is transient, never includes saved Wi-Fi passwords. */
+static esp_err_t handle_scan(httpd_req_t *req)
+{
+    lf_wifi_ap_t networks[LF_WIFI_MAX_RESULTS] = {0};
+    size_t count = 0;
+    int state = lf_network_scan_results(networks, LF_WIFI_MAX_RESULTS, &count);
+    char query[28] = {0};
+    (void)httpd_req_get_url_query_str(req, query, sizeof query);
+    if (state != 1 && strcmp(query, "refresh=1") == 0) {
+        if (lf_network_scan_start()) {
+            state = 1;
+            count = 0;
+        }
+    }
+    cJSON *root = cJSON_CreateObject();
+    cJSON *items = cJSON_AddArrayToObject(root, "networks");
+    cJSON_AddStringToObject(root, "state", state == 1 ? "scanning" :
+                                        state == 2 ? "ready" : "error");
+    if (state == 2 && items) {
+        for (size_t i = 0; i < count; ++i) {
+            cJSON *item = cJSON_CreateObject();
+            if (!item) break;
+            cJSON_AddStringToObject(item, "ssid", networks[i].ssid);
+            cJSON_AddBoolToObject(item, "secured", networks[i].secured);
+            cJSON_AddNumberToObject(item, "rssi", networks[i].rssi);
+            cJSON_AddItemToArray(items, item);
+        }
+    }
+    char *json = root ? cJSON_PrintUnformatted(root) : NULL;
+    cJSON_Delete(root);
+    if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Scan response failed");
+    httpd_resp_set_type(req, "application/json");
+    esp_err_t status = httpd_resp_sendstr(req, json);
+    free(json);
+    return status;
 }
 static esp_err_t handle_update(httpd_req_t *req)
 {
@@ -309,6 +353,7 @@ static bool serve(void)
         {.uri="/api/info",.method=HTTP_GET,.handler=handle_info},
         {.uri="/api/device",.method=HTTP_GET,.handler=handle_device},
         {.uri="/wifi",.method=HTTP_POST,.handler=handle_wifi},
+        {.uri="/api/wifi-scan",.method=HTTP_GET,.handler=handle_scan},
         {.uri="/update",.method=HTTP_POST,.handler=handle_update}
     };
     for(size_t i=0;i<sizeof(routes)/sizeof(routes[0]);i++)
@@ -319,13 +364,13 @@ const char *lf_network_address(void){return address;}
 const char *lf_network_ap_ssid(void){return ap_ssid;}
 const char *lf_network_ap_password(void){return ap_pass;}
 const char *lf_network_ota_pin(void){return ota_pin;}
-void lf_network_arm_ota(void){ota_expiry=xTaskGetTickCount()+pdMS_TO_TICKS(120000);}
+void lf_network_arm_ota(void){ota_pin_attempts=0;ota_expiry=xTaskGetTickCount()+pdMS_TO_TICKS(120000);}
 bool lf_network_ota_armed(void){return ota_expiry && (int32_t)(ota_expiry-xTaskGetTickCount())>0;}
 
 bool lf_network_start(void)
 {
     uint32_t seed=esp_random();
-    snprintf(ota_pin,sizeof ota_pin,"%08" PRIu32,seed%100000000u);
+    snprintf(ota_pin,sizeof ota_pin,"%04" PRIu32,seed%10000u);
     if(!connected_event) connected_event=xEventGroupCreate();
     if(!connected_event) return false;
     if(esp_netif_init()!=ESP_OK) return false;
