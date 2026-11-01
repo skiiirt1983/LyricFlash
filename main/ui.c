@@ -24,7 +24,6 @@ static lv_obj_t *scroll_panel;
 static lv_obj_t *lyrics_label;
 static lv_obj_t *speed_text;
 static lv_obj_t *brightness_text;
-static lv_obj_t *font_text;
 static lv_obj_t *timeout_text;
 static lv_obj_t *screen;
 static lv_obj_t *battery_status;
@@ -42,7 +41,6 @@ static lv_obj_t *pause_button;
 static lv_obj_t *wifi_list;
 static lv_obj_t *wifi_status;
 static lv_obj_t *wifi_password_status;
-static lv_obj_t *wifi_password_input;
 static lf_wifi_ap_t wifi_aps[LF_WIFI_MAX_RESULTS];
 static size_t wifi_ap_count;
 static char selected_wifi[33];
@@ -51,14 +49,7 @@ static int wifi_state_previous;
 static lv_obj_t *clockface_text;
 static lv_obj_t *weather_status_text;
 static lv_obj_t *weather_city_text;
-static lv_obj_t *weather_location_input;
 static uint64_t clock_last_refresh;
-static lv_obj_t *wheel_roller;
-static lv_obj_t *wheel_text;
-static lv_obj_t *wheel_mode_text;
-static char wheel_value[65];
-static int wheel_mode;
-static bool wheel_for_wifi;
 static lv_obj_t *weather_detail_text;
 static uint64_t weather_detail_refresh;
 static int page; // 0 home, 1 preview, 2 settings hub, 3 sleep, 4 wifi, 5 wifi pass, 6 clock, 7 clock settings, 8 weather city, 9 lyrics, 10 device, 11 weather
@@ -129,7 +120,6 @@ static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int heigh
     return b;
 }
 
-static void on_sleep(lv_event_t *e);
 static void build_home(void);
 static void build_preview(void);
 static void build_settings(void);
@@ -141,9 +131,9 @@ static void build_weather_location(void);
 static void build_lyrics_settings(void);
 static void build_device_settings(void);
 static void build_weather_details(void);
-static void build_wheel(bool wifi);
 static void on_arm_ota(lv_event_t *e);
 static void on_clock_options(lv_event_t *e);
+static void on_clock_back(lv_event_t *e);
 static void on_home(lv_event_t *e)
 {
     (void)e; activity(); build_home();
@@ -161,6 +151,11 @@ static void on_swipe(lv_event_t *e)
     (void)e;
     lv_indev_t *indev = lv_indev_active();
     if (!indev) return;
+    lv_point_t p = {0};
+    lv_indev_get_point(indev, &p);
+    int dx = p.x - 233, dy = p.y - 233;
+    /* Ignore edge gestures that previously bounced users to the home page. */
+    if (dx * dx + dy * dy > 188 * 188) return;
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
     activity();
     if (page == 0) {
@@ -168,10 +163,17 @@ static void on_swipe(lv_event_t *e)
         else if (dir == LV_DIR_RIGHT) build_clock();
     } else if (page == 6) {
         if (dir == LV_DIR_LEFT) build_home();
-        else if (dir == LV_DIR_BOTTOM) build_weather_details();
-    } else if (page == 11 && dir == LV_DIR_TOP) {
+        else if (dir == LV_DIR_TOP) build_weather_details();
+    } else if (page == 11 && dir == LV_DIR_BOTTOM) {
         build_clock();
     }
+}
+static void on_clock_long_press(lv_event_t *e)
+{
+    (void)e;
+    if (page != 6) return;
+    activity();
+    build_clock_settings();
 }
 
 static void make_base(void)
@@ -190,16 +192,11 @@ static void make_base(void)
     clockface_text = NULL;
     weather_status_text = NULL;
     weather_city_text = NULL;
-    weather_location_input = NULL;
     ota_status = NULL;
     wifi_list = NULL;
     wifi_status = NULL;
     wifi_password_status = NULL;
-    wifi_password_input = NULL;
     pause_button = NULL;
-    wheel_roller = NULL;
-    wheel_text = NULL;
-    wheel_mode_text = NULL;
     weather_detail_text = NULL;
 }
 
@@ -428,13 +425,6 @@ static void on_speed(lv_event_t *e)
     lv_label_set_text(speed_text, s);
     if (lv_event_get_code(e) == LV_EVENT_RELEASED) save_settings();
 }
-static void on_font(lv_event_t *e)
-{
-    (void)e; prefs->font_size = (prefs->font_size + 1) % 3;
-    lv_label_set_text(font_text, prefs->font_size == 0 ? "Font  Small  >" :
-                      prefs->font_size == 2 ? "Font  Large  >" : "Font  Medium  >");
-    save_settings();
-}
 static void on_timeout(lv_event_t *e)
 {
     (void)e;
@@ -554,8 +544,15 @@ static void build_clock(void)
     page = 6;
     make_base();
     lf_clock_build(screen, prefs->clock_face);
+    /* Clock settings are a long press, not an accidental edge tap. */
+    lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(screen, on_clock_long_press, LV_EVENT_LONG_PRESSED, NULL);
     clock_last_refresh = 0;
     activity();
+}
+static void on_clock_back(lv_event_t *e)
+{
+    (void)e; activity(); build_clock();
 }
 static void on_clock_options(lv_event_t *e)
 {
@@ -627,6 +624,21 @@ static void build_clock_settings(void)
     weather_city_text = label(screen, value, 361, &lv_font_montserrat_16, 0xB9CADB);
     button(screen, "BACK", 122, 42, 0, 181, prefs->text_color, on_settings, NULL);
 }
+static void build_weather_details(void)
+{
+    page = 11;
+    make_base();
+    lf_clock_clear();
+    label(screen, "CURRENT WEATHER", 55, &lv_font_montserrat_24, prefs->text_color);
+    weather_detail_text = label(screen, "Loading weather...", 133,
+                                system_font(), 0xB8DBF4);
+    char detail[256];
+    lf_weather_get_detail(detail, sizeof detail);
+    lv_label_set_text(weather_detail_text, detail);
+    weather_detail_refresh = now_ms();
+    button(screen, "BACK TO CLOCK", 208, 52, 0, 153,
+           0xB2C6D3, on_clock_back, NULL);
+}
 static void build_weather_location(void)
 {
     page = 8;
@@ -657,11 +669,6 @@ static void sleep_display(void)
     lv_obj_add_event_cb(screen, on_wake, LV_EVENT_PRESSED, NULL);
     apply_brightness();
 }
-static void on_sleep(lv_event_t *e)
-{
-    (void)e; activity(); sleep_display();
-}
-
 static void on_tick(lv_timer_t *timer)
 {
     (void)timer;
@@ -723,6 +730,12 @@ static void on_tick(lv_timer_t *timer)
         if(ota_status && !lf_network_ota_armed()) lv_label_set_text(ota_status,"");
     }
     if (asleep) return;
+    if (page == 11 && weather_detail_text && current - weather_detail_refresh > 4000) {
+        weather_detail_refresh = current;
+        char detail[256];
+        lf_weather_get_detail(detail, sizeof detail);
+        lv_label_set_text(weather_detail_text, detail);
+    }
     if (page == 6 && current - clock_last_refresh >= 950) {
         clock_last_refresh = current;
         lf_clock_update();
