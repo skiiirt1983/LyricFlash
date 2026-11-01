@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 
 /* A luxury diver-inspired face for personal use, plus two original alternatives.
    No watchmaker graphics, images, fonts, or proprietary assets are required. */
@@ -393,4 +394,22 @@ void lf_clock_update(void)
         polar(lengths[i], angles[i], &hand_points[i][1]);
         lv_line_set_points(hands[i], hand_points[i], 2);
     }
+}
+
+
+/* Time-of-day includes microseconds, unlike time(NULL). Updating just the
+   moving second hand avoids repainting clock labels, weather, and battery
+   60 times per second. LVGL's display pipeline may cap the actual FPS. */
+void lf_clock_animate(void)
+{
+    if (!clock_active || current_style != 0 || !hands[2]) return;
+    struct timeval stamp;
+    if (gettimeofday(&stamp, NULL) != 0 || stamp.tv_sec <= 1700000000) return;
+
+    float precise_seconds = (float)(stamp.tv_sec % 60) +
+                            (float)stamp.tv_usec / 1000000.0f;
+    float angle = (precise_seconds * 6.0f - 90.0f) * PI_F / 180.0f;
+    polar(-13, angle, &hand_points[2][0]);
+    polar(164, angle, &hand_points[2][1]);
+    lv_line_set_points(hands[2], hand_points[2], 2);
 }
