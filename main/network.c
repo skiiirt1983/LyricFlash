@@ -1,4 +1,5 @@
 #include "network.h"
+#include "cJSON.h"
 #include "image_policy.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
