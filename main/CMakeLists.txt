@@ -3,6 +3,7 @@ idf_component_register(
     SRCS
         "main.c"
         "ui.c"
+        "clock_face.c"
         "ota_guard.c"
         "settings.c"
         "lyrics.c"
