@@ -25,5 +25,6 @@ typedef struct {
 bool lf_network_scan_start(void);
 int lf_network_scan_results(lf_wifi_ap_t *out, size_t max, size_t *count);
 bool lf_network_save_wifi(const char *ssid, const char *password);
+void lf_network_restart(void);
 bool lf_network_is_connected(void);
 bool lf_network_connected_ssid(char *out, size_t size);
