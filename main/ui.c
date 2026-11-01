@@ -193,6 +193,15 @@ static void on_settings(lv_event_t *e)
 {
     (void)e; activity(); build_settings();
 }
+static lv_point_t gesture_origin;
+static bool gesture_origin_valid;
+static void on_gesture_press(lv_event_t *e)
+{
+    (void)e;
+    lv_indev_t *indev=lv_indev_active();
+    gesture_origin_valid = indev != NULL;
+    if(indev) lv_indev_get_point(indev,&gesture_origin);
+}
 static void on_swipe(lv_event_t *e)
 {
     (void)e;
@@ -201,6 +210,11 @@ static void on_swipe(lv_event_t *e)
     lv_point_t p = {0};
     lv_indev_get_point(indev, &p);
     int dx = p.x - 233, dy = p.y - 233;
+    /* Physical travel threshold: small/edge drags do not navigate. */
+    if (!gesture_origin_valid) return;
+    int travel_x = p.x - gesture_origin.x;
+    int travel_y = p.y - gesture_origin.y;
+    if (travel_x*travel_x + travel_y*travel_y < 78*78) return;
     /* Ignore edge gestures that previously bounced users to the home page. */
     if (dx * dx + dy * dy > 188 * 188) return;
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
@@ -235,6 +249,7 @@ static void make_base(void)
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(screen, on_gesture_press, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(screen, on_swipe, LV_EVENT_GESTURE, NULL);
     if (!screen_initialized) {
         screen_initialized = true;
