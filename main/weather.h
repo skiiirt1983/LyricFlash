@@ -19,3 +19,31 @@ void lf_weather_get_strip(char *out, size_t max);
 void lf_weather_get_detail(char *out, size_t max);
 /* Cached numeric weather avoids parsing city names into tiny watchface text. */
 bool lf_weather_get_current(int *temp_c, int *wmo_code);
+
+/* Read-only snapshot for the visual weather dashboard (never network calls on LVGL task). */
+#define LF_WEATHER_HOURS 4
+#define LF_WEATHER_DAYS 3
+typedef struct {
+    char hour[6];
+    int temperature;
+    int condition;
+} lf_weather_hour_t;
+typedef struct {
+    int high, low;
+    int condition;
+} lf_weather_day_t;
+typedef struct {
+    bool valid;
+    char location[24];
+    int temperature;
+    int condition;
+    int feels_like;
+    int humidity_pct;
+    int wind_kmh;
+    int precipitation_tenths_mm;
+    lf_weather_hour_t hourly[LF_WEATHER_HOURS];
+    lf_weather_day_t daily[LF_WEATHER_DAYS];
+    unsigned hour_count;
+    unsigned day_count;
+} lf_weather_view_t;
+void lf_weather_get_view(lf_weather_view_t *out);
