@@ -26,6 +26,104 @@ static char ap_pass[16];
 static char ota_pin[10];
 static TickType_t ota_expiry;
 static httpd_handle_t server;
+static void reboot_task(void *arg);
+
+/* Scan completion runs on the ESP event task, UI reads on the LVGL task. */
+static portMUX_TYPE wifi_scan_mux = portMUX_INITIALIZER_UNLOCKED;
+static lf_wifi_ap_t wifi_scan_list[LF_WIFI_MAX_RESULTS];
+static size_t wifi_scan_count;
+static int wifi_scan_state; /* 0 idle, 1 running, 2 ready, -1 failed */
+
+static void wifi_scan_done(void)
+{
+    wifi_ap_record_t records[LF_WIFI_MAX_RESULTS] = {0};
+    uint16_t found = LF_WIFI_MAX_RESULTS;
+    esp_err_t err = esp_wifi_scan_get_ap_records(&found, records);
+    lf_wifi_ap_t entries[LF_WIFI_MAX_RESULTS] = {0};
+    size_t count = 0;
+    if (err == ESP_OK) {
+        for (uint16_t i = 0; i < found && count < LF_WIFI_MAX_RESULTS; i++) {
+            if (!records[i].ssid[0]) continue; /* Hide non-broadcast SSIDs. */
+            char name[33] = {0};
+            memcpy(name, records[i].ssid, 32);
+            bool duplicate = false;
+            for (size_t j = 0; j < count; j++) {
+                if (strcmp(entries[j].ssid, name) == 0) { duplicate = true; break; }
+            }
+            if (duplicate) continue;
+            strlcpy(entries[count].ssid, name, sizeof(entries[count].ssid));
+            entries[count].rssi = records[i].rssi;
+            entries[count].secured = records[i].authmode != WIFI_AUTH_OPEN;
+            count++;
+        }
+    }
+    portENTER_CRITICAL(&wifi_scan_mux);
+    wifi_scan_count = count;
+    memcpy(wifi_scan_list, entries, sizeof(entries));
+    wifi_scan_state = err == ESP_OK ? 2 : -1;
+    portEXIT_CRITICAL(&wifi_scan_mux);
+}
+
+bool lf_network_scan_start(void)
+{
+    portENTER_CRITICAL(&wifi_scan_mux);
+    if (wifi_scan_state == 1) {
+        portEXIT_CRITICAL(&wifi_scan_mux);
+        return false;
+    }
+    wifi_scan_count = 0;
+    wifi_scan_state = 1;
+    portEXIT_CRITICAL(&wifi_scan_mux);
+    /* ESP-IDF cannot scan in AP-only mode. Keep the fallback setup AP
+       available while enabling the STA interface for an asynchronous scan. */
+    esp_err_t err = ESP_OK;
+    if (in_ap) err = esp_wifi_set_mode(WIFI_MODE_APSTA);
+    if (err == ESP_OK) err = esp_wifi_scan_start(NULL, false);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Wi-Fi scan could not start: %s", esp_err_to_name(err));
+        portENTER_CRITICAL(&wifi_scan_mux);
+        wifi_scan_state = -1;
+        portEXIT_CRITICAL(&wifi_scan_mux);
+        return false;
+    }
+    return true;
+}
+
+int lf_network_scan_results(lf_wifi_ap_t *out, size_t max, size_t *count)
+{
+    if (!count || (max && !out)) return -1;
+    portENTER_CRITICAL(&wifi_scan_mux);
+    int state = wifi_scan_state;
+    size_t copied = wifi_scan_count < max ? wifi_scan_count : max;
+    if (out && copied) memcpy(out, wifi_scan_list, copied * sizeof(*out));
+    *count = copied;
+    portEXIT_CRITICAL(&wifi_scan_mux);
+    return state;
+}
+
+/* Save selection from the on-device screen, then restart the normal
+   STA startup path. Credentials are never printed in ESP logs. */
+bool lf_network_save_wifi(const char *ssid, const char *password)
+{
+    if (!ssid || !password) return false;
+    size_t sn = strlen(ssid), pn = strlen(password);
+    if (!sn || sn > 32 || pn > 63 || (pn > 0 && pn < 8)) return false;
+    nvs_handle_t h;
+    if (nvs_open("lf_network", NVS_READWRITE, &h) != ESP_OK) return false;
+    esp_err_t e = nvs_set_str(h, "ssid", ssid);
+    if (e == ESP_OK) e = nvs_set_str(h, "password", password);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    if (e != ESP_OK) return false;
+    xTaskCreate(reboot_task, "lf_wifi_reboot", 2048, NULL, 3, NULL);
+    return true;
+}
+
+bool lf_network_is_connected(void)
+{
+    return !in_ap && connected_event &&
+           (xEventGroupGetBits(connected_event) & LF_CONNECTED);
+}
 
 static bool nvs_wifi_load(char *ssid, size_t ns, char *pass, size_t np)
 {
@@ -40,8 +138,12 @@ static bool nvs_wifi_load(char *ssid, size_t ns, char *pass, size_t np)
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
-    if(base==WIFI_EVENT && id==WIFI_EVENT_STA_DISCONNECTED && !in_ap)
+    if(base==WIFI_EVENT && id==WIFI_EVENT_SCAN_DONE) wifi_scan_done();
+    if(base==WIFI_EVENT && id==WIFI_EVENT_STA_DISCONNECTED && !in_ap) {
+        xEventGroupClearBits(connected_event, LF_CONNECTED);
+        strlcpy(address, "Offline", sizeof(address));
         esp_wifi_connect();
+    }
     if(base==IP_EVENT && id==IP_EVENT_STA_GOT_IP) {
         const ip_event_got_ip_t *got=(const ip_event_got_ip_t *)data;
         snprintf(address,sizeof(address),IPSTR,IP2STR(&got->ip_info.ip));
