@@ -7,6 +7,7 @@ idf_component_register(
         "clock_face.c"
         "basic_clock.c"
         "weather.c"
+        "weather_visual.c"
         "ota_guard.c"
         "settings.c"
         "lyrics.c"
