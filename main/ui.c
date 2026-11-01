@@ -746,6 +746,14 @@ static void on_tick(lv_timer_t *timer)
     lv_obj_scroll_to_y(scroll_panel, (int32_t)scroll_y, LV_ANIM_OFF);
 }
 
+/* Only the active Rolex-style clock needs a high-rate redraw.
+   The rest of the UI retains its lower-cost 50 ms timer. */
+static void on_clock_sweep(lv_timer_t *timer)
+{
+    (void)timer;
+    if (page == 6 && !asleep) lf_clock_animate();
+}
+
 bool lf_ui_start(lf_settings_t *s)
 {
     prefs = s;
@@ -760,6 +768,7 @@ bool lf_ui_start(lf_settings_t *s)
     build_home();
     lv_obj_add_event_cb(lv_screen_active(), on_swipe, LV_EVENT_GESTURE, NULL);
     lv_timer_create(on_tick, 50, NULL);
+    lv_timer_create(on_clock_sweep, 16, NULL);
     esp_lv_adapter_unlock();
     return true;
 }
