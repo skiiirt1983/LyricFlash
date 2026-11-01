@@ -31,6 +31,9 @@ static char ota_pin[10];
 static uint8_t ota_pin_attempts;
 static TickType_t ota_expiry;
 static httpd_handle_t server;
+static const char *ota_result = "idle";
+static uint32_t ota_received;
+static uint32_t ota_total;
 static bool time_sync_started;
 static void reboot_task(void *arg);
 
@@ -221,7 +224,7 @@ static const char home_page[] =
 "<section><h2>Firmware update</h2><p>Tap <b>ARM OTA</b> on the device, then enter the PIN shown on screen.</p>"
 "<input id='pin' type='password' placeholder='Device OTA PIN' autocomplete='off'>"
 "<input id='bin' type='file' accept='.bin,application/octet-stream'>"
-"<button onclick='update()'>Install application-only OTA firmware</button></section>"
+"<button id='install-btn' onclick='update()'>Install application-only OTA firmware</button></section>"
 "<p id='msg' role='status'></p><script>const msg=t=>document.getElementById('msg').textContent=t;"
 "async function loadState(){try{let r=await fetch('/api/info');let d=await r.json();"
 "let state=document.getElementById('wifi-state');state.textContent=d.connected_ssid?"
@@ -236,9 +239,30 @@ static const char home_page[] =
 "msg(d.state==='ready'?(d.networks.length+' networks found'):'Scan failed. Try again.');}catch(e){msg('Scan unavailable');}}"
 "async function save(){let r=await fetch('/wifi',{method:'POST',headers:{'Content-Type':'application/json'},"
 "body:JSON.stringify({ssid:document.getElementById('ssid').value,password:document.getElementById('pass').value})});msg(await r.text());}"
-"async function update(){let f=document.getElementById('bin').files[0];if(!f)return msg('Choose an OTA .bin file first');"
-"msg('Uploading...');let r=await fetch('/update',{method:'POST',headers:{'Content-Type':'application/octet-stream',"
-"'X-LyricFlash-PIN':document.getElementById('pin').value},body:f});msg(await r.text());}</script></html>";
+"let busy=false;\n"
+"function update(){\n"
+" const f=document.getElementById('bin').files[0];\n"
+" const pin=document.getElementById('pin').value.trim();\n"
+" if(!f)return msg('Choose the application-only OTA .bin file first');\n"
+" if(!/^[0-9]{4}$/.test(pin))return msg('Enter the four-digit PIN shown on device');\n"
+" if(busy)return;\n"
+" const button=document.getElementById('install-btn');\n"
+" const xhr=new XMLHttpRequest();\n"
+" busy=true;button.disabled=true;\n"
+" const done=t=>{busy=false;button.disabled=false;msg(t);};\n"
+" xhr.open('POST','/update',true);xhr.timeout=180000;\n"
+" xhr.setRequestHeader('Content-Type','application/octet-stream');\n"
+" xhr.setRequestHeader('X-LyricFlash-PIN',pin);\n"
+" xhr.upload.onprogress=e=>msg(e.lengthComputable?'Transfer '+Math.round(100*e.loaded/e.total)+'% (not yet verified)':'Transferring...');\n"
+" xhr.upload.onload=()=>msg('Firmware transmitted; waiting for verification...');\n"
+" xhr.onload=()=>done(xhr.status>=200&&xhr.status<300?xhr.responseText:'HTTP '+xhr.status+': '+(xhr.responseText||'Upload rejected'));\n"
+" xhr.onerror=()=>done('Connection failed. Check device status before retrying.');\n"
+" xhr.ontimeout=()=>done('Upload timed out. Check /api/info before retrying.');\n"
+" xhr.onabort=()=>done('Upload cancelled.');\n"
+" msg('Starting upload...');\n"
+" try{xhr.send(f);}catch(e){done('Cannot start upload: '+e.message);}\n"
+"}\n"
+"</script></html>";
 
 static esp_err_t handle_home(httpd_req_t *req)
 {
@@ -259,10 +283,13 @@ static esp_err_t handle_info(httpd_req_t *req)
     cJSON *root = cJSON_CreateObject();
     if (!root) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
     cJSON_AddStringToObject(root, "app", "LyricFlash");
-    cJSON_AddStringToObject(root, "version", "0.6.0-alpha");
+    cJSON_AddStringToObject(root, "version", "0.7.0-alpha");
     cJSON_AddStringToObject(root, "mode", in_ap ? "ap" : "station");
     cJSON_AddStringToObject(root, "address", address);
     cJSON_AddBoolToObject(root, "ota_armed", lf_network_ota_armed());
+    cJSON_AddStringToObject(root, "ota_result", ota_result);
+    cJSON_AddNumberToObject(root, "ota_received", ota_received);
+    cJSON_AddNumberToObject(root, "ota_total", ota_total);
     cJSON_AddStringToObject(root, "connected_ssid", ssid);
     cJSON_AddStringToObject(root, "saved_ssid", saved);
     char *body = cJSON_PrintUnformatted(root);
@@ -279,7 +306,7 @@ static esp_err_t handle_device(httpd_req_t *req)
     esp_wifi_get_mac(in_ap?WIFI_IF_AP:WIFI_IF_STA,mac);
     char response[220];
     snprintf(response,sizeof(response),
-        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.6.0-alpha\","
+        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.7.0-alpha\","
         "\"device_id\":\"LF-%02X%02X%02X\",\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\"}",
         mac[3],mac[4],mac[5],mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
     httpd_resp_set_type(req,"application/json");
@@ -339,8 +366,13 @@ static esp_err_t handle_scan(httpd_req_t *req)
 static esp_err_t handle_update(httpd_req_t *req)
 {
     if(!pin_matches(req)){httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Arm OTA on device and enter the correct PIN");return ESP_FAIL;}
+    ota_expiry=0; /* Single-use PIN; do not require it to remain armed during upload. */
+    ota_received=0;
+    ota_total=req->content_len>0?(uint32_t)req->content_len:0;
+    ota_result="validating";
     const esp_partition_t *part=esp_ota_get_next_update_partition(NULL);
     if(!part || req->content_len<512 || req->content_len>(int)part->size){
+        ota_result="bad_size"; ESP_LOGE(TAG,"Invalid OTA request size / inactive partition");
         httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"OTA image invalid or too large");return ESP_FAIL;
     }
     uint8_t buf[2048];
@@ -350,29 +382,42 @@ static esp_err_t handle_update(httpd_req_t *req)
     esp_ota_handle_t handle=0;
     bool started=false;
     bool ok=true;
+    int receive_timeouts=0;
     while(received<req->content_len) {
         int remaining=req->content_len-received;
         int r=httpd_req_recv(req,(char *)buf,remaining>(int)sizeof(buf)?sizeof(buf):remaining);
-        if(r<=0){ok=false;break;}
+        if(r==HTTPD_SOCK_ERR_TIMEOUT && ++receive_timeouts<4) continue;
+        if(r<=0){ESP_LOGE(TAG,"OTA receive failed code=%d at %d/%d",r,received,req->content_len);ota_result="receive_failed";ok=false;break;}
+        receive_timeouts=0;
         if(!started){
             size_t copy=(size_t)r;
             if(copy>sizeof(first)-first_len) copy=sizeof(first)-first_len;
             memcpy(first+first_len,buf,copy);
             first_len+=copy;
             if(first_len>=sizeof(first)){
-                if(lf_check_ota_image(first,sizeof(first),part->size)!=LF_IMAGE_OK){ok=false;break;}
-                if(esp_ota_begin(part,OTA_SIZE_UNKNOWN,&handle)!=ESP_OK){ok=false;break;}
+                lf_image_result_t check=lf_check_ota_image(first,sizeof(first),part->size);
+                if(check!=LF_IMAGE_OK){ESP_LOGE(TAG,"OTA header: %s",lf_image_error(check));ota_result="header_failed";ok=false;break;}
+                /* Erase only the image size rather than pre-erasing the entire 5 MB slot. */
+                esp_err_t begin_err=esp_ota_begin(part,(size_t)req->content_len,&handle);
+                if(begin_err!=ESP_OK){ESP_LOGE(TAG,"OTA begin: %s",esp_err_to_name(begin_err));ota_result="begin_failed";ok=false;break;}
                 started=true;
                 if(esp_ota_write(handle,first,first_len)!=ESP_OK){ok=false;break;}
                 if((size_t)r>copy && esp_ota_write(handle,buf+copy,r-copy)!=ESP_OK){ok=false;break;}
             }
         } else if(esp_ota_write(handle,buf,r)!=ESP_OK){ok=false;break;}
         received+=r;
+        ota_received=(uint32_t)received;
+        ota_result="writing";
     }
     ota_expiry=0; // disarm after a single attempt, whether successful or not
-    if(!ok){if(started) esp_ota_abort(handle);httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Upload failed, device remains on current firmware");return ESP_FAIL;}
-    if(esp_ota_end(handle)!=ESP_OK){httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Firmware checksum / image validation failed");return ESP_FAIL;}
-    if(esp_ota_set_boot_partition(part)!=ESP_OK){httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot activate new firmware");return ESP_FAIL;}
+    if(!ok){if(started) esp_ota_abort(handle);ESP_LOGE(TAG,"OTA incomplete at %u/%u",ota_received,ota_total);
+        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Upload failed, device remains on current firmware");return ESP_FAIL;}
+    ota_result="verifying";
+    esp_err_t finish_err=esp_ota_end(handle);
+    if(finish_err!=ESP_OK){ota_result="checksum_failed";ESP_LOGE(TAG,"OTA end: %s",esp_err_to_name(finish_err));httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Firmware checksum / image validation failed");return ESP_FAIL;}
+    esp_err_t boot_err=esp_ota_set_boot_partition(part);
+    if(boot_err!=ESP_OK){ota_result="activation_failed";ESP_LOGE(TAG,"OTA activate: %s",esp_err_to_name(boot_err));httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot activate new firmware");return ESP_FAIL;}
+    ota_result="verified_rebooting";
     httpd_resp_sendstr(req,"Firmware verified. Rebooting into new application.");
     xTaskCreate(reboot_task,"lf_reboot",2048,NULL,3,NULL);
     return ESP_OK;
@@ -381,6 +426,7 @@ static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
+    cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
         {.uri="/",.method=HTTP_GET,.handler=handle_home},
