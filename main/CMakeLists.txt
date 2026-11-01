@@ -3,6 +3,7 @@ idf_component_register(
     SRCS
         "main.c"
         "ui.c"
+        "char_wheel.c"
         "clock_face.c"
         "weather.c"
         "ota_guard.c"
