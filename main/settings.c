@@ -13,6 +13,7 @@ void lf_settings_defaults(lf_settings_t *s)
         .brightness = 55,
         .scroll_speed = 45,
         .font_size = 1,
+        .system_font_size = 2,
         .sleep_seconds = 60,
         .text_color = 0x86E3AE,
         .background_color = 0x000000,
@@ -41,6 +42,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     (void)nvs_get_u8(h, "brightness", &s->brightness);
     (void)nvs_get_u8(h, "scroll", &s->scroll_speed);
     (void)nvs_get_u8(h, "font", &s->font_size);
+    (void)nvs_get_u8(h, "uifont", &s->system_font_size);
     (void)nvs_get_u8(h, "timeout", &s->sleep_seconds);
     (void)nvs_get_u32(h, "textcolor", &s->text_color);
     (void)nvs_get_u32(h, "bgcolor", &s->background_color);
@@ -54,6 +56,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     s->brightness = in_range(s->brightness, 5, 100, 55);
     s->scroll_speed = in_range(s->scroll_speed, 10, 100, 45);
     s->font_size = in_range(s->font_size, 0, 2, 1);
+    s->system_font_size = in_range(s->system_font_size, 0, 2, 2);
     if (s->sleep_seconds != 0 && s->sleep_seconds != 15 &&
         s->sleep_seconds != 30 && s->sleep_seconds != 60) s->sleep_seconds = 60;
     s->text_color &= 0xFFFFFF;
@@ -75,6 +78,7 @@ esp_err_t lf_settings_save(const lf_settings_t *s)
     TRY_NVS(nvs_set_u8(h, "brightness", s->brightness));
     TRY_NVS(nvs_set_u8(h, "scroll", s->scroll_speed));
     TRY_NVS(nvs_set_u8(h, "font", s->font_size));
+    TRY_NVS(nvs_set_u8(h, "uifont", s->system_font_size));
     TRY_NVS(nvs_set_u8(h, "timeout", s->sleep_seconds));
     TRY_NVS(nvs_set_u32(h, "textcolor", s->text_color));
     TRY_NVS(nvs_set_u32(h, "bgcolor", s->background_color));
