@@ -20,6 +20,7 @@ static char weather_details[256];
 static int weather_temperature;
 static int weather_code;
 static bool weather_numeric_valid;
+static lf_weather_view_t view_cache;
 static uint32_t config_generation;
 static TaskHandle_t weather_task;
 
@@ -47,7 +48,7 @@ static esp_err_t on_http_event(esp_http_client_event_t *event)
 }
 static cJSON *https_json(const char *url)
 {
-    response_t out = {.capacity = 6144};
+    response_t out = {.capacity = 12288};
     out.data = calloc(out.capacity, 1);
     if (!out.data) return NULL;
     esp_http_client_config_t options = {
@@ -103,11 +104,12 @@ static const char *condition(int code)
     return "WEATHER";
 }
 static bool fetch_weather(const char *city, char *result, size_t cap,
-                          char *details, size_t details_cap, int *out_temp, int *out_code)
+                          char *details, size_t details_cap, int *out_temp, int *out_code,
+                          lf_weather_view_t *view)
 {
     char encoded[3 * (LF_WEATHER_CITY_MAX + 1)] = {0};
     if (!encode_city(city, encoded, sizeof encoded)) return false;
-    char url[300];
+    char url[512];
     snprintf(url, sizeof url,
              "https://geocoding-api.open-meteo.com/v1/search?name=%s&count=1&language=en&format=json",
              encoded);
@@ -131,7 +133,10 @@ static bool fetch_weather(const char *city, char *result, size_t cap,
     snprintf(url, sizeof url,
              "https://api.open-meteo.com/v1/forecast?latitude=%.5f&longitude=%.5f"
              "&current=temperature_2m,apparent_temperature,relative_humidity_2m,"
-             "weather_code,wind_speed_10m,precipitation&temperature_unit=celsius&timezone=auto",
+             "weather_code,wind_speed_10m,precipitation"
+             "&hourly=temperature_2m,weather_code&forecast_hours=8"
+             "&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=3"
+             "&temperature_unit=celsius&timezone=auto",
              lat, lon);
     cJSON *forecast = https_json(url);
     if (!forecast) return false;
@@ -146,6 +151,13 @@ static bool fetch_weather(const char *city, char *result, size_t cap,
         if (out_temp) *out_temp = rounded;
         if (out_code) *out_code = code->valueint;
     }
+    if (valid && view) {
+        memset(view, 0, sizeof *view);
+        view->valid = true;
+        snprintf(view->location, sizeof view->location, "%s", short_name);
+        view->temperature = (int)(temp->valuedouble + (temp->valuedouble >= 0 ? 0.5 : -0.5));
+        view->condition = code->valueint;
+    }
     if (valid && details && details_cap) {
         cJSON *feels = cJSON_GetObjectItemCaseSensitive(current, "apparent_temperature");
         cJSON *humidity = cJSON_GetObjectItemCaseSensitive(current, "relative_humidity_2m");
@@ -155,10 +167,50 @@ static bool fetch_weather(const char *city, char *result, size_t cap,
         double wind_kmh = cJSON_IsNumber(wind) ? wind->valuedouble : 0;
         double rain_mm = cJSON_IsNumber(precip) ? precip->valuedouble : 0;
         int humidity_pct = cJSON_IsNumber(humidity) ? humidity->valueint : 0;
+        if (view) {
+            view->feels_like = (int)(perceived + (perceived >= 0 ? 0.5 : -0.5));
+            view->humidity_pct = humidity_pct;
+            view->wind_kmh = (int)(wind_kmh + 0.5);
+            view->precipitation_tenths_mm = (int)(rain_mm * 10.0 + 0.5);
+        }
         snprintf(details, details_cap,
                  "%s\n%d C  %s\nFeels like %.0f C\nHumidity %d%%\nWind %.0f km/h\nPrecipitation %.1f mm",
                  short_name, (int)(temp->valuedouble < 0 ? temp->valuedouble-0.5 : temp->valuedouble+0.5),
                  condition(code->valueint), perceived, humidity_pct, wind_kmh, rain_mm);
+    }
+    if (valid && view) {
+        cJSON *hourly = cJSON_GetObjectItemCaseSensitive(forecast, "hourly");
+        cJSON *hours = cJSON_GetObjectItemCaseSensitive(hourly, "time");
+        cJSON *temps = cJSON_GetObjectItemCaseSensitive(hourly, "temperature_2m");
+        cJSON *codes = cJSON_GetObjectItemCaseSensitive(hourly, "weather_code");
+        for (unsigned i=0;i<LF_WEATHER_HOURS;i++) {
+            /* Four samples spanning the next 8 hours. */
+            unsigned index = i*2;
+            cJSON *at = cJSON_GetArrayItem(hours, (int)index);
+            cJSON *t = cJSON_GetArrayItem(temps, (int)index);
+            cJSON *c = cJSON_GetArrayItem(codes, (int)index);
+            if (!cJSON_IsString(at) || !cJSON_IsNumber(t) || !cJSON_IsNumber(c)) break;
+            const char *clock = strchr(at->valuestring, 'T');
+            snprintf(view->hourly[i].hour, sizeof view->hourly[i].hour,
+                     "%.2sh", clock ? clock+1 : "--");
+            view->hourly[i].temperature = (int)(t->valuedouble + (t->valuedouble >= 0 ? 0.5 : -0.5));
+            view->hourly[i].condition = c->valueint;
+            view->hour_count++;
+        }
+        cJSON *daily = cJSON_GetObjectItemCaseSensitive(forecast, "daily");
+        cJSON *highs = cJSON_GetObjectItemCaseSensitive(daily, "temperature_2m_max");
+        cJSON *lows = cJSON_GetObjectItemCaseSensitive(daily, "temperature_2m_min");
+        cJSON *day_codes = cJSON_GetObjectItemCaseSensitive(daily, "weather_code");
+        for (unsigned i=0;i<LF_WEATHER_DAYS;i++) {
+            cJSON *hi = cJSON_GetArrayItem(highs, (int)i);
+            cJSON *lo = cJSON_GetArrayItem(lows, (int)i);
+            cJSON *c = cJSON_GetArrayItem(day_codes, (int)i);
+            if (!cJSON_IsNumber(hi) || !cJSON_IsNumber(lo) || !cJSON_IsNumber(c)) break;
+            view->daily[i].high = (int)(hi->valuedouble + (hi->valuedouble >= 0 ? 0.5 : -0.5));
+            view->daily[i].low = (int)(lo->valuedouble + (lo->valuedouble >= 0 ? 0.5 : -0.5));
+            view->daily[i].condition = c->valueint;
+            view->day_count++;
+        }
     }
     cJSON_Delete(forecast);
     return valid;
@@ -219,6 +271,7 @@ bool lf_weather_save_config(const lf_weather_config_t *next)
     portENTER_CRITICAL(&weather_mux);
     weather_details[0] = 0;
     weather_numeric_valid = false;
+    view_cache.valid = false;
     portEXIT_CRITICAL(&weather_mux);
     return true;
 }
@@ -232,6 +285,13 @@ bool lf_weather_get_current(int *temp_c, int *wmo_code)
     }
     portEXIT_CRITICAL(&weather_mux);
     return valid;
+}
+void lf_weather_get_view(lf_weather_view_t *out)
+{
+    if (!out) return;
+    portENTER_CRITICAL(&weather_mux);
+    *out = view_cache;
+    portEXIT_CRITICAL(&weather_mux);
 }
 void lf_weather_get_detail(char *out, size_t max)
 {
@@ -271,8 +331,9 @@ static void worker(void *arg)
             char reading[68] = {0};
             char detailed[256] = {0};
             int t=0, code=0;
+            lf_weather_view_t updated_view = {0};
             bool ok = fetch_weather(c.city, reading, sizeof reading,
-                                    detailed, sizeof detailed, &t, &code);
+                                    detailed, sizeof detailed, &t, &code, &updated_view);
             /* A changed configuration must not display a stale result. */
             portENTER_CRITICAL(&weather_mux);
             bool unchanged = config_generation == generation;
@@ -286,6 +347,7 @@ static void worker(void *arg)
                     weather_temperature = t;
                     weather_code = code;
                     weather_numeric_valid = true;
+                    view_cache = updated_view;
                 }
                 portEXIT_CRITICAL(&weather_mux);
             }
