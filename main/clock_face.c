@@ -1,6 +1,8 @@
 #include "clock_face.h"
 #include "power.h"
 #include "weather.h"
+#include "basic_clock.h"
+#include "esp_timer.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -27,6 +29,11 @@ static lv_point_precise_t sundial_shadow_points[2];
 static uint8_t current_style;
 static time_t last_second = (time_t)-1;
 static bool clock_active;
+static const lf_settings_t *clock_settings;
+static lv_obj_t *weather_icon;
+static int last_weather_icon = -999;
+static int64_t anchor_mono_us;
+static int64_t anchor_wall_us;
 
 static lv_obj_t *round_panel(lv_obj_t *parent, int diameter, uint32_t fill,
                             uint32_t border, int border_width)
@@ -141,10 +148,6 @@ static void build_diver(lv_obj_t *parent)
     round_panel(parent, 389, 0x070F14, 0x24404C, 2);
     draw_ticks(parent, true);
     add_hour_markers(parent);
-    face_text(parent, "ROLEX", 0, -91, &lv_font_montserrat_20, 0xDBD3B2);
-    face_text(parent, "OYSTER PERPETUAL", 0, -68, &lv_font_montserrat_12, 0xB0C8CC);
-    face_text(parent, "DIVER", 0, 85, &lv_font_montserrat_16, 0xA5DBE2);
-    face_text(parent, "AUTOMATIC STYLE", 0, 103, &lv_font_montserrat_12, 0x82989F);
     lv_obj_t *dw = lv_obj_create(parent);
     lv_obj_set_size(dw, 45, 34);
     lv_obj_align(dw, LV_ALIGN_CENTER, 99, -2);
@@ -155,31 +158,27 @@ static void build_diver(lv_obj_t *parent)
     lv_obj_set_style_pad_all(dw, 0, 0);
     date_label = face_text(dw, "--", 0, 0, &lv_font_montserrat_18, 0x111B1B);
     create_hands(parent, true);
-    battery_label = face_text(parent, "BAT --", 0, 140, &lv_font_montserrat_16, 0xA5D6E8);
-    info_label = face_text(parent, "SYNCING TIME", 0, -127, &lv_font_montserrat_12, 0xB5D9E8);
+    battery_label = face_text(parent, "BAT --", 0, -137, &lv_font_montserrat_16, 0xA5D6E8);
+    info_label = face_text(parent, "", 0, 111, &lv_font_montserrat_12, 0xB5D9E8);
 }
 static void build_digital(lv_obj_t *parent)
 {
     round_panel(parent, 447, 0x030815, 0x245285, 5);
     round_panel(parent, 409, 0x081426, 0x153454, 3);
-    face_text(parent, "LYRICFLASH", 0, -137, &lv_font_montserrat_18, 0x5AB4FF);
-    face_text(parent, "MIDNIGHT", 0, -103, &lv_font_montserrat_16, 0xA3BDD8);
     time_label = face_text(parent, "--:--", 0, -11, &lv_font_montserrat_48, 0xEDF7FF);
     date_label = face_text(parent, "NO TIME", 0, 72, &lv_font_montserrat_20, 0xA9D5FF);
-    battery_label = face_text(parent, "BAT --", 0, 142, &lv_font_montserrat_18, 0x7DCEFF);
-    info_label = face_text(parent, "CONNECT WI-FI TO SYNC", 0, 110, &lv_font_montserrat_12, 0x7D92AD);
+    battery_label = face_text(parent, "BAT --", 0, -146, &lv_font_montserrat_18, 0x7DCEFF);
+    info_label = face_text(parent, "", 0, 110, &lv_font_montserrat_12, 0x7D92AD);
 }
 static void build_classic(lv_obj_t *parent)
 {
     round_panel(parent, 442, 0x05090D, 0x527AA6, 5);
     round_panel(parent, 397, 0x080C13, 0x283E55, 2);
     draw_ticks(parent, false);
-    face_text(parent, "L Y R I C F L A S H", 0, -86, &lv_font_montserrat_16, 0x8BBDE1);
-    face_text(parent, "CLASSIC", 0, 83, &lv_font_montserrat_16, 0xB4D8EE);
     create_hands(parent, false);
     date_label = face_text(parent, "--", 0, 109, &lv_font_montserrat_12, 0x718FA8);
-    battery_label = face_text(parent, "BAT --", 0, 139, &lv_font_montserrat_16, 0xA5D6E8);
-    info_label = face_text(parent, "SYNCING TIME", 0, -125, &lv_font_montserrat_12, 0x809DB8);
+    battery_label = face_text(parent, "BAT --", 0, -143, &lv_font_montserrat_16, 0xA5D6E8);
+    info_label = face_text(parent, "", 0, 87, &lv_font_montserrat_12, 0x809DB8);
 }
 
 /* Retro green 1980s LCD watch. Intentionally an original face, not a
@@ -188,9 +187,6 @@ static void build_retro_lcd(lv_obj_t *parent)
 {
     round_panel(parent, 450, 0x090B10, 0x6A737C, 9);
     round_panel(parent, 423, 0x15191C, 0x31383C, 3);
-    face_text(parent, "DIGITAL  •  MULTI FUNCTION", 0, -153,
-              &lv_font_montserrat_16, 0xD0D5CE);
-    face_text(parent, "L F - 8 8", 0, -117, &lv_font_montserrat_20, 0xDAE0D6);
 
     lv_obj_t *lcd = lv_obj_create(parent);
     lv_obj_set_size(lcd, 347, 219);
@@ -211,9 +207,7 @@ static void build_retro_lcd(lv_obj_t *parent)
                            &lv_font_montserrat_48, 0x162C1F);
     info_label = face_text(lcd, "NO TIME SYNC", 0, 64,
                            &lv_font_montserrat_12, 0x385341);
-    face_text(parent, "WATER RESIST  •  1988 VIBES", 0, 136,
-              &lv_font_montserrat_12, 0xB2BBB2);
-    battery_label = face_text(parent, "BAT --", 0, 162,
+    battery_label = face_text(parent, "BAT --", 0, -167,
                               &lv_font_montserrat_16, 0xACDDB0);
 }
 
@@ -224,10 +218,6 @@ static void build_sundial(lv_obj_t *parent)
     round_panel(parent, 451, 0x241E17, 0xA88E55, 9);
     round_panel(parent, 420, 0xB6A47D, 0x65553B, 4);
     round_panel(parent, 383, 0xC8BB94, 0xE4D0A0, 2);
-    face_text(parent, "SUNDIAL 3000", 0, -151,
-              &lv_font_montserrat_20, 0x49331E);
-    face_text(parent, "SOLAR POWERED*", 0, -120,
-              &lv_font_montserrat_16, 0x583F23);
     /* The ornamental sun isn't an astronomical calculation. */
     lv_obj_t *sun = lv_obj_create(parent);
     lv_obj_set_size(sun, 38, 38);
@@ -264,11 +254,9 @@ static void build_sundial(lv_obj_t *parent)
 
     sundial_time_label = face_text(parent, "--:--", 0, 71,
                                    &lv_font_montserrat_36, 0x332719);
-    info_label = face_text(parent, "CONNECT WI-FI, TRUST THE SUN", 0, 107,
+    info_label = face_text(parent, "", 0, 107,
                            &lv_font_montserrat_12, 0x5A4830);
-    face_text(parent, "*ACTUALLY POWERED BY ELECTRICITY", 0, 143,
-              &lv_font_montserrat_12, 0x553F25);
-    battery_label = face_text(parent, "BAT --", 0, 161,
+    battery_label = face_text(parent, "BAT --", 0, -172,
                               &lv_font_montserrat_16, 0x443425);
 }
 
@@ -280,6 +268,7 @@ const char *lf_clock_style_name(uint8_t style)
         case 2: return "Classic Analog";
         case 3: return "Retro Green LCD";
         case 4: return "Solar-ish Sundial";
+        case 5: return "Basic Custom";
         default: return "Rolex Diver";
     }
 }
@@ -292,13 +281,17 @@ void lf_clock_clear(void)
     time_label = NULL;
     battery_label = NULL;
     weather_label = NULL;
+    weather_icon = NULL;
+    last_weather_icon = -999;
     sundial_time_label = NULL;
     sundial_shadow = NULL;
 }
-void lf_clock_build(lv_obj_t *parent, uint8_t style)
+void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settings)
 {
     lf_clock_clear();
-    current_style = style > 4 ? 0 : style;
+    current_style = style > 5 ? 0 : style;
+    clock_settings = settings;
+    anchor_mono_us = 0;
     last_second = (time_t)-1;
     lv_obj_set_style_bg_color(parent, lv_color_hex(0x03070A), 0);
     lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
@@ -306,17 +299,24 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style)
     else if (current_style == 1) build_digital(parent);
     else if (current_style == 2) build_classic(parent);
     else if (current_style == 3) build_retro_lcd(parent);
-    else build_sundial(parent);
+    else if (current_style == 4) build_sundial(parent);
+    else {
+        time_label = lf_basic_clock_render(parent, settings);
+        battery_label = face_text(parent, LV_SYMBOL_BATTERY_FULL " --%",
+                                  0, -166, &lv_font_montserrat_20, settings->basic_foreground);
+        if (settings->basic_show_date)
+            date_label = face_text(parent, "--", 0, 70, &lv_font_montserrat_24,
+                                   settings->basic_foreground);
+        info_label = face_text(parent, "", 0, 109, &lv_font_montserrat_16,
+                               settings->basic_foreground);
+    }
     lf_weather_config_t weather_cfg;
     lf_weather_get_config(&weather_cfg);
-    if (weather_cfg.enabled) {
-        uint32_t colour = current_style == 4 ? 0x4C3926 :
-                          current_style == 3 ? 0x9DD3A2 : 0x97CCEA;
-        weather_label = face_text(parent, "WEATHER", 0, 186,
-                                  &lv_font_montserrat_12, colour);
-        lv_obj_set_width(weather_label, 270);
-        lv_label_set_long_mode(weather_label, LV_LABEL_LONG_DOT);
-        lv_obj_set_style_text_align(weather_label, LV_TEXT_ALIGN_CENTER, 0);
+    /* Fancy faces stay free of forecast overlays. */
+    if (weather_cfg.enabled &&
+        (current_style == 1 || (current_style == 5 && settings->basic_weather))) {
+        uint32_t colour = current_style == 5 ? settings->basic_foreground : 0x9DC9F3;
+        weather_label = face_text(parent, "-- C", 45, 140, &lv_font_montserrat_24, colour);
     }
     clock_active = true;
     lf_clock_update();
@@ -378,7 +378,7 @@ void lf_clock_update(void)
         polar(104, angle, &sundial_shadow_points[1]);
         lv_line_set_points(sundial_shadow, sundial_shadow_points, 2);
     }
-    if (current_style == 1 || current_style == 3 || current_style == 4) return;
+    if (current_style == 1 || current_style == 3 || current_style == 4 || current_style == 5) return;
     float sec = (float)local.tm_sec;
     float min = (float)local.tm_min + sec / 60.f;
     float hour = (float)(local.tm_hour % 12) + min / 60.f;
@@ -389,6 +389,7 @@ void lf_clock_update(void)
     };
     int lengths[3] = {94, 133, 164};
     for (int i = 0; i < 3; i++) {
+        if (current_style == 0 && i == 2) continue;
         if (!hands[i]) continue;
         polar(-13, angles[i], &hand_points[i][0]);
         polar(lengths[i], angles[i], &hand_points[i][1]);
@@ -400,15 +401,29 @@ void lf_clock_update(void)
 /* Time-of-day includes microseconds, unlike time(NULL). Updating just the
    moving second hand avoids repainting clock labels, weather, and battery
    60 times per second. LVGL's display pipeline may cap the actual FPS. */
+/* Monotonic second hand: refresh civil-time anchor once per two minutes,
+   never snap a competing time(NULL) hand onto the same LVGL line. */
 void lf_clock_animate(void)
 {
     if (!clock_active || current_style != 0 || !hands[2]) return;
-    struct timeval stamp;
-    if (gettimeofday(&stamp, NULL) != 0 || stamp.tv_sec <= 1700000000) return;
-
-    float precise_seconds = (float)(stamp.tv_sec % 60) +
-                            (float)stamp.tv_usec / 1000000.0f;
-    float angle = (precise_seconds * 6.0f - 90.0f) * PI_F / 180.0f;
+    int64_t mono = esp_timer_get_time();
+    if (!anchor_mono_us || mono - anchor_mono_us >= 120000000LL) {
+        struct timeval t;
+        if (gettimeofday(&t, NULL) != 0 || t.tv_sec <= 1700000000) return;
+        int64_t fresh = (int64_t)t.tv_sec * 1000000LL + t.tv_usec;
+        if (anchor_mono_us) {
+            int64_t projected = anchor_wall_us + mono - anchor_mono_us;
+            int64_t correction = fresh - projected;
+            if (correction > 200000) correction = 200000;
+            if (correction < -200000) correction = -200000;
+            fresh = projected + correction;
+        }
+        anchor_mono_us = mono;
+        anchor_wall_us = fresh;
+    }
+    int64_t wall = anchor_wall_us + mono - anchor_mono_us;
+    float seconds = (float)(wall % 60000000LL) / 1000000.f;
+    float angle = (seconds * 6.f - 90.f) * PI_F / 180.f;
     polar(-13, angle, &hand_points[2][0]);
     polar(164, angle, &hand_points[2][1]);
     lv_line_set_points(hands[2], hand_points[2], 2);
