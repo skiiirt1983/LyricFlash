@@ -148,7 +148,7 @@ bool lf_network_connected_ssid(char *out, size_t size)
     if (!lf_network_is_connected()) return false;
     wifi_ap_record_t ap = {0};
     if (esp_wifi_sta_get_ap_info(&ap) != ESP_OK) return false;
-    snprintf(out, size, "%s", (const char *)ap.ssid);
+    snprintf(out, size, "%.32s", (const char *)ap.ssid);
     return out[0] != 0;
 }
 static bool nvs_wifi_load(char *ssid, size_t ns, char *pass, size_t np)
