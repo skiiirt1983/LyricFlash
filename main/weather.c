@@ -13,7 +13,6 @@
 #include <string.h>
 #include <ctype.h>
 
-static const char *TAG = "LFWeather";
 static portMUX_TYPE weather_mux = portMUX_INITIALIZER_UNLOCKED;
 static lf_weather_config_t config = {.enabled = false, .interval_minutes = 30, .city = ""};
 static char weather_strip[68];
