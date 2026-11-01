@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+python3 tests/test_partitions.py
+python3 tests/test_static_safety.py
+cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/lyrics.c tests/test_lyrics.c -o /tmp/lyricflash_test_lyrics
+/tmp/lyricflash_test_lyrics
+cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/image_policy.c tests/test_image_policy.c -o /tmp/lyricflash_test_image
+/tmp/lyricflash_test_image
+cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/service_errors.c tests/test_service_errors.c -o /tmp/lyricflash_test_api
+/tmp/lyricflash_test_api
+cc -std=c11 -Wall -Wextra -Werror -pedantic -Itests/mock -Imain main/settings.c tests/mock/mock_nvs.c tests/test_settings.c -o /tmp/lyricflash_test_settings
+/tmp/lyricflash_test_settings
+cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/power_logic.c tests/test_power.c -o /tmp/lyricflash_test_power
+/tmp/lyricflash_test_power
+rm -f /tmp/lyricflash_test_power
+rm -f /tmp/lyricflash_test_settings /tmp/lyricflash_test_image /tmp/lyricflash_test_api /tmp/lyricflash_test_lyrics
