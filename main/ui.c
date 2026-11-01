@@ -5,6 +5,8 @@
 #include "esp_timer.h"
 #include "power.h"
 #include "network.h"
+#include "clock_face.h"
+#include "weather.h"
 #include "lvgl.h"
 #include <stdbool.h>
 #include <stdio.h>
@@ -27,6 +29,7 @@ static lv_obj_t *screen;
 static lv_obj_t *battery_status;
 static lv_obj_t *network_status;
 static lv_obj_t *network_password;
+static lv_obj_t *network_url;
 static lv_obj_t *ota_status;
 static uint64_t last_power_refresh_ms;
 static uint64_t last_wifi_poll_ms;
@@ -41,7 +44,12 @@ static size_t wifi_ap_count;
 static char selected_wifi[33];
 static bool selected_wifi_secured;
 static int wifi_state_previous;
-static int page; // 0=home, 1=preview, 2=settings, 3=sleep, 4=wifi, 5=password
+static lv_obj_t *clockface_text;
+static lv_obj_t *weather_status_text;
+static lv_obj_t *weather_city_text;
+static lv_obj_t *weather_location_input;
+static uint64_t clock_last_refresh;
+static int page; // 0 home, 1 preview, 2 settings, 3 sleep, 4 scan, 5 Wi-Fi pass, 6 clock, 7 clock settings, 8 weather city
 
 static const uint32_t PALETTE[] = {0xFFFFFF, 0x86E3AE, 0x76C6FF, 0xFFD18B, 0xF6A1D2};
 static const char *DEMO_TEXT =
@@ -110,6 +118,10 @@ static void build_preview(void);
 static void build_settings(void);
 static void build_wifi(void);
 static void build_wifi_password(void);
+static void build_clock(void);
+static void build_clock_settings(void);
+static void build_weather_location(void);
+static void on_clock_options(lv_event_t *e);
 static void on_home(lv_event_t *e)
 {
     (void)e; activity(); build_home();
@@ -121,6 +133,22 @@ static void on_preview(lv_event_t *e)
 static void on_settings(lv_event_t *e)
 {
     (void)e; activity(); build_settings();
+}
+static void on_swipe(lv_event_t *e)
+{
+    (void)e;
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev) return;
+    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+    activity();
+    if (page == 0) {
+        if (dir == LV_DIR_LEFT) build_settings();
+        else if (dir == LV_DIR_RIGHT) build_clock();
+    } else if (page == 2 && dir == LV_DIR_RIGHT) {
+        build_home();
+    } else if (page == 6 && dir == LV_DIR_LEFT) {
+        build_home();
+    }
 }
 
 static void make_base(void)
@@ -135,6 +163,11 @@ static void make_base(void)
     battery_status = NULL;
     network_status = NULL;
     network_password = NULL;
+    network_url = NULL;
+    clockface_text = NULL;
+    weather_status_text = NULL;
+    weather_city_text = NULL;
+    weather_location_input = NULL;
     ota_status = NULL;
     wifi_list = NULL;
     wifi_status = NULL;
@@ -163,12 +196,14 @@ static void build_home(void)
 {
     page = 0;
     make_base();
+    lf_clock_clear();
     label(screen, "LYRICFLASH", 34, &lv_font_montserrat_20, prefs->text_color);
     label(screen, "ALPHA 0.4  |  HARDWARE TEST", 65, &lv_font_montserrat_16, 0xB7C7D7);
     battery_status = label(screen, "BATTERY", 96, &lv_font_montserrat_16, 0xDCE8F0);
     network_status = label(screen, "Wi-Fi", 124, &lv_font_montserrat_16, 0xB9CADB);
-    network_password = label(screen, "", 148, &lv_font_montserrat_16, 0xB9CADB);
-    button(screen, "LYRIC PREVIEW", 224, 91, 0, -5, prefs->text_color, on_preview, NULL);
+    network_password = label(screen, "", 142, &lv_font_montserrat_16, 0xB9CADB);
+    network_url = label(screen, "Open browser to http://192.168.4.1/", 165, &lv_font_montserrat_16, 0xB9CADB);
+    button(screen, "LYRIC PREVIEW", 224, 91, 0, 5, prefs->text_color, on_preview, NULL);
     label(screen, "MIC OFF", 285, &lv_font_montserrat_16, 0xB9CADB);
     ota_status = label(screen, "", 310, &lv_font_montserrat_16, prefs->accent_color);
     button(screen, "WI-FI", 134, 42, -77, 117, 0xB2C6D3, on_wifi, NULL);
@@ -446,7 +481,124 @@ static void build_settings(void)
     timeout_text = label(screen, s, 339, &lv_font_montserrat_16, 0xD0E4EF);
     lv_obj_add_flag(timeout_text, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(timeout_text, on_timeout, LV_EVENT_CLICKED, NULL);
-    button(screen, "BACK", 155, 44, 0, 171, prefs->text_color, on_home, NULL);
+    button(screen, "BACK", 122, 44, -86, 171, prefs->text_color, on_home, NULL);
+    button(screen, "CLOCK / WEATHER", 174, 44, 77, 171, 0xB2C6D3, on_clock_options, NULL);
+}
+
+
+static void build_clock(void)
+{
+    page = 6;
+    make_base();
+    lf_clock_build(screen, prefs->clock_face);
+    clock_last_refresh = 0;
+    activity();
+}
+static void on_clock_options(lv_event_t *e)
+{
+    (void)e; activity(); build_clock_settings();
+}
+static void on_cycle_face(lv_event_t *e)
+{
+    (void)e;
+    prefs->clock_face = (uint8_t)((prefs->clock_face + 1) % 5);
+    save_settings();
+    if (clockface_text) {
+        char label_text[55];
+        snprintf(label_text, sizeof label_text, "Face: %s", lf_clock_style_name(prefs->clock_face));
+        lv_label_set_text(clockface_text, label_text);
+    }
+}
+static void on_weather_toggle(lv_event_t *e)
+{
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    cfg.enabled = !cfg.enabled;
+    if (lf_weather_save_config(&cfg)) {
+        lv_obj_t *name = lv_obj_get_child(lv_event_get_target(e), 0);
+        if (name) lv_label_set_text(name, cfg.enabled ? "WEATHER: ON" : "WEATHER: OFF");
+        activity();
+    }
+}
+static void on_weather_interval(lv_event_t *e)
+{
+    (void)e;
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    cfg.interval_minutes = cfg.interval_minutes == 15 ? 30 :
+                           cfg.interval_minutes == 30 ? 60 :
+                           cfg.interval_minutes == 60 ? 120 : 15;
+    if (lf_weather_save_config(&cfg) && weather_status_text) {
+        char value[48];
+        snprintf(value, sizeof value, "Refresh: %u min", cfg.interval_minutes);
+        lv_label_set_text(weather_status_text, value);
+        activity();
+    }
+}
+static void on_weather_location(lv_event_t *e)
+{
+    (void)e; activity(); build_weather_location();
+}
+static void build_clock_settings(void)
+{
+    page = 7;
+    make_base();
+    label(screen, "CLOCK & WEATHER", 37, &lv_font_montserrat_20, prefs->text_color);
+    button(screen, "CHANGE CLOCK FACE", 264, 49, 0, -114,
+           prefs->text_color, on_cycle_face, NULL);
+    char value[65];
+    snprintf(value, sizeof value, "Face: %s", lf_clock_style_name(prefs->clock_face));
+    clockface_text = label(screen, value, 151, &lv_font_montserrat_16, 0xDEE9F2);
+
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    button(screen, cfg.enabled ? "WEATHER: ON" : "WEATHER: OFF", 224, 45, 0, -30,
+           0xB2C6D3, on_weather_toggle, NULL);
+    button(screen, "REFRESH INTERVAL", 223, 45, 0, 29,
+           0xB2C6D3, on_weather_interval, NULL);
+    snprintf(value, sizeof value, "Refresh: %u min", cfg.interval_minutes);
+    weather_status_text = label(screen, value, 293, &lv_font_montserrat_16, 0xB9CADB);
+    button(screen, "WEATHER LOCATION", 226, 43, 0, 100,
+           0xB2C6D3, on_weather_location, NULL);
+    snprintf(value, sizeof value, "City: %.40s", cfg.city[0] ? cfg.city : "(not set)");
+    weather_city_text = label(screen, value, 361, &lv_font_montserrat_16, 0xB9CADB);
+    button(screen, "BACK", 122, 42, 0, 181, prefs->text_color, on_settings, NULL);
+}
+static void on_weather_city_keyboard(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_CANCEL) {
+        activity(); build_clock_settings(); return;
+    }
+    if (lv_event_get_code(e) != LV_EVENT_READY || !weather_location_input) return;
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    strlcpy(cfg.city, lv_textarea_get_text(weather_location_input), sizeof cfg.city);
+    if (lf_weather_save_config(&cfg)) {
+        activity();
+        build_clock_settings();
+    }
+}
+static void build_weather_location(void)
+{
+    page = 8;
+    make_base();
+    label(screen, "WEATHER LOCATION", 34, &lv_font_montserrat_20, prefs->text_color);
+    label(screen, "Enter a town or city, then OK", 74, &lv_font_montserrat_16, 0xB9CADB);
+    weather_location_input = lv_textarea_create(screen);
+    lv_obj_set_size(weather_location_input, 330, 52);
+    lv_obj_align(weather_location_input, LV_ALIGN_TOP_MID, 0, 116);
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    lv_textarea_set_text(weather_location_input, cfg.city);
+    lv_textarea_set_one_line(weather_location_input, true);
+    lv_textarea_set_max_length(weather_location_input, LF_WEATHER_CITY_MAX);
+    lv_obj_set_style_text_font(weather_location_input, &lv_font_montserrat_18, 0);
+    lv_obj_t *keyboard = lv_keyboard_create(screen);
+    lv_obj_set_size(keyboard, 390, 218);
+    lv_obj_align(keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_keyboard_set_textarea(keyboard, weather_location_input);
+    lv_obj_add_event_cb(keyboard, on_weather_city_keyboard, LV_EVENT_READY, NULL);
+    lv_obj_add_event_cb(keyboard, on_weather_city_keyboard, LV_EVENT_CANCEL, NULL);
 }
 
 static void on_wake(lv_event_t *e)
@@ -511,19 +663,33 @@ static void on_tick(lv_timer_t *timer)
         }
         if (network_status) {
             char text[128];
-            if (*lf_network_ap_ssid()) snprintf(text,sizeof text,"Wi-Fi setup: %s",lf_network_ap_ssid());
-            else snprintf(text,sizeof text,"Open http://%s/",lf_network_address());
-            lv_label_set_text(network_status,text);
+            char ssid[33] = {0};
+            if (lf_network_connected_ssid(ssid, sizeof ssid))
+                snprintf(text, sizeof text, "Wi-Fi: %.32s", ssid);
+            else if (*lf_network_ap_ssid())
+                snprintf(text, sizeof text, "Setup: %.32s", lf_network_ap_ssid());
+            else snprintf(text, sizeof text, "Wi-Fi connecting...");
+            lv_label_set_text(network_status, text);
         }
         if (network_password) {
             char text[72];
-            if (*lf_network_ap_ssid()) snprintf(text,sizeof text,"Wi-Fi password: %s",lf_network_ap_password());
-            else text[0]=0;
-            lv_label_set_text(network_password,text);
+            if (*lf_network_ap_ssid())
+                snprintf(text, sizeof text, "Password: %s", lf_network_ap_password());
+            else snprintf(text, sizeof text, "Connected to home Wi-Fi");
+            lv_label_set_text(network_password, text);
+        }
+        if (network_url) {
+            char url_text[85];
+            snprintf(url_text, sizeof url_text, "Open browser to http://%s/", lf_network_address());
+            lv_label_set_text(network_url, url_text);
         }
         if(ota_status && !lf_network_ota_armed()) lv_label_set_text(ota_status,"");
     }
     if (asleep) return;
+    if (page == 6 && current - clock_last_refresh >= 950) {
+        clock_last_refresh = current;
+        lf_clock_update();
+    }
     if (prefs->sleep_seconds && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
         sleep_display();
         return;
@@ -551,6 +717,7 @@ bool lf_ui_start(lf_settings_t *s)
     apply_brightness();
     (void)lf_power_background_start();
     build_home();
+    lv_obj_add_event_cb(lv_screen_active(), on_swipe, LV_EVENT_GESTURE, NULL);
     lv_timer_create(on_tick, 50, NULL);
     esp_lv_adapter_unlock();
     return true;
