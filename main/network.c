@@ -193,7 +193,7 @@ static esp_err_t handle_home(httpd_req_t *req)
 static esp_err_t handle_info(httpd_req_t *req)
 {
     char out[220];
-    snprintf(out,sizeof(out),"{\"app\":\"LyricFlash\",\"version\":\"0.3.0-alpha\",\"mode\":\"%s\",\"address\":\"%s\",\"ota_armed\":%s}",
+    snprintf(out,sizeof(out),"{\"app\":\"LyricFlash\",\"version\":\"0.4.0-alpha\",\"mode\":\"%s\",\"address\":\"%s\",\"ota_armed\":%s}",
         in_ap?"ap":"station",address,lf_network_ota_armed()?"true":"false");
     httpd_resp_set_type(req,"application/json");
     return httpd_resp_sendstr(req,out);
@@ -204,7 +204,7 @@ static esp_err_t handle_device(httpd_req_t *req)
     esp_wifi_get_mac(in_ap?WIFI_IF_AP:WIFI_IF_STA,mac);
     char response[220];
     snprintf(response,sizeof(response),
-        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.3.0-alpha\","
+        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.4.0-alpha\","
         "\"device_id\":\"LF-%02X%02X%02X\",\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\"}",
         mac[3],mac[4],mac[5],mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
     httpd_resp_set_type(req,"application/json");
