@@ -213,7 +213,7 @@ static const char home_page[] =
 "section{background:#101824;border:1px solid #293b58;border-radius:19px;padding:23px;margin:20px 0}"
 "#msg{color:#a8d7ff;overflow-wrap:anywhere}</style>"
 "<h1>LYRICFLASH</h1><p>ESP32-S3 / Local device manager</p>"
-"<section><h2>Wi-Fi setup</h2><p>Select your 2.4 GHz network or type its name.</p>"
+"<section><h2>Wi-Fi setup</h2><p id='wifi-state'>Checking current network...</p><p>Scan for 2.4 GHz Wi-Fi or enter its name.</p>"
 "<button onclick='scan()'>Scan nearby Wi-Fi</button><select id='networks' onchange='pick()'>"
 "<option value=''>Choose a network</option></select><input id='ssid' placeholder='Wi-Fi name'>"
 "<input id='pass' type='password' placeholder='Wi-Fi password'>"
@@ -223,6 +223,11 @@ static const char home_page[] =
 "<input id='bin' type='file' accept='.bin,application/octet-stream'>"
 "<button onclick='update()'>Install application-only OTA firmware</button></section>"
 "<p id='msg' role='status'></p><script>const msg=t=>document.getElementById('msg').textContent=t;"
+"async function loadState(){try{let r=await fetch('/api/info');let d=await r.json();"
+"let state=document.getElementById('wifi-state');state.textContent=d.connected_ssid?"
+"('Connected: '+d.connected_ssid):d.saved_ssid?('Saved: '+d.saved_ssid+' (not connected)'):'No home Wi-Fi saved';"
+"if(d.saved_ssid)document.getElementById('ssid').value=d.saved_ssid;}catch(e){}}"
+"window.addEventListener('DOMContentLoaded',loadState);"
 "function pick(){const n=document.getElementById('networks');if(n.value)document.getElementById('ssid').value=n.value;}"
 "async function scan(){msg('Scanning Wi-Fi...');try{await fetch('/api/wifi-scan?refresh=1');poll(0);}catch(e){msg('Scan unavailable');}}"
 "async function poll(attempt){try{let r=await fetch('/api/wifi-scan');let d=await r.json();if(d.state==='scanning'&&attempt<16){setTimeout(()=>poll(attempt+1),650);return;}"
@@ -242,11 +247,31 @@ static esp_err_t handle_home(httpd_req_t *req)
 }
 static esp_err_t handle_info(httpd_req_t *req)
 {
-    char out[220];
-    snprintf(out,sizeof(out),"{\"app\":\"LyricFlash\",\"version\":\"0.5.0-alpha\",\"mode\":\"%s\",\"address\":\"%s\",\"ota_armed\":%s}",
-        in_ap?"ap":"station",address,lf_network_ota_armed()?"true":"false");
-    httpd_resp_set_type(req,"application/json");
-    return httpd_resp_sendstr(req,out);
+    char ssid[33] = {0};
+    char saved[33] = {0};
+    (void)lf_network_connected_ssid(ssid, sizeof ssid);
+    nvs_handle_t h;
+    if (nvs_open("lf_network", NVS_READONLY, &h) == ESP_OK) {
+        size_t max = sizeof saved;
+        (void)nvs_get_str(h, "ssid", saved, &max);
+        nvs_close(h);
+    }
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
+    cJSON_AddStringToObject(root, "app", "LyricFlash");
+    cJSON_AddStringToObject(root, "version", "0.6.0-alpha");
+    cJSON_AddStringToObject(root, "mode", in_ap ? "ap" : "station");
+    cJSON_AddStringToObject(root, "address", address);
+    cJSON_AddBoolToObject(root, "ota_armed", lf_network_ota_armed());
+    cJSON_AddStringToObject(root, "connected_ssid", ssid);
+    cJSON_AddStringToObject(root, "saved_ssid", saved);
+    char *body = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!body) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
+    httpd_resp_set_type(req, "application/json");
+    esp_err_t r = httpd_resp_sendstr(req, body);
+    free(body);
+    return r;
 }
 static esp_err_t handle_device(httpd_req_t *req)
 {
@@ -254,7 +279,7 @@ static esp_err_t handle_device(httpd_req_t *req)
     esp_wifi_get_mac(in_ap?WIFI_IF_AP:WIFI_IF_STA,mac);
     char response[220];
     snprintf(response,sizeof(response),
-        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.5.0-alpha\","
+        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.6.0-alpha\","
         "\"device_id\":\"LF-%02X%02X%02X\",\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\"}",
         mac[3],mac[4],mac[5],mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
     httpd_resp_set_type(req,"application/json");
