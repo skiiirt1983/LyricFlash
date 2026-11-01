@@ -1,5 +1,6 @@
 #include "clock_face.h"
 #include "power.h"
+#include "weather.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,6 +19,7 @@ static lv_obj_t *info_label;
 static lv_obj_t *date_label;
 static lv_obj_t *time_label;
 static lv_obj_t *battery_label;
+static lv_obj_t *weather_label;
 static lv_obj_t *sundial_time_label;
 static lv_obj_t *sundial_shadow;
 static lv_point_precise_t sundial_shadow_points[2];
@@ -263,9 +265,9 @@ static void build_sundial(lv_obj_t *parent)
                                    &lv_font_montserrat_36, 0x332719);
     info_label = face_text(parent, "CONNECT WI-FI, TRUST THE SUN", 0, 107,
                            &lv_font_montserrat_12, 0x5A4830);
-    face_text(parent, "*ACTUALLY POWERED BY ELECTRICITY", 0, 155,
+    face_text(parent, "*ACTUALLY POWERED BY ELECTRICITY", 0, 143,
               &lv_font_montserrat_12, 0x553F25);
-    battery_label = face_text(parent, "BAT --", 0, 180,
+    battery_label = face_text(parent, "BAT --", 0, 161,
                               &lv_font_montserrat_16, 0x443425);
 }
 
@@ -288,6 +290,7 @@ void lf_clock_clear(void)
     date_label = NULL;
     time_label = NULL;
     battery_label = NULL;
+    weather_label = NULL;
     sundial_time_label = NULL;
     sundial_shadow = NULL;
 }
@@ -303,6 +306,17 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style)
     else if (current_style == 2) build_classic(parent);
     else if (current_style == 3) build_retro_lcd(parent);
     else build_sundial(parent);
+    lf_weather_config_t weather_cfg;
+    lf_weather_get_config(&weather_cfg);
+    if (weather_cfg.enabled) {
+        uint32_t colour = current_style == 4 ? 0x4C3926 :
+                          current_style == 3 ? 0x9DD3A2 : 0x97CCEA;
+        weather_label = face_text(parent, "WEATHER", 0, 186,
+                                  &lv_font_montserrat_12, colour);
+        lv_obj_set_width(weather_label, 270);
+        lv_label_set_long_mode(weather_label, LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_align(weather_label, LV_TEXT_ALIGN_CENTER, 0);
+    }
     clock_active = true;
     lf_clock_update();
 }
@@ -319,6 +333,11 @@ void lf_clock_update(void)
             snprintf(text, sizeof(text), "%s", state.charging ? "CHARGING" : "BATTERY");
         lv_label_set_text(battery_label, text);
         lv_obj_set_style_text_color(battery_label, lv_color_hex(lf_power_color(&state)), 0);
+    }
+    if (weather_label) {
+        char strip[68];
+        lf_weather_get_strip(strip, sizeof strip);
+        lv_label_set_text(weather_label, strip[0] ? strip : "WEATHER SYNCING");
     }
     time_t now = time(NULL);
     if (now == last_second) return;
