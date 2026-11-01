@@ -7,6 +7,7 @@
 #include "network.h"
 #include "clock_face.h"
 #include "weather.h"
+#include "weather_visual.h"
 #include "char_wheel.h"
 #include "lvgl.h"
 #include <stdbool.h>
@@ -49,7 +50,6 @@ static char selected_wifi[33];
 static bool selected_wifi_secured;
 static int wifi_state_previous;
 static uint64_t clock_last_refresh;
-static lv_obj_t *weather_detail_text;
 static uint64_t weather_detail_refresh;
 static lv_obj_t *basic_font_size_label;
 static lv_obj_t *basic_colour_swatch;
@@ -241,6 +241,7 @@ static int previous_page = -1;
 static void make_base(void)
 {
     lv_obj_t *old_screen = lv_screen_active();
+    lf_weather_visual_clear();
     screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(screen, lv_color_hex(prefs->background_color), 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
@@ -280,7 +281,6 @@ static void make_base(void)
     wifi_status = NULL;
     wifi_password_status = NULL;
     pause_button = NULL;
-    weather_detail_text = NULL;
 }
 
 static void on_arm_ota(lv_event_t *e)
@@ -874,15 +874,14 @@ static void build_weather_details(void)
     page = 11;
     make_base();
     lf_clock_clear();
-    label(screen, "CURRENT WEATHER", 55, &lv_font_montserrat_24, prefs->text_color);
-    weather_detail_text = label(screen, "Loading weather...", 133,
-                                system_font(), 0xB8DBF4);
-    char detail[256];
-    lf_weather_get_detail(detail, sizeof detail);
-    lv_label_set_text(weather_detail_text, detail);
+    label(screen, "WEATHER", 25, &lv_font_montserrat_24, 0xE8F5FF);
+    lf_weather_visual_build(screen);
+    lf_weather_view_t weather;
+    lf_weather_get_view(&weather);
+    lf_weather_visual_update(&weather);
     weather_detail_refresh = now_ms();
-    button(screen, "BACK TO CLOCK", 208, 52, 0, 153,
-           0xB2C6D3, on_clock_back, NULL);
+    button(screen, "BACK TO CLOCK", 188, 50, 0, 173,
+           0x9ACBF1, on_clock_back, NULL);
 }
 static void build_weather_location(void)
 {
@@ -975,11 +974,11 @@ static void on_tick(lv_timer_t *timer)
         if(ota_status && !lf_network_ota_armed()) lv_label_set_text(ota_status,"");
     }
     if (asleep) return;
-    if (page == 11 && weather_detail_text && current - weather_detail_refresh > 4000) {
+    if (page == 11 && current - weather_detail_refresh >= 4000) {
         weather_detail_refresh = current;
-        char detail[256];
-        lf_weather_get_detail(detail, sizeof detail);
-        lv_label_set_text(weather_detail_text, detail);
+        lf_weather_view_t weather;
+        lf_weather_get_view(&weather);
+        lf_weather_visual_update(&weather);
     }
     if (page == 6 && current - clock_last_refresh >= 950) {
         clock_last_refresh = current;
