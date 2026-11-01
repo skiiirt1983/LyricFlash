@@ -790,7 +790,9 @@ static void on_tick(lv_timer_t *timer)
     scroll_at_end_ms = 0;
     /* Accumulate subpixel motion. Reading back integer Y every tick would
        truncate the fractional step to zero and stop automatic scrolling. */
-    scroll_y += (float)dt * (0.004f + prefs->scroll_speed * 0.0004f);
+    /* 10-100% maps to ~31-148 px/s; default 45% is ~77 px/s.
+       Old formula only moved ~22 px/s at 45%. */
+    scroll_y += (float)dt * (0.018f + prefs->scroll_speed * 0.0013f);
     lv_obj_scroll_to_y(scroll_panel, (int32_t)scroll_y, LV_ANIM_OFF);
 }
 
