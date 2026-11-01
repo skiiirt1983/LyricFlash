@@ -7,6 +7,7 @@
 #include "network.h"
 #include "clock_face.h"
 #include "weather.h"
+#include "char_wheel.h"
 #include "lvgl.h"
 #include <stdbool.h>
 #include <stdio.h>
@@ -323,6 +324,7 @@ static void on_wifi_selected(lv_event_t *e)
     if (selected_wifi_secured) build_wifi_password();
     else {
         if (lf_network_save_wifi(selected_wifi, "")) {
+            lf_network_restart();
             if (wifi_status) lv_label_set_text(wifi_status, "Saved. Restarting...");
         } else if (wifi_status) lv_label_set_text(wifi_status, "Could not save Wi-Fi.");
     }
@@ -385,41 +387,31 @@ static void build_wifi(void)
     if (!wifi_ap_count) (void)lf_network_scan_start();
     wifi_state_previous = 1;
 }
-static void on_wifi_password_done(lv_event_t *e)
+static void wheel_wifi_save(const char *password)
 {
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code == LV_EVENT_CANCEL) { activity(); build_wifi(); return; }
-    if (code != LV_EVENT_READY || !wifi_password_input) return;
-    const char *p = lv_textarea_get_text(wifi_password_input);
-    if (lf_network_save_wifi(selected_wifi, p)) {
-        if (wifi_password_status) lv_label_set_text(wifi_password_status, "Saved. Restarting...");
-    } else if (wifi_password_status) {
-        lv_label_set_text(wifi_password_status, "Password must be 8-63 characters.");
+    if (lf_network_save_wifi(selected_wifi, password)) {
+        lf_network_restart();
+        build_wifi();
+    } else if (screen) {
+        label(screen, "Password must be 8-63 characters", 95,
+              system_font(), 0xFFB7B7);
     }
-    activity();
 }
+static void wheel_wifi_cancel(void) { build_wifi(); }
+static void wheel_weather_save(const char *city)
+{
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    snprintf(cfg.city, sizeof cfg.city, "%s", city);
+    if (lf_weather_save_config(&cfg)) build_clock_settings();
+}
+static void wheel_weather_cancel(void) { build_clock_settings(); }
 static void build_wifi_password(void)
 {
     page = 5;
     make_base();
-    label(screen, "WI-FI PASSWORD", 37, &lv_font_montserrat_20, prefs->text_color);
-    char display[48];
-    snprintf(display, sizeof(display), "%.32s", selected_wifi);
-    label(screen, display, 73, &lv_font_montserrat_16, 0xDCE8F0);
-    wifi_password_status = label(screen, "Enter password, then tap OK", 104, &lv_font_montserrat_16, 0xB9CADB);
-    wifi_password_input = lv_textarea_create(screen);
-    lv_obj_set_size(wifi_password_input, 318, 48);
-    lv_obj_align(wifi_password_input, LV_ALIGN_TOP_MID, 0, 137);
-    lv_textarea_set_one_line(wifi_password_input, true);
-    lv_textarea_set_password_mode(wifi_password_input, true);
-    lv_textarea_set_max_length(wifi_password_input, 63);
-    lv_obj_set_style_text_font(wifi_password_input, &lv_font_montserrat_18, 0);
-    lv_obj_t *keyboard = lv_keyboard_create(screen);
-    lv_obj_set_size(keyboard, 330, 167);
-    lv_obj_align(keyboard, LV_ALIGN_CENTER, 0, 78);
-    lv_keyboard_set_textarea(keyboard, wifi_password_input);
-    lv_obj_add_event_cb(keyboard, on_wifi_password_done, LV_EVENT_READY, NULL);
-    lv_obj_add_event_cb(keyboard, on_wifi_password_done, LV_EVENT_CANCEL, NULL);
+    lf_charwheel_show(screen, "Wi-Fi password", "", true, 63,
+                      wheel_wifi_save, wheel_wifi_cancel);
 }
 static void on_brightness(lv_event_t *e)
 {
@@ -635,41 +627,15 @@ static void build_clock_settings(void)
     weather_city_text = label(screen, value, 361, &lv_font_montserrat_16, 0xB9CADB);
     button(screen, "BACK", 122, 42, 0, 181, prefs->text_color, on_settings, NULL);
 }
-static void on_weather_city_keyboard(lv_event_t *e)
-{
-    if (lv_event_get_code(e) == LV_EVENT_CANCEL) {
-        activity(); build_clock_settings(); return;
-    }
-    if (lv_event_get_code(e) != LV_EVENT_READY || !weather_location_input) return;
-    lf_weather_config_t cfg;
-    lf_weather_get_config(&cfg);
-    strlcpy(cfg.city, lv_textarea_get_text(weather_location_input), sizeof cfg.city);
-    if (lf_weather_save_config(&cfg)) {
-        activity();
-        build_clock_settings();
-    }
-}
 static void build_weather_location(void)
 {
     page = 8;
     make_base();
-    label(screen, "WEATHER LOCATION", 34, &lv_font_montserrat_20, prefs->text_color);
-    label(screen, "Enter a town or city, then OK", 74, &lv_font_montserrat_16, 0xB9CADB);
-    weather_location_input = lv_textarea_create(screen);
-    lv_obj_set_size(weather_location_input, 330, 52);
-    lv_obj_align(weather_location_input, LV_ALIGN_TOP_MID, 0, 116);
     lf_weather_config_t cfg;
     lf_weather_get_config(&cfg);
-    lv_textarea_set_text(weather_location_input, cfg.city);
-    lv_textarea_set_one_line(weather_location_input, true);
-    lv_textarea_set_max_length(weather_location_input, LF_WEATHER_CITY_MAX);
-    lv_obj_set_style_text_font(weather_location_input, &lv_font_montserrat_18, 0);
-    lv_obj_t *keyboard = lv_keyboard_create(screen);
-    lv_obj_set_size(keyboard, 330, 167);
-    lv_obj_align(keyboard, LV_ALIGN_CENTER, 0, 78);
-    lv_keyboard_set_textarea(keyboard, weather_location_input);
-    lv_obj_add_event_cb(keyboard, on_weather_city_keyboard, LV_EVENT_READY, NULL);
-    lv_obj_add_event_cb(keyboard, on_weather_city_keyboard, LV_EVENT_CANCEL, NULL);
+    lf_charwheel_show(screen, "Weather city", cfg.city, false,
+                      LF_WEATHER_CITY_MAX,
+                      wheel_weather_save, wheel_weather_cancel);
 }
 
 static void on_wake(lv_event_t *e)
