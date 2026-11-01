@@ -17,3 +17,5 @@ void lf_weather_get_config(lf_weather_config_t *out);
 bool lf_weather_save_config(const lf_weather_config_t *config);
 void lf_weather_get_strip(char *out, size_t max);
 void lf_weather_get_detail(char *out, size_t max);
+/* Cached numeric weather avoids parsing city names into tiny watchface text. */
+bool lf_weather_get_current(int *temp_c, int *wmo_code);
