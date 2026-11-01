@@ -35,6 +35,48 @@ static int last_weather_icon = -999;
 static int64_t anchor_mono_us;
 static int64_t anchor_wall_us;
 
+static lv_obj_t *weather_icon;
+static int weather_icon_code = -999;
+static void symbol_shape(lv_obj_t *parent, int x, int y, int w, int h,
+                         uint32_t color, int round)
+{
+    lv_obj_t *part = lv_obj_create(parent);
+    lv_obj_set_size(part, w, h);
+    lv_obj_align(part, LV_ALIGN_CENTER, x, y);
+    lv_obj_set_style_bg_color(part, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_opa(part, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(part, 0, 0);
+    lv_obj_set_style_radius(part, round, 0);
+    lv_obj_set_style_pad_all(part, 0, 0);
+    lv_obj_remove_flag(part, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(part, LV_OBJ_FLAG_CLICKABLE);
+}
+static void update_weather_icon(int code)
+{
+    if (!weather_icon || code == weather_icon_code) return;
+    weather_icon_code = code;
+    lv_obj_clean(weather_icon);
+    bool rain = (code >= 51 && code <= 67) || (code >= 80 && code <= 82);
+    bool snow = (code >= 71 && code <= 77) || code == 85 || code == 86;
+    if (code == 0) {
+        symbol_shape(weather_icon, 0, 0, 28, 28, 0xFFD05E, LV_RADIUS_CIRCLE);
+        symbol_shape(weather_icon, 0,-21, 4,8,0xFFD05E,2);
+        symbol_shape(weather_icon, 0,21, 4,8,0xFFD05E,2);
+        symbol_shape(weather_icon, -21,0,8,4,0xFFD05E,2);
+        symbol_shape(weather_icon, 21,0,8,4,0xFFD05E,2);
+    } else {
+        symbol_shape(weather_icon,-10,-3,24,24,0xC0DCF2,LV_RADIUS_CIRCLE);
+        symbol_shape(weather_icon,7,-7,30,29,0xE2F0FA,LV_RADIUS_CIRCLE);
+        symbol_shape(weather_icon,1,6,44,18,0xCBDFF0,9);
+        if (rain || snow) for (int i=-1;i<=1;i++)
+            symbol_shape(weather_icon,i*13,23,5,10,
+                         snow ? 0xF4FAFF : 0x56A8FB,3);
+        if (code >= 95)
+            symbol_shape(weather_icon,9,22,8,15,0xFFD044,3);
+    }
+}
+
+
 static lv_obj_t *round_panel(lv_obj_t *parent, int diameter, uint32_t fill,
                             uint32_t border, int border_width)
 {
@@ -282,6 +324,8 @@ void lf_clock_clear(void)
     battery_label = NULL;
     weather_label = NULL;
     weather_icon = NULL;
+    weather_icon_code = -999;
+    weather_icon = NULL;
     last_weather_icon = -999;
     sundial_time_label = NULL;
     sundial_shadow = NULL;
@@ -316,7 +360,15 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
     if (weather_cfg.enabled &&
         (current_style == 1 || (current_style == 5 && settings->basic_weather))) {
         uint32_t colour = current_style == 5 ? settings->basic_foreground : 0x9DC9F3;
-        weather_label = face_text(parent, "-- C", 45, 140, &lv_font_montserrat_24, colour);
+        weather_icon = lv_obj_create(parent);
+        lv_obj_set_size(weather_icon, 62, 62);
+        lv_obj_align(weather_icon, LV_ALIGN_CENTER, -52, 138);
+        lv_obj_set_style_bg_opa(weather_icon, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(weather_icon, 0, 0);
+        lv_obj_set_style_pad_all(weather_icon, 0, 0);
+        lv_obj_remove_flag(weather_icon, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(weather_icon, LV_OBJ_FLAG_SCROLLABLE);
+        weather_label = face_text(parent, "-- C", 50, 138, &lv_font_montserrat_24, colour);
     }
     clock_active = true;
     lf_clock_update();
@@ -336,9 +388,15 @@ void lf_clock_update(void)
         lv_obj_set_style_text_color(battery_label, lv_color_hex(lf_power_color(&state)), 0);
     }
     if (weather_label) {
-        char strip[68];
-        lf_weather_get_strip(strip, sizeof strip);
-        lv_label_set_text(weather_label, strip[0] ? strip : "WEATHER SYNCING");
+        int temperature=0, condition=0;
+        if (lf_weather_get_current(&temperature, &condition)) {
+            char value[22];
+            snprintf(value, sizeof value, "%d C", temperature);
+            lv_label_set_text(weather_label, value);
+            update_weather_icon(condition);
+        } else {
+            lv_label_set_text(weather_label, "-- C");
+        }
     }
     time_t now = time(NULL);
     if (now == last_second) return;
