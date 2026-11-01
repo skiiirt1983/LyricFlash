@@ -54,7 +54,11 @@ static lv_obj_t *weather_city_text;
 static uint64_t clock_last_refresh;
 static lv_obj_t *weather_detail_text;
 static uint64_t weather_detail_refresh;
-static int page; // 0 home, 1 preview, 2 settings hub, 3 sleep, 4 wifi, 5 wifi pass, 6 clock, 7 clock settings, 8 weather city, 9 lyrics, 10 device, 11 weather
+static lv_obj_t *basic_font_size_label;
+static lv_obj_t *basic_colour_swatch;
+static lv_obj_t *basic_hue_label;
+static uint8_t selected_colour_target;
+static int page; // 0 home, 1 lyrics, 2 settings, 3 sleep, 4 wifi, 5 password, 6 clock, 7 clock settings, 8 city, 9 lyrics settings, 10 device, 11 detail, 12 Basic settings, 13 hue picker
 
 static const uint32_t PALETTE[] = {0xFFFFFF, 0x86E3AE, 0x76C6FF, 0xFFD18B, 0xF6A1D2};
 static const char *DEMO_TEXT =
@@ -168,6 +172,8 @@ static void build_wifi(void);
 static void build_wifi_password(void);
 static void build_clock(void);
 static void build_clock_settings(void);
+static void build_basic_settings(void);
+static void build_basic_colour(void);
 static void build_weather_location(void);
 static void build_lyrics_settings(void);
 static void build_device_settings(void);
@@ -633,7 +639,7 @@ static void build_clock(void)
 {
     page = 6;
     make_base();
-    lf_clock_build(screen, prefs->clock_face);
+    lf_clock_build(screen, prefs->clock_face, prefs);
     /* Clock settings are a long press, not an accidental edge tap. */
     lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(screen, on_clock_long_press, LV_EVENT_LONG_PRESSED, NULL);
@@ -651,13 +657,9 @@ static void on_clock_options(lv_event_t *e)
 static void on_cycle_face(lv_event_t *e)
 {
     (void)e;
-    prefs->clock_face = (uint8_t)((prefs->clock_face + 1) % 5);
+    prefs->clock_face = (uint8_t)((prefs->clock_face + 1) % 6);
     save_settings();
-    if (clockface_text) {
-        char label_text[55];
-        snprintf(label_text, sizeof label_text, "Face: %s", lf_clock_style_name(prefs->clock_face));
-        lv_label_set_text(clockface_text, label_text);
-    }
+    build_clock_settings();
 }
 static void on_weather_toggle(lv_event_t *e)
 {
@@ -678,41 +680,197 @@ static void on_weather_interval(lv_event_t *e)
     cfg.interval_minutes = cfg.interval_minutes == 15 ? 30 :
                            cfg.interval_minutes == 30 ? 60 :
                            cfg.interval_minutes == 60 ? 120 : 15;
-    if (lf_weather_save_config(&cfg) && weather_status_text) {
-        char value[48];
-        snprintf(value, sizeof value, "Refresh: %u min", cfg.interval_minutes);
-        lv_label_set_text(weather_status_text, value);
+    if (lf_weather_save_config(&cfg)) {
         activity();
+        build_clock_settings();
     }
 }
 static void on_weather_location(lv_event_t *e)
 {
     (void)e; activity(); build_weather_location();
 }
+static void on_basic_settings(lv_event_t *e)
+{
+    (void)e; activity(); build_basic_settings();
+}
 static void build_clock_settings(void)
 {
     page = 7;
     make_base();
-    label(screen, "CLOCK & WEATHER", 37, &lv_font_montserrat_20, prefs->text_color);
-    button(screen, "CHANGE CLOCK FACE", 264, 49, 0, -114,
-           prefs->text_color, on_cycle_face, NULL);
+    label(screen, "CLOCK SETTINGS", 38, &lv_font_montserrat_24, prefs->text_color);
     char value[65];
     snprintf(value, sizeof value, "Face: %s", lf_clock_style_name(prefs->clock_face));
-    clockface_text = label(screen, value, 151, &lv_font_montserrat_16, 0xDEE9F2);
-
+    button(screen, value, 270, 55, 0, -99,
+           0xB2C6D3, on_cycle_face, NULL);
+    button(screen, "CUSTOMIZE BASIC", 270, 52, 0, -29,
+           0xB2C6D3, on_basic_settings, NULL);
     lf_weather_config_t cfg;
     lf_weather_get_config(&cfg);
-    button(screen, cfg.enabled ? "WEATHER: ON" : "WEATHER: OFF", 224, 45, 0, -30,
-           0xB2C6D3, on_weather_toggle, NULL);
-    button(screen, "REFRESH INTERVAL", 223, 45, 0, 29,
-           0xB2C6D3, on_weather_interval, NULL);
-    snprintf(value, sizeof value, "Refresh: %u min", cfg.interval_minutes);
-    weather_status_text = label(screen, value, 293, &lv_font_montserrat_16, 0xB9CADB);
-    button(screen, "WEATHER LOCATION", 226, 43, 0, 100,
+    button(screen, "WEATHER LOCATION", 254, 51, 0, 40,
            0xB2C6D3, on_weather_location, NULL);
-    snprintf(value, sizeof value, "City: %.40s", cfg.city[0] ? cfg.city : "(not set)");
-    weather_city_text = label(screen, value, 361, &lv_font_montserrat_16, 0xB9CADB);
-    button(screen, "BACK", 122, 42, 0, 181, prefs->text_color, on_settings, NULL);
+    snprintf(value, sizeof value, "Update: %u min", cfg.interval_minutes);
+    button(screen, value, 239, 50, 0, 106,
+           0xB2C6D3, on_weather_interval, NULL);
+    weather_status_text = NULL;
+    button(screen, "BACK", 144, 50, 0, 176,
+           prefs->text_color, on_settings, NULL);
+}
+static void on_basic_font(lv_event_t *e)
+{
+    (void)e;
+    prefs->basic_font_style = (prefs->basic_font_style + 1) % 5;
+    save_settings();
+    build_basic_settings();
+}
+static void on_basic_ring_mode(lv_event_t *e)
+{
+    (void)e;
+    prefs->basic_ring_mode = (prefs->basic_ring_mode + 1) % 3;
+    save_settings();
+    build_basic_settings();
+}
+static void on_basic_date(lv_event_t *e)
+{
+    (void)e;
+    prefs->basic_show_date = !prefs->basic_show_date;
+    save_settings();
+    build_basic_settings();
+}
+static void on_basic_weather(lv_event_t *e)
+{
+    (void)e;
+    prefs->basic_weather = !prefs->basic_weather;
+    if (prefs->basic_weather) {
+        lf_weather_config_t cfg;
+        lf_weather_get_config(&cfg);
+        cfg.enabled = true;
+        (void)lf_weather_save_config(&cfg);
+    }
+    save_settings();
+    build_basic_settings();
+}
+static void on_basic_size(lv_event_t *e)
+{
+    prefs->basic_font_size = (uint8_t)lv_slider_get_value(lv_event_get_target(e));
+    if (basic_font_size_label) {
+        char text[40];
+        snprintf(text, sizeof text, "Time size: %u%%", prefs->basic_font_size);
+        lv_label_set_text(basic_font_size_label, text);
+    }
+    if (lv_event_get_code(e) == LV_EVENT_RELEASED) save_settings();
+}
+static void on_basic_colour(lv_event_t *e)
+{
+    selected_colour_target = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
+    activity();
+    build_basic_colour();
+}
+static void on_basic_back(lv_event_t *e)
+{
+    (void)e; activity(); build_basic_settings();
+}
+static uint32_t *selected_basic_rgb(void)
+{
+    switch (selected_colour_target) {
+        case 0: return &prefs->basic_background;
+        case 1: return &prefs->basic_foreground;
+        case 2: return &prefs->basic_ring_a;
+        case 3: return &prefs->basic_ring_b;
+        default: return &prefs->basic_ring_c;
+    }
+}
+static uint32_t hue_rgb(int hue)
+{
+    int sector=(hue / 60) % 6;
+    int d=(hue % 60)*255/60;
+    int r=0, g=0, b=0;
+    switch (sector) {
+        case 0: r=255;g=d;break;
+        case 1: r=255-d;g=255;break;
+        case 2: g=255;b=d;break;
+        case 3: g=255-d;b=255;break;
+        case 4: r=d;b=255;break;
+        default: r=255;b=255-d;break;
+    }
+    return (uint32_t)((r<<16)|(g<<8)|b);
+}
+static void on_basic_hue(lv_event_t *e)
+{
+    int hue=lv_slider_get_value(lv_event_get_target(e));
+    uint32_t rgb=hue_rgb(hue);
+    *selected_basic_rgb() = rgb;
+    if (basic_colour_swatch)
+        lv_obj_set_style_bg_color(basic_colour_swatch, lv_color_hex(rgb), 0);
+    if (basic_hue_label) {
+        char text[35];
+        snprintf(text, sizeof text, "Spectrum: %d / 359", hue);
+        lv_label_set_text(basic_hue_label,text);
+    }
+    if (lv_event_get_code(e)==LV_EVENT_RELEASED) save_settings();
+}
+static void build_basic_colour(void)
+{
+    page = 13;
+    make_base();
+    const char *titles[] = {"BACKGROUND","TIME TEXT","RING COLOR 1",
+                            "RING COLOR 2","RING COLOR 3"};
+    label(screen, titles[selected_colour_target], 48,
+          &lv_font_montserrat_24, prefs->text_color);
+    basic_colour_swatch = lv_obj_create(screen);
+    lv_obj_set_size(basic_colour_swatch, 138, 94);
+    lv_obj_align(basic_colour_swatch, LV_ALIGN_CENTER, 0, -64);
+    lv_obj_set_style_bg_color(basic_colour_swatch, lv_color_hex(*selected_basic_rgb()), 0);
+    lv_obj_set_style_radius(basic_colour_swatch, 28, 0);
+    lv_obj_set_style_border_color(basic_colour_swatch, lv_color_hex(0xC6E2FF),0);
+    lv_obj_set_style_border_width(basic_colour_swatch, 3, 0);
+    basic_hue_label = label(screen, "Drag hue across the spectrum", 225,
+                            &lv_font_montserrat_20, 0xCEDCEB);
+    add_slider(screen, 283, 210, 0, 359, on_basic_hue);
+    button(screen, "BACK", 161, 51, 0, 169, 0xB2C6D3, on_basic_back, NULL);
+}
+static void build_basic_settings(void)
+{
+    page = 12;
+    make_base();
+    label(screen, "BASIC CLOCK", 39, &lv_font_montserrat_24, prefs->text_color);
+    lv_obj_t *list = lv_obj_create(screen);
+    lv_obj_set_size(list, 322, 265);
+    lv_obj_align(list, LV_ALIGN_CENTER, 0, -2);
+    lv_obj_set_style_bg_color(list, lv_color_hex(0x0C1B2B), 0);
+    lv_obj_set_style_border_width(list, 0, 0);
+    lv_obj_set_style_radius(list, 18, 0);
+    lv_obj_set_style_pad_all(list, 7, 0);
+    lv_obj_set_style_pad_row(list, 8, 0);
+    lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_remove_flag(list, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    char text[65];
+    snprintf(text, sizeof text, "Font preset %u / 5", prefs->basic_font_style + 1);
+    button(list, text, 256, 50, 0, 0, 0xB2C6D3, on_basic_font, NULL);
+    basic_font_size_label = lv_label_create(list);
+    snprintf(text, sizeof text, "Time size: %u%%", prefs->basic_font_size);
+    lv_label_set_text(basic_font_size_label, text);
+    lv_obj_set_style_text_font(basic_font_size_label, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(basic_font_size_label, lv_color_hex(0xD2E7FD), 0);
+    lv_obj_t *slider=lv_slider_create(list);
+    lv_obj_set_size(slider, 249, 14);
+    lv_slider_set_range(slider, 0, 100);
+    lv_slider_set_value(slider, prefs->basic_font_size, LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_RELEASED, NULL);
+    snprintf(text, sizeof text, "Ring: %s", prefs->basic_ring_mode==0?"Solid":
+             prefs->basic_ring_mode==1?"2-color gradient":"3-color gradient");
+    button(list, text, 256, 50, 0, 0, 0xB2C6D3, on_basic_ring_mode, NULL);
+    const char *names[]={"Background color","Time text color","Ring color 1",
+                         "Ring color 2","Ring color 3"};
+    for(uintptr_t i=0;i<5;i++)
+        button(list,names[i],256,50,0,0,0xB2C6D3,on_basic_colour,(void*)i);
+    button(list, prefs->basic_show_date?"Date: ON":"Date: OFF",256,50,0,0,
+           0xB2C6D3,on_basic_date,NULL);
+    button(list, prefs->basic_weather?"Weather: ON":"Weather: OFF",256,50,0,0,
+           0xB2C6D3,on_basic_weather,NULL);
+    button(screen, "BACK", 150, 50, 0, 175, 0xB2C6D3, on_clock_options, NULL);
 }
 static void build_weather_details(void)
 {
