@@ -1,5 +1,6 @@
 #include "ui.h"
 #include "bsp/display.h"
+#include "esp_lv_adapter.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "power.h"
@@ -367,13 +368,13 @@ bool lf_ui_start(lf_settings_t *s)
     prefs = s;
     activity();
     asleep = false;
-    if (bsp_display_lock((uint32_t)-1) != ESP_OK) {
+    if (esp_lv_adapter_lock(-1) != ESP_OK) {
         ESP_LOGE(TAG, "Cannot lock display");
         return false;
     }
     apply_brightness();
     build_home();
     lv_timer_create(on_tick, 50, NULL);
-    bsp_display_unlock();
+    esp_lv_adapter_unlock();
     return true;
 }
