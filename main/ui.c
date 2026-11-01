@@ -48,9 +48,6 @@ static size_t wifi_ap_count;
 static char selected_wifi[33];
 static bool selected_wifi_secured;
 static int wifi_state_previous;
-static lv_obj_t *clockface_text;
-static lv_obj_t *weather_status_text;
-static lv_obj_t *weather_city_text;
 static uint64_t clock_last_refresh;
 static lv_obj_t *weather_detail_text;
 static uint64_t weather_detail_refresh;
@@ -278,9 +275,6 @@ static void make_base(void)
     network_status = NULL;
     network_password = NULL;
     network_url = NULL;
-    clockface_text = NULL;
-    weather_status_text = NULL;
-    weather_city_text = NULL;
     ota_status = NULL;
     wifi_list = NULL;
     wifi_status = NULL;
@@ -676,17 +670,6 @@ static void on_cycle_face(lv_event_t *e)
     save_settings();
     build_clock_settings();
 }
-static void on_weather_toggle(lv_event_t *e)
-{
-    lf_weather_config_t cfg;
-    lf_weather_get_config(&cfg);
-    cfg.enabled = !cfg.enabled;
-    if (lf_weather_save_config(&cfg)) {
-        lv_obj_t *name = lv_obj_get_child(lv_event_get_target(e), 0);
-        if (name) lv_label_set_text(name, cfg.enabled ? "WEATHER: ON" : "WEATHER: OFF");
-        activity();
-    }
-}
 static void on_weather_interval(lv_event_t *e)
 {
     (void)e;
@@ -726,7 +709,6 @@ static void build_clock_settings(void)
     snprintf(value, sizeof value, "Update: %u min", cfg.interval_minutes);
     button(screen, value, 239, 50, 0, 106,
            0xB2C6D3, on_weather_interval, NULL);
-    weather_status_text = NULL;
     button(screen, "BACK", 144, 50, 0, 176,
            prefs->text_color, on_settings, NULL);
 }
