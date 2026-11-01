@@ -5,6 +5,7 @@
 #include "ui.h"
 #include "ota_guard.h"
 #include "network.h"
+#include "weather.h"
 
 static const char *TAG = "LyricFlash";
 
@@ -29,7 +30,7 @@ void app_main(void)
         lf_ota_guard_failure("Display start failed");
         return;
     }
-    ESP_LOGI(TAG, "LyricFlash alpha 0.3.0: demo UI and local firmware update; microphones OFF");
+    ESP_LOGI(TAG, "LyricFlash alpha 0.4.0: demo UI and local firmware update; microphones OFF");
     if (!lf_ui_start(&settings)) {
         lf_ota_guard_failure("UI init failed");
         return;
@@ -39,6 +40,7 @@ void app_main(void)
         lf_ota_guard_failure("Network recovery/update interface failed");
         return;
     }
+    if (!lf_weather_start()) ESP_LOGW(TAG, "Background weather service unavailable");
     // Confirm only after display, settings, and local update server initialize.
     // This guards early boot failures, NOT future Wi-Fi/touch failures.
     lf_ota_guard_confirm_startup();
