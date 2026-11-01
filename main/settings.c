@@ -62,7 +62,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     if (s->timing_offset_ms < -10000 || s->timing_offset_ms > 10000) s->timing_offset_ms = 0;
     s->line_spacing_px = in_range(s->line_spacing_px, 0, 24, 5);
     s->show_progress = in_range(s->show_progress, 0, 1, 1);
-    s->clock_face = in_range(s->clock_face, 0, 2, 0);
+    s->clock_face = in_range(s->clock_face, 0, 4, 0);
     return ESP_OK;
 }
 
