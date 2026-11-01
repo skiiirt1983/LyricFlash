@@ -8,6 +8,7 @@
 #include "lvgl.h"
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 static const char *TAG = "LyricFlashUI";
 static lf_settings_t *prefs;
