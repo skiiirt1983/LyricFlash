@@ -2,6 +2,8 @@ name: LyricFlash USB Build and Pages
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
     paths:
@@ -33,7 +35,7 @@ jobs:
         with:
           esp_idf_version: v5.5.4
           target: esp32s3
-          command: idf.py merge-bin -o build/lyricflash-full.bin -f raw
+          command: idf.py merge-bin -o lyricflash-full.bin -f raw
       - name: Validate and prepare site
         run: |
           python3 tools/check_build.py build/lyricflash.bin
@@ -48,11 +50,14 @@ jobs:
           name: LyricFlash-Alpha-0.3-USB-UNTESTED
           path: _site/beta/firmware/
       - uses: actions/configure-pages@v5
+        if: github.ref == 'refs/heads/main'
       - uses: actions/upload-pages-artifact@v4
+        if: github.ref == 'refs/heads/main'
         with:
           path: _site
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-24.04
     permissions:
