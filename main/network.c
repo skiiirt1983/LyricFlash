@@ -3,6 +3,9 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_netif.h"
+#include "esp_netif_sntp.h"
+#include <time.h>
+#include <stdlib.h>
 #include "esp_event.h"
 #include "esp_random.h"
 #include "esp_ota_ops.h"
@@ -26,6 +29,7 @@ static char ap_pass[16];
 static char ota_pin[10];
 static TickType_t ota_expiry;
 static httpd_handle_t server;
+static bool time_sync_started;
 static void reboot_task(void *arg);
 
 /* Scan completion runs on the ESP event task, UI reads on the LVGL task. */
@@ -125,6 +129,28 @@ bool lf_network_is_connected(void)
            (xEventGroupGetBits(connected_event) & LF_CONNECTED);
 }
 
+/* Pacific Time is the Alpha default. Later versions can expose time zone
+   as a user setting. NTP needs Wi-Fi but does not require a cloud account. */
+static void start_time_sync(void)
+{
+    setenv("TZ", "PST8PDT,M3.2.0,M11.1.0", 1);
+    tzset();
+    if (time_sync_started) return;
+    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    esp_err_t err = esp_netif_sntp_init(&config);
+    if (err == ESP_OK) time_sync_started = true;
+    else ESP_LOGW(TAG, "Time sync unavailable: %s", esp_err_to_name(err));
+}
+bool lf_network_connected_ssid(char *out, size_t size)
+{
+    if (!out || !size) return false;
+    out[0] = 0;
+    if (!lf_network_is_connected()) return false;
+    wifi_ap_record_t ap = {0};
+    if (esp_wifi_sta_get_ap_info(&ap) != ESP_OK) return false;
+    snprintf(out, size, "%s", (const char *)ap.ssid);
+    return out[0] != 0;
+}
 static bool nvs_wifi_load(char *ssid, size_t ns, char *pass, size_t np)
 {
     nvs_handle_t h;
@@ -318,6 +344,7 @@ bool lf_network_start(void)
             EventBits_t bits=xEventGroupWaitBits(connected_event,LF_CONNECTED,pdFALSE,pdFALSE,pdMS_TO_TICKS(12000));
             if(bits & LF_CONNECTED){
                 ESP_LOGI(TAG,"Connected to configured Wi-Fi at %s",address);
+                start_time_sync();
                 return serve();
             }
         }
