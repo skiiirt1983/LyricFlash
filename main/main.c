@@ -29,7 +29,7 @@ void app_main(void)
         lf_ota_guard_failure("Display start failed");
         return;
     }
-    ESP_LOGI(TAG, "LyricFlash alpha 0.3.0: demo UI and local firmware update; microphones OFF");
+    ESP_LOGI(TAG, "LyricFlash alpha 0.4.0: demo UI and local firmware update; microphones OFF");
     if (!lf_ui_start(&settings)) {
         lf_ota_guard_failure("UI init failed");
         return;
