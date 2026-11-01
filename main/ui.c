@@ -34,6 +34,8 @@ static lv_obj_t *ota_status;
 static uint64_t last_power_refresh_ms;
 static uint64_t last_wifi_poll_ms;
 static bool user_dragging;
+static bool finger_was_scrolling;
+static uint64_t scroll_at_end_ms;
 /* Finger releases resume auto-scrolling after this time; explicit PAUSE stays paused. */
 static uint64_t touch_resume_at_ms;
 #define LF_TOUCH_RESUME_DELAY_MS 1500ULL
@@ -241,24 +243,26 @@ static void on_toggle_pause(lv_event_t *e)
 
 static void on_touch_scroll(lv_event_t *e)
 {
-    const lv_event_code_t code = lv_event_get_code(e);
+    lv_event_code_t code = lv_event_get_code(e);
+    /* Auto-scroll also generates scroll events. Only physical finger
+       events may interrupt it; programmatic scrolling must never pause itself. */
     if (code == LV_EVENT_PRESSED) {
-        activity();
-    } else if (code == LV_EVENT_SCROLL_BEGIN) {
-        /* LVGL owns the drag and momentum; our automatic timer stays out. */
         user_dragging = true;
+        finger_was_scrolling = false;
         touch_resume_at_ms = UINT64_MAX;
         activity();
+    } else if (code == LV_EVENT_SCROLL_BEGIN) {
+        if (user_dragging) finger_was_scrolling = true;
     } else if (code == LV_EVENT_RELEASED) {
-        /* Start the quiet period as soon as the finger lifts. */
-        touch_resume_at_ms = now_ms() + LF_TOUCH_RESUME_DELAY_MS;
-        activity();
-    } else if (code == LV_EVENT_SCROLL_END) {
         user_dragging = false;
-        /* Keep fractional auto-scroll aligned with the final drag position. */
+        touch_resume_at_ms = now_ms() + LF_TOUCH_RESUME_DELAY_MS;
+        if (!finger_was_scrolling && scroll_panel)
+            scroll_y = (float)lv_obj_get_scroll_y(scroll_panel);
+        last_scroll_ms = now_ms();
+        activity();
+    } else if (code == LV_EVENT_SCROLL_END && finger_was_scrolling) {
+        finger_was_scrolling = false;
         if (scroll_panel) scroll_y = (float)lv_obj_get_scroll_y(scroll_panel);
-        if (touch_resume_at_ms == UINT64_MAX || !touch_resume_at_ms)
-            touch_resume_at_ms = now_ms() + LF_TOUCH_RESUME_DELAY_MS;
         last_scroll_ms = now_ms();
         activity();
     }
@@ -271,6 +275,8 @@ static void build_preview(void)
     scroll_y = 0;
     paused = false;
     user_dragging = false;
+    finger_was_scrolling = false;
+    scroll_at_end_ms = 0;
     touch_resume_at_ms = 0;
     last_scroll_ms = now_ms();
     label(screen, "LYRIC PREVIEW", 54, &lv_font_montserrat_20, prefs->text_color);
@@ -297,6 +303,9 @@ static void build_preview(void)
 
     lyrics_label = lv_label_create(scroll_panel);
     lv_obj_set_width(lyrics_label, 292);
+    lv_obj_set_height(lyrics_label, LV_SIZE_CONTENT);
+    lv_obj_remove_flag(lyrics_label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(lyrics_label, LV_OBJ_FLAG_SCROLLABLE);
     lv_label_set_long_mode(lyrics_label, LV_LABEL_LONG_WRAP);
     lv_label_set_text(lyrics_label, DEMO_TEXT);
     lv_obj_set_style_text_align(lyrics_label, LV_TEXT_ALIGN_CENTER, 0);
@@ -304,6 +313,21 @@ static void build_preview(void)
     lv_obj_set_style_text_font(lyrics_label, font_for_size(prefs->font_size), 0);
     lv_obj_set_style_text_line_space(lyrics_label, prefs->line_spacing_px, 0);
     lv_obj_align(lyrics_label, LV_ALIGN_TOP_MID, 0, 0);
+    /* Expand the computed content height and leave room to read the last
+       verse. A 1px invisible child guarantees an actual LVGL scroll range. */
+    lv_obj_update_layout(lyrics_label);
+    lv_obj_t *tail = lv_obj_create(scroll_panel);
+    lv_obj_set_size(tail, 1, 1);
+    lv_obj_set_style_bg_opa(tail, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(tail, 0, 0);
+    lv_obj_set_style_pad_all(tail, 0, 0);
+    lv_obj_remove_flag(tail, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(tail, LV_ALIGN_TOP_MID, 0,
+                 lv_obj_get_height(lyrics_label) + 80);
+    lv_obj_update_layout(scroll_panel);
+    ESP_LOGI(TAG, "Lyrics scroll: label=%ld px, viewport=%ld px, bottom=%ld px",
+             (long)lv_obj_get_height(lyrics_label), (long)lv_obj_get_height(scroll_panel),
+             (long)lv_obj_get_scroll_bottom(scroll_panel));
     lv_obj_remove_flag(lyrics_label, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
     button(screen, "BACK", 130, 47, -76, 172, 0x9CB7CB, on_home, NULL);
@@ -744,15 +768,26 @@ static void on_tick(lv_timer_t *timer)
         sleep_display();
         return;
     }
-    if (page != 1 || paused || user_dragging || !scroll_panel ||
-        (touch_resume_at_ms && current < touch_resume_at_ms)) {
+    if (page != 1 || paused || user_dragging || finger_was_scrolling ||
+        !scroll_panel || (touch_resume_at_ms && current < touch_resume_at_ms)) {
         last_scroll_ms = current;
         return;
     }
     uint64_t dt = current - last_scroll_ms;
     if (dt > 200) dt = 200;
     last_scroll_ms = current;
-    if (lv_obj_get_scroll_bottom(scroll_panel) <= 0) return;
+    if (lv_obj_get_scroll_bottom(scroll_panel) <= 0) {
+        /* The demo loops after a short reading pause; real songs will use
+           playback/lyric timestamps instead of a perpetual preview loop. */
+        if (!scroll_at_end_ms) scroll_at_end_ms = current;
+        if (current - scroll_at_end_ms >= 3500) {
+            lv_obj_scroll_to_y(scroll_panel, 0, LV_ANIM_OFF);
+            scroll_y = 0;
+            scroll_at_end_ms = 0;
+        }
+        return;
+    }
+    scroll_at_end_ms = 0;
     /* Accumulate subpixel motion. Reading back integer Y every tick would
        truncate the fractional step to zero and stop automatic scrolling. */
     scroll_y += (float)dt * (0.004f + prefs->scroll_speed * 0.0004f);
