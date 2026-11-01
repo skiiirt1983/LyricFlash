@@ -28,7 +28,19 @@ static lv_obj_t *network_status;
 static lv_obj_t *network_password;
 static lv_obj_t *ota_status;
 static uint64_t last_power_refresh_ms;
-static int page; // 0=home, 1=preview, 2=settings
+static uint64_t last_wifi_poll_ms;
+static bool user_dragging;
+static lv_obj_t *pause_button;
+static lv_obj_t *wifi_list;
+static lv_obj_t *wifi_status;
+static lv_obj_t *wifi_password_status;
+static lv_obj_t *wifi_password_input;
+static lf_wifi_ap_t wifi_aps[LF_WIFI_MAX_RESULTS];
+static size_t wifi_ap_count;
+static char selected_wifi[33];
+static bool selected_wifi_secured;
+static int wifi_state_previous;
+static int page; // 0=home, 1=preview, 2=settings, 3=sleep, 4=wifi, 5=password
 
 static const uint32_t PALETTE[] = {0xFFFFFF, 0x86E3AE, 0x76C6FF, 0xFFD18B, 0xF6A1D2};
 static const char *DEMO_TEXT =
@@ -95,6 +107,8 @@ static void on_sleep(lv_event_t *e);
 static void build_home(void);
 static void build_preview(void);
 static void build_settings(void);
+static void build_wifi(void);
+static void build_wifi_password(void);
 static void on_home(lv_event_t *e)
 {
     (void)e; activity(); build_home();
@@ -121,6 +135,11 @@ static void make_base(void)
     network_status = NULL;
     network_password = NULL;
     ota_status = NULL;
+    wifi_list = NULL;
+    wifi_status = NULL;
+    wifi_password_status = NULL;
+    wifi_password_input = NULL;
+    pause_button = NULL;
 }
 
 static void on_arm_ota(lv_event_t *e)
@@ -134,19 +153,25 @@ static void on_arm_ota(lv_event_t *e)
         lv_label_set_text(ota_status,text);
     }
 }
+static void on_wifi(lv_event_t *e)
+{
+    (void)e; activity(); build_wifi();
+}
+
 static void build_home(void)
 {
     page = 0;
     make_base();
     label(screen, "LYRICFLASH", 34, &lv_font_montserrat_20, prefs->text_color);
-    label(screen, "ALPHA 0.3  |  HARDWARE TEST", 65, &lv_font_montserrat_12, 0x919CA6);
-    battery_status = label(screen, "Battery reading...", 96, &lv_font_montserrat_16, 0xDCE8F0);
-    network_status = label(screen, "Wi-Fi starting...", 126, &lv_font_montserrat_12, 0x8F9BA6);
-    network_password = label(screen, "", 147, &lv_font_montserrat_12, 0x8F9BA6);
+    label(screen, "ALPHA 0.4  |  HARDWARE TEST", 65, &lv_font_montserrat_16, 0xB7C7D7);
+    battery_status = label(screen, "BATTERY", 96, &lv_font_montserrat_16, 0xDCE8F0);
+    network_status = label(screen, "Wi-Fi", 124, &lv_font_montserrat_16, 0xB9CADB);
+    network_password = label(screen, "", 148, &lv_font_montserrat_16, 0xB9CADB);
     button(screen, "LYRIC PREVIEW", 224, 91, 0, -5, prefs->text_color, on_preview, NULL);
-    label(screen, "Mic OFF  |  No audio recorded", 285, &lv_font_montserrat_12, 0x8F9BA6);
-    ota_status = label(screen, "", 310, &lv_font_montserrat_12, prefs->accent_color);
-    button(screen, "ARM OTA", 144, 42, 0, 117, 0xB2C6D3, on_arm_ota, NULL);
+    label(screen, "MIC OFF", 285, &lv_font_montserrat_16, 0xB9CADB);
+    ota_status = label(screen, "", 310, &lv_font_montserrat_16, prefs->accent_color);
+    button(screen, "WI-FI", 134, 42, -77, 117, 0xB2C6D3, on_wifi, NULL);
+    button(screen, "ARM OTA", 134, 42, 77, 117, 0xB2C6D3, on_arm_ota, NULL);
     button(screen, "SETTINGS", 143, 42, -74, 171, 0xAAC1D2, on_settings, NULL);
     button(screen, "SLEEP", 108, 42, 92, 171, 0xAAC1D2, on_sleep, NULL);
 }
@@ -160,15 +185,38 @@ static void on_toggle_pause(lv_event_t *e)
     last_scroll_ms = now_ms();
 }
 
+static void on_touch_scroll(lv_event_t *e)
+{
+    /* A finger gesture takes control from the automatic scroll timer. */
+    if (lv_event_get_code(e) == LV_EVENT_PRESSED ||
+        lv_event_get_code(e) == LV_EVENT_SCROLL_BEGIN) {
+        user_dragging = true;
+        paused = true;
+        activity();
+        if (pause_button) {
+            lv_obj_t *l = lv_obj_get_child(pause_button, 0);
+            if (l) lv_label_set_text(l, "RESUME");
+        }
+    }
+    if (lv_event_get_code(e) == LV_EVENT_SCROLL_END ||
+        lv_event_get_code(e) == LV_EVENT_RELEASED) {
+        user_dragging = false;
+        scroll_y = (float)lv_obj_get_scroll_y(scroll_panel);
+        last_scroll_ms = now_ms();
+        activity();
+    }
+}
+
 static void build_preview(void)
 {
     page = 1;
     make_base();
     scroll_y = 0;
     paused = false;
+    user_dragging = false;
     last_scroll_ms = now_ms();
     label(screen, "LYRIC PREVIEW", 54, &lv_font_montserrat_20, prefs->text_color);
-    label(screen, "Original sample text  |  No recording", 85, &lv_font_montserrat_12, 0x8797A4);
+    label(screen, "SAMPLE LYRICS - MIC OFF", 85, &lv_font_montserrat_16, 0xB7C7D7);
     scroll_panel = lv_obj_create(screen);
     lv_obj_set_size(scroll_panel, 338, 215);
     lv_obj_align(scroll_panel, LV_ALIGN_CENTER, 0, 10);
@@ -178,6 +226,11 @@ static void build_preview(void)
     lv_obj_set_style_pad_all(scroll_panel, 14, 0);
     lv_obj_set_scroll_dir(scroll_panel, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(scroll_panel, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_add_flag(scroll_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_SCROLL_BEGIN, NULL);
+    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_SCROLL_END, NULL);
+    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_RELEASED, NULL);
 
     lyrics_label = lv_label_create(scroll_panel);
     lv_obj_set_width(lyrics_label, 292);
@@ -190,9 +243,118 @@ static void build_preview(void)
     lv_obj_align(lyrics_label, LV_ALIGN_TOP_MID, 0, 0);
 
     button(screen, "BACK", 130, 47, -76, 172, 0x9CB7CB, on_home, NULL);
-    button(screen, "PAUSE", 130, 47, 76, 172, prefs->text_color, on_toggle_pause, NULL);
+    pause_button = button(screen, "PAUSE", 130, 47, 76, 172, prefs->text_color, on_toggle_pause, NULL);
 }
 
+/* List rows are clickable; selecting a network opens the on-device keyboard. */
+static void on_wifi_selected(lv_event_t *e)
+{
+    size_t idx = (size_t)(uintptr_t)lv_event_get_user_data(e);
+    if (idx >= wifi_ap_count) return;
+    strlcpy(selected_wifi, wifi_aps[idx].ssid, sizeof(selected_wifi));
+    selected_wifi_secured = wifi_aps[idx].secured;
+    activity();
+    if (selected_wifi_secured) build_wifi_password();
+    else {
+        if (lf_network_save_wifi(selected_wifi, "")) {
+            if (wifi_status) lv_label_set_text(wifi_status, "Saved. Restarting...");
+        } else if (wifi_status) lv_label_set_text(wifi_status, "Could not save Wi-Fi.");
+    }
+}
+static void draw_wifi_list(void)
+{
+    if (!wifi_list || !wifi_status) return;
+    lv_obj_clean(wifi_list);
+    if (!wifi_ap_count) {
+        lv_label_set_text(wifi_status, "No networks found. Tap SCAN.");
+        return;
+    }
+    lv_label_set_text(wifi_status, "Tap your Wi-Fi network");
+    for (size_t i = 0; i < wifi_ap_count; i++) {
+        lv_obj_t *b = lv_button_create(wifi_list);
+        lv_obj_set_width(b, lv_pct(100));
+        lv_obj_set_height(b, 49);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x263944), 0);
+        lv_obj_set_style_radius(b, 12, 0);
+        lv_obj_add_event_cb(b, on_wifi_selected, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
+        lv_obj_t *name = lv_label_create(b);
+        char row[60];
+        snprintf(row, sizeof(row), "%s %s", wifi_aps[i].secured ? LV_SYMBOL_EYE_CLOSE : " ", wifi_aps[i].ssid);
+        lv_label_set_text(name, row);
+        lv_obj_set_style_text_font(name, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_color(name, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_width(name, lv_pct(100));
+        lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+        lv_obj_center(name);
+    }
+}
+static void on_wifi_scan(lv_event_t *e)
+{
+    (void)e;
+    activity();
+    if (lf_network_scan_start()) {
+        if (wifi_status) lv_label_set_text(wifi_status, "Scanning nearby Wi-Fi...");
+        wifi_state_previous = 1;
+    } else if (wifi_status) lv_label_set_text(wifi_status, "Scan unavailable. Retry.");
+}
+static void build_wifi(void)
+{
+    page = 4;
+    make_base();
+    label(screen, "WI-FI NETWORKS", 42, &lv_font_montserrat_20, prefs->text_color);
+    wifi_status = label(screen, "Select a nearby network", 77, &lv_font_montserrat_16, 0xC4D9E8);
+    wifi_list = lv_obj_create(screen);
+    lv_obj_set_size(wifi_list, 346, 239);
+    lv_obj_align(wifi_list, LV_ALIGN_CENTER, 0, -4);
+    lv_obj_set_flex_flow(wifi_list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_bg_color(wifi_list, lv_color_hex(0x101C29), 0);
+    lv_obj_set_style_border_width(wifi_list, 0, 0);
+    lv_obj_set_style_radius(wifi_list, 16, 0);
+    lv_obj_set_style_pad_all(wifi_list, 7, 0);
+    lv_obj_set_scroll_dir(wifi_list, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(wifi_list, LV_SCROLLBAR_MODE_AUTO);
+    draw_wifi_list();
+    button(screen, "BACK", 140, 46, -81, 174, 0xAAC1D2, on_home, NULL);
+    button(screen, "SCAN", 140, 46, 81, 174, 0xAAC1D2, on_wifi_scan, NULL);
+    if (!wifi_ap_count) (void)lf_network_scan_start();
+    wifi_state_previous = 1;
+}
+static void on_wifi_password_done(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_CANCEL) { activity(); build_wifi(); return; }
+    if (code != LV_EVENT_READY || !wifi_password_input) return;
+    const char *p = lv_textarea_get_text(wifi_password_input);
+    if (lf_network_save_wifi(selected_wifi, p)) {
+        if (wifi_password_status) lv_label_set_text(wifi_password_status, "Saved. Restarting...");
+    } else if (wifi_password_status) {
+        lv_label_set_text(wifi_password_status, "Password must be 8-63 characters.");
+    }
+    activity();
+}
+static void build_wifi_password(void)
+{
+    page = 5;
+    make_base();
+    label(screen, "WI-FI PASSWORD", 37, &lv_font_montserrat_20, prefs->text_color);
+    char display[48];
+    snprintf(display, sizeof(display), "%.32s", selected_wifi);
+    label(screen, display, 73, &lv_font_montserrat_16, 0xDCE8F0);
+    wifi_password_status = label(screen, "Enter password, then tap OK", 104, &lv_font_montserrat_16, 0xB9CADB);
+    wifi_password_input = lv_textarea_create(screen);
+    lv_obj_set_size(wifi_password_input, 318, 48);
+    lv_obj_align(wifi_password_input, LV_ALIGN_TOP_MID, 0, 137);
+    lv_textarea_set_one_line(wifi_password_input, true);
+    lv_textarea_set_password_mode(wifi_password_input, true);
+    lv_textarea_set_max_length(wifi_password_input, 63);
+    lv_obj_set_style_text_font(wifi_password_input, &lv_font_montserrat_18, 0);
+    lv_obj_t *keyboard = lv_keyboard_create(screen);
+    lv_obj_set_size(keyboard, 390, 213);
+    lv_obj_align(keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_keyboard_set_textarea(keyboard, wifi_password_input);
+    lv_obj_add_event_cb(keyboard, on_wifi_password_done, LV_EVENT_READY, NULL);
+    lv_obj_add_event_cb(keyboard, on_wifi_password_done, LV_EVENT_CANCEL, NULL);
+}
 static void on_brightness(lv_event_t *e)
 {
     prefs->brightness = (uint8_t)lv_slider_get_value(lv_event_get_target(e));
@@ -314,10 +476,21 @@ static void on_tick(lv_timer_t *timer)
 {
     (void)timer;
     uint64_t current = now_ms();
+    if (page == 4 && !asleep && current - last_wifi_poll_ms >= 350) {
+        last_wifi_poll_ms = current;
+        size_t n = 0;
+        int scan_state = lf_network_scan_results(wifi_aps, LF_WIFI_MAX_RESULTS, &n);
+        if (scan_state != wifi_state_previous && scan_state != 1) {
+            wifi_state_previous = scan_state;
+            wifi_ap_count = n;
+            draw_wifi_list();
+            if (scan_state < 0 && wifi_status) lv_label_set_text(wifi_status, "Scan failed. Tap SCAN.");
+        }
+    }
     if (page == 0 && !asleep && current - last_power_refresh_ms >= 4000) {
         last_power_refresh_ms = current;
         lf_power_state_t st;
-        bool success=lf_power_read(&st);
+        bool success=lf_power_cached(&st);
         if (battery_status) {
             char value[68];
             const char *icon = !success ? LV_SYMBOL_WARNING :
@@ -329,9 +502,11 @@ static void on_tick(lv_timer_t *timer)
             if (success && st.percentage >= 0)
                 snprintf(value,sizeof value,"%s  %s  %d%%",icon,lf_power_symbol(&st),st.percentage);
             else if (success) snprintf(value,sizeof value,"%s  %s",icon,lf_power_symbol(&st));
-            else snprintf(value,sizeof value,"%s  Battery unavailable",icon);
-            lv_label_set_text(battery_status,value);
-            lv_obj_set_style_text_color(battery_status,lv_color_hex(lf_power_color(&st)),0);
+            else snprintf(value,sizeof value,"%s  BATTERY",LV_SYMBOL_BATTERY_FULL);
+            if (success) {
+                lv_label_set_text(battery_status,value);
+                lv_obj_set_style_text_color(battery_status,lv_color_hex(lf_power_color(&st)),0);
+            }
         }
         if (network_status) {
             char text[128];
@@ -352,7 +527,7 @@ static void on_tick(lv_timer_t *timer)
         sleep_display();
         return;
     }
-    if (page != 1 || paused || !scroll_panel) {
+    if (page != 1 || paused || user_dragging || !scroll_panel) {
         last_scroll_ms = current;
         return;
     }
@@ -373,6 +548,7 @@ bool lf_ui_start(lf_settings_t *s)
         return false;
     }
     apply_brightness();
+    (void)lf_power_background_start();
     build_home();
     lv_timer_create(on_tick, 50, NULL);
     esp_lv_adapter_unlock();
