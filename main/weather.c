@@ -17,6 +17,7 @@ static const char *TAG = "LFWeather";
 static portMUX_TYPE weather_mux = portMUX_INITIALIZER_UNLOCKED;
 static lf_weather_config_t config = {.enabled = false, .interval_minutes = 30, .city = ""};
 static char weather_strip[68];
+static char weather_details[256];
 static uint32_t config_generation;
 static TaskHandle_t weather_task;
 
@@ -99,7 +100,8 @@ static const char *condition(int code)
     if (code >= 95) return "STORM";
     return "WEATHER";
 }
-static bool fetch_weather(const char *city, char *result, size_t cap)
+static bool fetch_weather(const char *city, char *result, size_t cap,
+                          char *details, size_t details_cap)
 {
     char encoded[3 * (LF_WEATHER_CITY_MAX + 1)] = {0};
     if (!encode_city(city, encoded, sizeof encoded)) return false;
@@ -126,7 +128,8 @@ static bool fetch_weather(const char *city, char *result, size_t cap)
 
     snprintf(url, sizeof url,
              "https://api.open-meteo.com/v1/forecast?latitude=%.5f&longitude=%.5f"
-             "&current=temperature_2m,weather_code&temperature_unit=celsius&timezone=auto",
+             "&current=temperature_2m,apparent_temperature,relative_humidity_2m,"
+             "weather_code,wind_speed_10m,precipitation&temperature_unit=celsius&timezone=auto",
              lat, lon);
     cJSON *forecast = https_json(url);
     if (!forecast) return false;
@@ -138,6 +141,20 @@ static bool fetch_weather(const char *city, char *result, size_t cap)
         double t = temp->valuedouble;
         int rounded = (int)(t < 0 ? t - 0.5 : t + 0.5);
         snprintf(result, cap, "%s  %dC  %s", short_name, rounded, condition(code->valueint));
+    }
+    if (valid && details && details_cap) {
+        cJSON *feels = cJSON_GetObjectItemCaseSensitive(current, "apparent_temperature");
+        cJSON *humidity = cJSON_GetObjectItemCaseSensitive(current, "relative_humidity_2m");
+        cJSON *wind = cJSON_GetObjectItemCaseSensitive(current, "wind_speed_10m");
+        cJSON *precip = cJSON_GetObjectItemCaseSensitive(current, "precipitation");
+        double perceived = cJSON_IsNumber(feels) ? feels->valuedouble : temp->valuedouble;
+        double wind_kmh = cJSON_IsNumber(wind) ? wind->valuedouble : 0;
+        double rain_mm = cJSON_IsNumber(precip) ? precip->valuedouble : 0;
+        int humidity_pct = cJSON_IsNumber(humidity) ? humidity->valueint : 0;
+        snprintf(details, details_cap,
+                 "%s\n%d C  %s\nFeels like %.0f C\nHumidity %d%%\nWind %.0f km/h\nPrecipitation %.1f mm",
+                 short_name, (int)(temp->valuedouble < 0 ? temp->valuedouble-0.5 : temp->valuedouble+0.5),
+                 condition(code->valueint), perceived, humidity_pct, wind_kmh, rain_mm);
     }
     cJSON_Delete(forecast);
     return valid;
@@ -195,7 +212,17 @@ bool lf_weather_save_config(const lf_weather_config_t *next)
     config_generation++;
     portEXIT_CRITICAL(&weather_mux);
     set_strip("");
+    portENTER_CRITICAL(&weather_mux);
+    weather_details[0] = 0;
+    portEXIT_CRITICAL(&weather_mux);
     return true;
+}
+void lf_weather_get_detail(char *out, size_t max)
+{
+    if (!out || !max) return;
+    portENTER_CRITICAL(&weather_mux);
+    snprintf(out, max, "%s", weather_details[0] ? weather_details : "Weather not available yet");
+    portEXIT_CRITICAL(&weather_mux);
 }
 void lf_weather_get_strip(char *out, size_t max)
 {
@@ -226,12 +253,19 @@ static void worker(void *arg)
         } else if (generation != prior_generation ||
                    (int32_t)(xTaskGetTickCount() - next_poll) >= 0) {
             char reading[68] = {0};
-            bool ok = fetch_weather(c.city, reading, sizeof reading);
+            char detailed[256] = {0};
+            bool ok = fetch_weather(c.city, reading, sizeof reading, detailed, sizeof detailed);
             /* A changed configuration must not display a stale result. */
             portENTER_CRITICAL(&weather_mux);
             bool unchanged = config_generation == generation;
             portEXIT_CRITICAL(&weather_mux);
-            if (unchanged) set_strip(ok ? reading : "WEATHER UNAVAILABLE");
+            if (unchanged) {
+                set_strip(ok ? reading : "WEATHER UNAVAILABLE");
+                portENTER_CRITICAL(&weather_mux);
+                snprintf(weather_details, sizeof weather_details, "%s",
+                         ok ? detailed : "Weather unavailable. Check Wi-Fi and the selected city.");
+                portEXIT_CRITICAL(&weather_mux);
+            }
             uint32_t delay_ms = ok ? ((uint32_t)c.interval_minutes * 60000U) : 60000U;
             next_poll = xTaskGetTickCount() + pdMS_TO_TICKS(delay_ms);
         }
