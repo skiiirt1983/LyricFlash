@@ -151,6 +151,14 @@ require(len(settings_nav) == 2 and
         "LV_DIR_LEFT || direction == LV_DIR_RIGHT" in settings_nav[1].split("else if (page == 6)", 1)[0] and
         "swipe_candidate_page = 0;" in settings_nav[1].split("else if (page == 6)", 1)[0],
         "Settings page must swipe home in both horizontal directions")
+require('class="lf-mark"' in pages["studio"] and
+        '<div class="toolbar-links">' in pages["studio"] and
+        '<nav class="subnav"' in pages["studio"] and
+        'href="/settings" class="active"' in pages["studio"] and
+        'flex-direction:column!important' in pages["studio"] and
+        'gap:24px!important' in pages["settings"] and
+        'gap:24px!important' in pages["firmware"],
+        "Device Studio logo, menu spacing and Clock Studio navigation must match")
 require('class="lf-mark"' in pages["settings"] and 'class="lf-mark"' in pages["firmware"],
         "LyricFlash logo/header branding missing")
 require('class="toolbar-links"' in pages["settings"] and 'class="toolbar-links"' in pages["firmware"]
