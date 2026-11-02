@@ -37,12 +37,15 @@ static const lv_font_t *time_font(const lf_settings_t *p)
 lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
 {
     lv_obj_set_style_bg_color(parent, lv_color_hex(p->basic_background), 0);
-    for(int i=0;i<60;i++) {
+    /* A solid ring requires one arc. For blended rings, 30 anti-aliased
+       sections preserve a smooth appearance with half the prior objects. */
+    const int segment_count = p->basic_ring_mode == 0 ? 1 : 30;
+    for(int i=0;i<segment_count;i++) {
         lv_obj_t *arc=lv_arc_create(parent);
         lv_obj_set_size(arc, 441, 441);
         lv_obj_align(arc,LV_ALIGN_CENTER,0,0);
-        lv_arc_set_bg_angles(arc,i*6,(i+1)*6);
-        lv_obj_set_style_arc_color(arc,lv_color_hex(ring_colour(p,i)),LV_PART_MAIN);
+        lv_arc_set_bg_angles(arc,i*360/segment_count,(i+1)*360/segment_count);
+        lv_obj_set_style_arc_color(arc,lv_color_hex(ring_colour(p,i*60/segment_count)),LV_PART_MAIN);
         lv_obj_set_style_arc_width(arc,13,LV_PART_MAIN);
         lv_obj_set_style_arc_width(arc,0,LV_PART_INDICATOR);
         lv_obj_set_style_bg_opa(arc,LV_OPA_TRANSP,0);
