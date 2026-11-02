@@ -146,7 +146,7 @@ require('static void pager_build(' not in ui and
 require('static void build_home(void) { nav_schedule(build_home_now); }' in ui and
         'static void build_settings(void) { nav_schedule(build_settings_now); }' in ui and
         'static void build_clock(void) { nav_schedule(build_clock_now); }' in ui and
-        'if(target) {' in ui and
+        'if(!target)return;' in ui and
         'target();' in ui and
         'lv_async_call(nav_drain,NULL)' in ui,
         "Every main-screen navigation must be deferred until after touch dispatch")
@@ -275,7 +275,7 @@ require('invalidate_full_screen();' in ui and
         'lv_async_call(wake_finish_async,NULL);' in ui and
         'static void wake_finish_async(void *arg)' in ui and
         'if(cover)lv_obj_delete(cover);' in ui and
-        'if(target) {' in ui and
+        'if(!target)return;' in ui and
         'target();' in ui and
         'lv_display_add_event_cb(disp,display_flush_start_event,LV_EVENT_FLUSH_START,NULL);' in ui and
         'lv_display_add_event_cb(disp,display_flush_finish_event,LV_EVENT_FLUSH_FINISH,NULL);' in ui,
