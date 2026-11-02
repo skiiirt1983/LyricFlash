@@ -783,11 +783,23 @@ static void build_device_settings(void)
     button(screen, "BACK", 152, 45, 0, 178, prefs->text_color, on_settings, NULL);
 }
 
+/* Clock dial elements must never consume swipe/hold touch events. */
+static void clock_children_input_transparent(lv_obj_t *parent)
+{
+    uint32_t count = lv_obj_get_child_count(parent);
+    for (uint32_t i = 0; i < count; i++) {
+        lv_obj_t *child = lv_obj_get_child(parent, i);
+        lv_obj_remove_flag(child, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(child, LV_OBJ_FLAG_SCROLLABLE);
+        clock_children_input_transparent(child);
+    }
+}
 static void build_clock(void)
 {
     page = 6;
     make_base();
     lf_clock_build(screen, prefs->clock_face, prefs);
+    clock_children_input_transparent(screen);
     /* A deliberate 2-second hold produces a confirmation popup.
        The global LVGL short-long-press event no longer opens settings. */
     lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
