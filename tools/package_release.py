@@ -67,6 +67,8 @@ def validate(site):
     if len(reset_bytes) != 0x2000 or any(v != 0xff for v in reset_bytes):
         raise ValueError("Release BLOCKED: OTA selection reset image malformed")
     preserve = json.loads(preserve_path.read_text())
+    if preserve.get("new_install_prompt_erase") is not True:
+        raise ValueError("Release BLOCKED: USB updater must offer explicit erase-or-keep choice")
     if preserve.get("version") != embedded_version:
         raise ValueError("Release BLOCKED: preserve-NVS manifest version mismatch")
     builds = preserve.get("builds", [])
@@ -103,7 +105,7 @@ def package(site):
         "Waveshare ESP32-S3 16 MB device.\n"
         "OTA: use firmware/lyricflash-ota.bin only in an already authorized LyricFlash updater.\n"
         "Do NOT flash the OTA-only image at 0x0.\n"
-        "Use manifest-preserve.json for an existing LyricFlash installation to retain Wi-Fi.\n"
+        "Use manifest-preserve.json for an existing LyricFlash installation.\n"\n        "IMPORTANT: Choose KEEP DATA if the browser offers an erase prompt.\n"\n        "If KEEP is unavailable, cancel USB installation; it may otherwise wipe NVS.\n"
         "This writes the app at 0x110000 and OTA-data reset at 0x109000, not the NVS region.\n"
         "Use the full recovery image only if the preserve installation fails.\n"
         "The complete USB image overwrites existing NVS and OTA slot metadata, "
