@@ -9,3 +9,5 @@
 /* Single intentional hardware-candidate compile after successful navigation preflight. */
 
 /* One targeted production-toolchain validation after green OTA/weather/time preflight. */
+
+/* Build 0.8.8 direct HTTPS alpha OTA and safe Weather -> pager handoff after passing source tests. */
