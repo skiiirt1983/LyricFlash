@@ -555,7 +555,9 @@ static esp_err_t handle_device(httpd_req_t *req)
 }
 static esp_err_t handle_wifi(httpd_req_t *req)
 {
-    if(!in_ap) { httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Connect to the device setup AP to change Wi-Fi"); return ESP_FAIL; }
+    /* LAN Settings page must also be able to change the saved home SSID.
+       This endpoint is available on the local device network without PIN,
+       as explicitly requested; no credential is returned by API. */
     if(req->content_len<2 || req->content_len>320){httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid request size");return ESP_FAIL;}
     char json[321]; int n=0;
     while(n<req->content_len){int r=httpd_req_recv(req,json+n,req->content_len-n);if(r<=0){httpd_resp_send_err(req,HTTPD_408_REQ_TIMEOUT,"Request timed out");return ESP_FAIL;}n+=r;}
