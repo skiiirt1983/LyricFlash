@@ -5,3 +5,4 @@
    Hardware validation still required. */
 #define LF_VERSION "0.8.17-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.17"
+/* 0.8.17 TE-off compile checkpoint: all source preflight assertions passed. */
