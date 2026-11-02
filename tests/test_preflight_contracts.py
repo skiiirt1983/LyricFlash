@@ -325,17 +325,17 @@ require('static void update_label_if_changed(' in clock_face and
         'displayed_battery_color' in clock_face,
         "Basic Clock unchanged-value LVGL invalidation guard missing")
 
-# Clock warm navigation: retain one clock child under the single root, never
-# create an additional active screen; invalidate cached content on settings.
-render_clock=ui.split('static void render_clock(void)\n{',1)[1].split('static void build_clock_now',1)[0]
+# The clock is kept as one child of the persistent three-page pager, still
+# under the ONLY LVGL root screen; invalidate it on settings changes.
+pager_clock=ui.split('static void primary_pager_build_clock(void)\n{',1)[1].split('static void primary_pager_create',1)[0]
 make_base=ui.split('static void make_base(void)\n{',1)[1].split('static void on_wifi',1)[0]
 require('static lv_obj_t *clock_scene;' in ui and
         'if (clock_scene) lv_obj_add_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);' in make_base and
         'if (child != clock_scene) lv_obj_delete(child);' in make_base and
         'clock_scene_stale || clock_scene_style != prefs->clock_face' in make_base and
-        'lf_clock_build(clock_scene,prefs->clock_face,prefs);' in render_clock and
-        'lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);' in render_clock and
-        'lf_clock_update();' in render_clock and
+        'lf_clock_build(clock_scene,prefs->clock_face,prefs);' in pager_clock and
+        'lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);' in pager_clock and
+        'lf_clock_update();' in ui and
         'clock_scene_stale=true;' in ui and
         ui.count('screen=lv_obj_create(NULL);') == 1,
         "Clock must remain cached as one child of the only LVGL screen")
@@ -373,3 +373,32 @@ require('nav_transition_edge' not in ui and
         'nav_transition_catcher=lv_obj_create(screen);' in ui and
         'if(screen && interrupted) lv_obj_invalidate(screen);' in ui,
         "Page transitions must reveal content without green accent divider")
+
+# 0.8.22: actual page carousel rather than 0.8.21 post-release strip wipe.
+# Three live sibling panels scroll WITH the user's finger and snap on release.
+# Still only one lv_screen_load() root, and Weather/submenus stay deferred.
+pager_impl=ui.split('static void primary_pager_scroll_event(lv_event_t *e)\n{',1)[1].split('static lv_obj_t *primary_page_create',1)[0]
+pager_scene=ui.split('static void primary_pager_create(int target_index)\n{',1)[1].split('static void primary_pager_enter(',1)[0]
+require('static lv_obj_t *primary_pager;' in ui and
+        'primary_pager_pages[3]' in ui and
+        'primary_pager_origin' in pager_impl and
+        'LV_EVENT_SCROLL_BEGIN' in pager_impl and
+        'LV_EVENT_SCROLL_END' in pager_impl and
+        'lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);' in pager_impl and
+        'abs(displacement)>=93' in pager_impl and
+        'lv_obj_set_scroll_dir(primary_pager,LV_DIR_HOR);' in pager_scene and
+        'LV_SCROLL_SNAP_NONE' in pager_scene and
+        'lv_obj_scroll_to_x(primary_pager,target_index*466,LV_ANIM_OFF);' in pager_scene and
+        'primary_pager_pages[i]=primary_page_create(primary_pager,i)' in pager_scene and
+        'primary_render_home_content(primary_pager_pages[1]);' in pager_scene and
+        'primary_render_settings_content(primary_pager_pages[2]);' in pager_scene and
+        'primary_pager_build_clock();' in pager_scene and
+        'lv_obj_set_parent(clock_scene,screen);' in make_base and
+        'if(was_pager && primary_pager)return;' in nav_drain and
+        ui.count('lv_screen_load(screen);')==1,
+        "Finger pager must contain 3 live pages inside single safe LVGL root")
+require('if(primary_pager && (page==0 || page==2 || page==6)' in ui and
+        'LV_DIR_LEFT || direction==LV_DIR_RIGHT' in ui and
+        'lv_indev_set_scroll_throw(touch,90);' in ui and
+        'if(nav_transition_active)nav_transition_end(true);' in ui,
+        "Native horizontal dragging must exclude duplicate release navigation")
