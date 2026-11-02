@@ -124,7 +124,7 @@ static const char lf_basic_settings_html[] =
 "svg+=text(256,63,time)+(f.show_date?text(196,22,date):'')+text(301,15,'RETRO LCD',f.accent);}\n"
 "else if(activeFace===4){svg+='<circle cx=\"233\" cy=\"233\" r=\"176\" fill=\"none\" stroke=\"'+f.accent+'\" stroke-width=\"3\"/>'+tickMarks(f.accent,170);\n"
 "svg+=analogHands(f,min,sec)+(f.show_date?text(371,20,date):'');}\n"
-"else{const a=hex(nval('ring_a')),b=hex(nval('ring_b')),c=hex(nval('ring_c')),mode=nval('ring_mode'),fs=Math.min(100,Math.max(0,nval('font_size')));svg+='<defs><linearGradient id=\"basic-gradient\"><stop stop-color=\"'+a+'\"/><stop offset=\".5\" stop-color=\"'+(mode>0?b:a)+'\"/><stop offset=\"1\" stop-color=\"'+(mode>1?c:mode>0?b:a)+'\"/></linearGradient></defs><circle cx=\"233\" cy=\"233\" r=\"191\" stroke=\"url(#basic-gradient)\" stroke-width=\"12\" fill=\"none\"/>';\n"
+"else{const a=$('ring_a').value,b=$('ring_b').value,c=$('ring_c').value,mode=nval('ring_mode'),fs=Math.min(100,Math.max(0,nval('font_size')));svg+='<defs><linearGradient id=\"basic-gradient\"><stop stop-color=\"'+a+'\"/><stop offset=\".5\" stop-color=\"'+(mode>0?b:a)+'\"/><stop offset=\"1\" stop-color=\"'+(mode>1?c:mode>0?b:a)+'\"/></linearGradient></defs><circle cx=\"233\" cy=\"233\" r=\"191\" stroke=\"url(#basic-gradient)\" stroke-width=\"12\" fill=\"none\"/>';\n"
 "svg+=text(249,35+fs*.32,time)+(f.show_date?text(311,23,date):'')+($('weather').checked?text(368,18,'Weather',f.accent):'');}\n"
 "if(f.show_battery)svg+='<g fill=\"'+f.accent+'\"><rect x=\"193\" y=\"66\" width=\"73\" height=\"25\" rx=\"6\" fill=\"none\" stroke=\"'+f.accent+'\" stroke-width=\"3\"/><rect x=\"266\" y=\"73\" width=\"6\" height=\"11\" rx=\"2\"/><rect x=\"200\" y=\"72\" width=\"43\" height=\"13\" rx=\"2\"/></g>';\n"
 "$('clock-preview').innerHTML=svg;\n"
@@ -140,7 +140,8 @@ static const char lf_basic_settings_html[] =
 "async function diagnostics(){let p=$('diagnostics');p.hidden=!p.hidden;if(p.hidden)return;try{p.textContent=JSON.stringify(await request('/api/diagnostics'),null,2);}catch(e){p.textContent=e.message;}}\n"
 "$('clock_face').addEventListener('change',()=>{readProfile();activeFace=nval('clock_face');writeProfile();});\n"
 "for(let id of ['face_background','face_foreground','face_accent','face_show_date','face_show_seconds','face_show_battery','face_24h'])$(id).addEventListener('input',()=>{readProfile();render();});\n"
-"for(let id of ['font_style','font_size','ring_mode','show_date','weather','background','foreground','ring_a','ring_b','ring_c'])$(id).addEventListener('input',()=>{if(activeFace===5)readProfile();render();});\n"
+"for(let id of ['font_style','font_size','ring_mode','show_date','weather','ring_a','ring_b','ring_c'])$(id).addEventListener('input',()=>{if(id==='show_date'&&activeFace===5){faceProfiles[5].show_date=$('show_date').checked;$('face_show_date').checked=$('show_date').checked;}render();});
+for(let id of ['background','foreground'])$(id).addEventListener('input',()=>{if(activeFace===5){faceProfiles[5][id]=parseInt($(id).value.slice(1),16);$('face_'+id).value=$(id).value;}render();});\n"
 "$('reset-face').onclick=()=>{faceProfiles[activeFace]={...defaults[activeFace]};writeProfile();status(names[activeFace]+' restored to defaults in preview. Save to apply.');};\n"
 "$('save').onclick=save;$('refresh').onclick=diagnostics;\n"
 "load();setInterval(render,1000);\n"
