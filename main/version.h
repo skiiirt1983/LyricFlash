@@ -8,3 +8,4 @@
    Hardware gesture smoothness, battery/wake and no-stacking untested. */
 #define LF_VERSION "0.8.22-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.22"
+/* 0.8.22 finger pager compile checkpoint: source preflight and driver diff audit passed. */
