@@ -134,28 +134,30 @@ require(abs(old_top-new_top) < 0.00001,
         "New 100% lyric scroll cap does not equal old 35%")
 require("lv_label_set_long_mode(s_text,LV_LABEL_LONG_CLIP)" in ui,
         "Clock settings dialog long label not protected")
-require("lv_obj_set_flex_flow(p,LV_FLEX_FLOW_ROW);" in ui and
-        "lv_obj_set_scroll_dir(p,LV_DIR_HOR);" in ui and
-        "lv_obj_scroll_to_x(pager_scroll,target_x,LV_ANIM_ON);" in ui and
-        "pager_build_target=pager_clock;" in ui and
-        "lv_obj_set_style_bg_opa(pages[i],LV_OPA_COVER,0);" in ui,
-        "Main page swipes must follow touch in an opaque, clipped native pager")
-require("return; /* LVGL scrolls adjacent pages together with the finger. */" in ui and
-        "if (pager_root && lv_screen_active()==pager_root) pager_show(1,LV_ANIM_ON);" in ui and
-        "if (pager_root && lv_screen_active()==pager_root) pager_show(2,LV_ANIM_ON);" in ui,
-        "Main-page swipe was silently downgraded to switching only after finger release")
-require("nav_settle(direction)" in ui and
-        "lv_obj_set_style_translate_x(screen,amount,0);" in ui and
-        "lv_anim_set_duration(&a,175);" in ui and
-        "lv_anim_delete(old_screen,nav_translate_x);" in ui,
-        "Swipe must move with finger and settle without overlapping screens")
-require("if (swipe_candidate_page >= 0 && screen && page != 11)" in ui and
-        "if (page==11 && old)" in ui and
-        "lv_screen_load(handoff);" in ui and
-        "lv_obj_delete(old);" in ui and
-        "lf_weather_visual_clear();" in ui and
-        "lv_async_call(weather_back_deferred,NULL);" in ui,
-        "Weather exit must free its scene before pager creation, off the LVGL button callback")
+# Recovery release: the previous native three-screen pager repeatedly
+# left the Waveshare display black/overlapping and touch unresponsive.
+# Enforce one LVGL screen and prohibit all root-slide effects.
+require('static void pager_build(' not in ui and
+        'lv_obj_set_flex_flow(p,LV_FLEX_FLOW_ROW);' not in ui and
+        'lv_obj_scroll_to_x(pager_scroll' not in ui and
+        'lv_obj_set_style_translate_x(screen,' not in ui and
+        'lv_anim_set_exec_cb(' not in ui,
+        "Recovery must not restore the broken multi-screen pager or root animations")
+require('static void build_home(void)\n{\n    render_home();\n}' in ui and
+        'static void build_settings(void)\n{\n    render_settings();\n}' in ui and
+        'static void build_clock(void)\n{\n    render_clock();\n}' in ui,
+        "Main navigation must use direct single-screen renderers")
+require('lv_screen_load(screen);' in ui and
+        'lv_obj_delete_async(old_screen);' in ui and
+        'lv_obj_delete(old_screen)' not in ui and
+        'lv_async_call(commit_swipe, NULL)' in ui and
+        'lv_async_call(weather_back_deferred,NULL)' in ui,
+        "No synchronous screen delete within LVGL click/gesture callbacks")
+require('if (!touch_held && is_swipe_page() && !clock_settings_popup)' in ui and
+        'lv_indev_get_state(ptr)==LV_INDEV_STATE_PRESSED' in ui and
+        'lv_indev_get_state(gesture_indev) == LV_INDEV_STATE_RELEASED' in ui and
+        'lv_obj_add_flag(scrollbox,LV_OBJ_FLAG_EVENT_BUBBLE);' in read("main/weather_visual.c"),
+        "Weather scroll gesture must be captured from physical touch input")
 require("raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/" in network and
         "esp_http_client_get_and_clear_last_tls_error" in network and
         "ota_socket_errno" in network,
