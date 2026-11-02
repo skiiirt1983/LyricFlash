@@ -3,6 +3,8 @@
 #include "esp_lv_adapter.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_sleep.h"
+#include "driver/gpio.h"
 #include "power.h"
 #include "network.h"
 #include "diagnostics.h"
@@ -1454,6 +1456,27 @@ static void on_wake(lv_event_t *e)
     apply_brightness();
     build_home();
 }
+/* Optional hardware-level deep sleep. GPIO11 is CST9217 TP_INT on the
+   Waveshare 1.75-in board (RTC GPIO). Requires physical wake testing: an
+   asserted low INT at sleep entry would immediately wake, so guard it.
+   Timer wake is a recovery fallback in case the touch controller will not
+   generate an interrupt while the SoC sleeps. Default remains OFF. */
+static void sleep_deep(void)
+{
+    if (gpio_get_level(GPIO_NUM_11) != 1) {
+        ESP_LOGW(TAG,"Touch INT is low; rejecting deep sleep to avoid wake loop");
+        return;
+    }
+    esp_err_t wake_err=esp_sleep_enable_ext0_wakeup(GPIO_NUM_11,0);
+    if(wake_err!=ESP_OK){
+        ESP_LOGW(TAG,"Cannot arm touch wake: %s",esp_err_to_name(wake_err));
+        return;
+    }
+    (void)esp_sleep_enable_timer_wakeup(12ULL*60ULL*60ULL*1000000ULL);
+    (void)bsp_display_brightness_set(0);
+    ESP_LOGI(TAG,"Entering optional deep sleep; touch GPIO11 or timer will reboot device");
+    esp_deep_sleep_start();
+}
 static void sleep_display(void)
 {
     asleep = true;
@@ -1544,6 +1567,13 @@ static void on_tick(lv_timer_t *timer)
             lv_label_set_text(network_url, url_text);
         }
     }
+    /* Check deep-sleep deadline even after the screen has already turned off.
+       Never deep sleep during diagnostics, onboarding, or active lyric play. */
+    if (prefs->deep_sleep_minutes && !(page == 1 && !paused) &&
+        page != 14 && page != 15 &&
+        current-last_activity_ms >= (uint64_t)prefs->deep_sleep_minutes*60000ULL) {
+        sleep_deep();
+    }
     if (asleep) return;
     if (page == 11 && !touch_held && current >= screen_animation_until_ms && current - weather_detail_refresh >= 4000) {
         weather_detail_refresh = current;
@@ -1583,7 +1613,12 @@ static void on_tick(lv_timer_t *timer)
        truncate the fractional step to zero and stop automatic scrolling. */
     /* User-calibrated: new 100% matches the previous 35% (~63.5 px/s).
        Subpixel float accumulation keeps motion smooth at low speeds. */
-    scroll_y += (float)dt * (0.003f + prefs->scroll_speed * 0.000605f);
+    /* Preserve the tuned 30..100% speeds. Open a much slower, controllable
+       0..29% range without changing the existing high-end calibration. */
+    const float px_sec=prefs->scroll_speed>=30 ?
+        3.0f+0.605f*(float)prefs->scroll_speed :
+        0.5f+(20.65f/900.0f)*(float)prefs->scroll_speed*(float)prefs->scroll_speed;
+    scroll_y += (float)dt * (px_sec/1000.0f);
     lv_obj_scroll_to_y(scroll_panel, (int32_t)scroll_y, LV_ANIM_OFF);
 }
 
@@ -1676,6 +1711,7 @@ esp_err_t lf_ui_apply_device_settings(const lf_settings_t *requested)
     prefs->font_size=requested->font_size;
     prefs->system_font_size=requested->system_font_size;
     prefs->sleep_seconds=requested->sleep_seconds;
+    prefs->deep_sleep_minutes=requested->deep_sleep_minutes;
     prefs->charging_color=requested->charging_color;
     err=lf_settings_save(prefs);
     if(err==ESP_OK){

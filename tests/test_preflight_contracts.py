@@ -125,7 +125,8 @@ require("weather_numeric_valid = false;" in weather and
 require("Connect to the device setup AP to change Wi-Fi" not in network,
         "Wi-Fi settings are inaccessible while connected to home Wi-Fi")
 require("if (schema > 0 && schema < 6)" in settings and
-        "0.003f + prefs->scroll_speed * 0.000605f" in ui,
+        "3.0f+0.605f*(float)prefs->scroll_speed" in ui and
+        "0.5f+(20.65f/900.0f)" in ui,
         "Saved lyric speed migration or cap missing")
 old_top = 18.0 + 1.3 * 35
 new_top = 3.0 + 0.605 * 100
@@ -168,6 +169,10 @@ require('id="refresh-builds"' in pages["firmware"] and 'loadBuilds(true)' in pag
         and 'entries.sort((a,b)=>versionCompare' in pages["firmware"]
         and 'OLDER THAN INSTALLED' in pages["firmware"] and ' — NEW' not in pages["firmware"],
         "Firmware picker must support refresh and correctly order versions")
+require('id="pref-deep_sleep_minutes"' in pages["settings"] and
+        'id="pref-scroll_speed" min="0"' in pages["settings"] and
+        'margin-top:34px!important' in pages["settings"],
+        "Slow range, deep sleep and lowered menu missing")
 require('class="subnav"' in pages["settings"], "Settings section menu missing")
 for key in ("network", "clocks", "lyrics", "device", "status-section"):
     require('id="'+key+'"' in pages["settings"],

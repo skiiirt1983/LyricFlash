@@ -270,6 +270,7 @@ static esp_err_t handle_preferences_get(httpd_req_t *req)
     cJSON_AddNumberToObject(root,"brightness",p.brightness);
     cJSON_AddNumberToObject(root,"scroll_speed",p.scroll_speed);
     cJSON_AddNumberToObject(root,"sleep_seconds",p.sleep_seconds);
+    cJSON_AddNumberToObject(root,"deep_sleep_minutes",p.deep_sleep_minutes);
     cJSON_AddNumberToObject(root,"font_size",p.font_size);
     cJSON_AddNumberToObject(root,"system_font_size",p.system_font_size);
     cJSON_AddNumberToObject(root,"charging_color",p.charging_color);
@@ -288,12 +289,14 @@ static esp_err_t handle_preferences_post(httpd_req_t *req)
     }
     cJSON *root=cJSON_Parse(json);
     lf_settings_t p;
-    int brightness,scroll,timeout,font,system,colour;
+    int brightness,scroll,timeout,deepmins,font,system,colour;
     bool valid=root&&cJSON_IsObject(root)&&lf_settings_load(&p)==ESP_OK&&
         number_in_range(root,"brightness",5,100,&brightness)&&
-        number_in_range(root,"scroll_speed",10,100,&scroll)&&
+        number_in_range(root,"scroll_speed",0,100,&scroll)&&
         number_in_range(root,"sleep_seconds",0,60,&timeout)&&
         (timeout==0||timeout==15||timeout==30||timeout==60)&&
+        number_in_range(root,"deep_sleep_minutes",0,60,&deepmins)&&
+        (deepmins==0||deepmins==5||deepmins==15||deepmins==30||deepmins==60)&&
         number_in_range(root,"font_size",0,2,&font)&&
         number_in_range(root,"system_font_size",0,2,&system)&&
         number_in_range(root,"charging_color",0,0xFFFFFF,&colour);
@@ -302,6 +305,7 @@ static esp_err_t handle_preferences_post(httpd_req_t *req)
     p.brightness=(uint8_t)brightness;
     p.scroll_speed=(uint8_t)scroll;
     p.sleep_seconds=(uint8_t)timeout;
+    p.deep_sleep_minutes=(uint16_t)deepmins;
     p.font_size=(uint8_t)font;
     p.system_font_size=(uint8_t)system;
     p.charging_color=(uint32_t)colour;

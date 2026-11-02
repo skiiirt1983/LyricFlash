@@ -16,7 +16,8 @@ int main(void)
     assert(initial.face_background[0]==0x070F14);
     assert(initial.charging_color==0x42DC89);
     initial.brightness=77;
-    initial.scroll_speed=24;
+    initial.scroll_speed=0;
+    initial.deep_sleep_minutes=15;
     initial.font_size=2;
     initial.text_color=0xFF55AB;
     initial.background_color=0x123456;
@@ -31,7 +32,7 @@ int main(void)
     assert(mock_nvs_count()>=10);
     // Simulated reboot or app-slot switch: new struct, same NVS storage.
     assert(lf_settings_load(&next)==ESP_OK);
-    assert(next.brightness==77&&next.scroll_speed==24&&next.font_size==2);
+    assert(next.brightness==77&&next.scroll_speed==0&&next.deep_sleep_minutes==15&&next.font_size==2);
     assert(next.text_color==0xFF55AB&&next.background_color==0x123456);
     assert(next.accent_color==0xABCDEF&&next.timing_offset_ms==-420);
     assert(next.line_spacing_px==13);

@@ -16,6 +16,7 @@ void lf_settings_defaults(lf_settings_t *s)
         .font_size = 1,
         .system_font_size = 2,
         .sleep_seconds = 60,
+        .deep_sleep_minutes = 0, /* opt in only after testing GPIO11 touch wake */
         .text_color = 0x86E3AE,
         .background_color = 0x000000,
         .accent_color = 0x86E3AE,
@@ -77,6 +78,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     (void)nvs_get_u8(h, "font", &s->font_size);
     (void)nvs_get_u8(h, "uifont", &s->system_font_size);
     (void)nvs_get_u8(h, "timeout", &s->sleep_seconds);
+    (void)nvs_get_u16(h, "deepmins", &s->deep_sleep_minutes);
     (void)nvs_get_u32(h, "textcolor", &s->text_color);
     (void)nvs_get_u32(h, "bgcolor", &s->background_color);
     (void)nvs_get_u32(h, "accent", &s->accent_color);
@@ -108,11 +110,14 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     nvs_close(h);
 
     s->brightness = in_range(s->brightness, 5, 100, 55);
-    s->scroll_speed = in_range(s->scroll_speed, 10, 100, 70);
+    s->scroll_speed = in_range(s->scroll_speed, 0, 100, 70);
     s->font_size = in_range(s->font_size, 0, 2, 1);
     s->system_font_size = in_range(s->system_font_size, 0, 2, 2);
     if (s->sleep_seconds != 0 && s->sleep_seconds != 15 &&
         s->sleep_seconds != 30 && s->sleep_seconds != 60) s->sleep_seconds = 60;
+    if (s->deep_sleep_minutes != 0 && s->deep_sleep_minutes != 5 &&
+        s->deep_sleep_minutes != 15 && s->deep_sleep_minutes != 30 &&
+        s->deep_sleep_minutes != 60) s->deep_sleep_minutes = 0;
     s->text_color &= 0xFFFFFF;
     s->background_color &= 0xFFFFFF;
     s->accent_color &= 0xFFFFFF;
@@ -158,6 +163,7 @@ esp_err_t lf_settings_save(const lf_settings_t *s)
     TRY_NVS(nvs_set_u8(h, "font", s->font_size));
     TRY_NVS(nvs_set_u8(h, "uifont", s->system_font_size));
     TRY_NVS(nvs_set_u8(h, "timeout", s->sleep_seconds));
+    TRY_NVS(nvs_set_u16(h, "deepmins", s->deep_sleep_minutes));
     TRY_NVS(nvs_set_u32(h, "textcolor", s->text_color));
     TRY_NVS(nvs_set_u32(h, "bgcolor", s->background_color));
     TRY_NVS(nvs_set_u32(h, "accent", s->accent_color));
