@@ -7,3 +7,5 @@
 /* Device-tested 0.8.6 main pager retained; weather exit, PCT clock and OTA diagnostics under test. */
 
 /* Single intentional hardware-candidate compile after successful navigation preflight. */
+
+/* One targeted production-toolchain validation after green OTA/weather/time preflight. */
