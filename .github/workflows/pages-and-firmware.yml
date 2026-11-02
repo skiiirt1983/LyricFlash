@@ -5,7 +5,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, feature/alpha-0-8-3-touch-clock-web-controls]
+    branches: [main, fix/alpha-0-8-4-reliable-swipe]
     paths:
       - 'docs/**'
       - 'main/**'
@@ -53,7 +53,7 @@ jobs:
       - name: Upload complete USB and OTA release
         uses: actions/upload-artifact@v4
         with:
-          name: LyricFlash-Alpha-0.8.3-FULL-USB-and-OTA-UNTESTED
+          name: LyricFlash-Alpha-0.8.4-FULL-USB-and-OTA-UNTESTED
           path: |
             _site/beta/firmware/lyricflash-full.bin
             _site/beta/firmware/lyricflash-ota.bin
