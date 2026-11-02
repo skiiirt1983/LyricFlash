@@ -116,7 +116,7 @@ require('"/api/install"' in pages["firmware"]
         "GitHub build selector not linked to install endpoint")
 require("lf_weather_save_config" in network and "xTaskNotifyGive(weather_task)" in weather,
         "Weather refresh on save missing")
-require("if (schema < 6)" in settings and
+require("if (schema > 0 && schema < 6)" in settings and
         "0.003f + prefs->scroll_speed * 0.000605f" in ui,
         "Saved lyric speed migration or cap missing")
 old_top = 18.0 + 1.3 * 35
@@ -127,6 +127,11 @@ require("lv_label_set_long_mode(s_text,LV_LABEL_LONG_CLIP)" in ui,
         "Clock settings dialog long label not protected")
 require("page == 2" in ui and "case 7:" in ui,
         "Swipe back-navigation omits settings screens")
+settings_nav = ui.split("else if (page == 2)", 1)
+require(len(settings_nav) == 2 and
+        "LV_DIR_LEFT || direction == LV_DIR_RIGHT" in settings_nav[1].split("else if (page == 6)", 1)[0] and
+        "swipe_candidate_page = 0;" in settings_nav[1].split("else if (page == 6)", 1)[0],
+        "Settings page must swipe home in both horizontal directions")
 require("lf-mark" in pages["settings"] and "lf-mark" in pages["firmware"],
         "LyricFlash logo/header branding missing")
 require('class="subnav"' in pages["settings"], "Settings section menu missing")
