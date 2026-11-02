@@ -9,24 +9,36 @@ int main(void)
     lf_settings_t initial={0},next={0};
     mock_nvs_reset();
     assert(lf_settings_load(&initial)==ESP_OK);
-    assert(initial.brightness==55 && initial.scroll_speed==45);
+    assert(initial.brightness==55 && initial.scroll_speed==70);
     assert(initial.line_spacing_px==5 && initial.show_progress==1);
+    /* Virgin NVS must use the NEW default (70), not migrate a nonexistent
+       legacy preference as if it came from alpha 0.8.4. */
+    assert(initial.face_background[0]==0x070F14);
+    assert(initial.charging_color==0x42DC89);
     initial.brightness=77;
-    initial.scroll_speed=24;
+    initial.scroll_speed=0;
+    initial.deep_sleep_minutes=15;
     initial.font_size=2;
     initial.text_color=0xFF55AB;
     initial.background_color=0x123456;
     initial.accent_color=0xABCDEF;
     initial.timing_offset_ms=-420;
     initial.line_spacing_px=13;
+    initial.face_background[0]=0x445566;
+    initial.face_accent[2]=0xF0AC22;
+    initial.face_show_seconds[0]=0;
+    initial.face_24h[1]=1;
     assert(lf_settings_save(&initial)==ESP_OK);
     assert(mock_nvs_count()>=10);
     // Simulated reboot or app-slot switch: new struct, same NVS storage.
     assert(lf_settings_load(&next)==ESP_OK);
-    assert(next.brightness==77&&next.scroll_speed==24&&next.font_size==2);
+    assert(next.brightness==77&&next.scroll_speed==0&&next.deep_sleep_minutes==15&&next.font_size==2);
     assert(next.text_color==0xFF55AB&&next.background_color==0x123456);
     assert(next.accent_color==0xABCDEF&&next.timing_offset_ms==-420);
     assert(next.line_spacing_px==13);
+    assert(next.face_background[0]==0x445566);
+    assert(next.face_accent[2]==0xF0AC22);
+    assert(next.face_show_seconds[0]==0 && next.face_24h[1]==1);
     // Corrupt/out-of-range values must be normalized, never require erasing NVS.
     nvs_handle_t h; assert(nvs_open(LF_CONFIG_NS,NVS_READWRITE,&h)==ESP_OK);
     assert(nvs_set_u8(h,"brightness",255)==ESP_OK);

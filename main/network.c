@@ -3,8 +3,13 @@
 #include "settings.h"
 #include "weather.h"
 #include "diagnostics.h"
+#include "mic_probe.h"
 #include "version.h"
 #include "web_basic_html.h"
+#include "web_device_html.h"
+#include "esp_https_ota.h"
+#include "esp_crt_bundle.h"
+#include <stdatomic.h>
 #include "cJSON.h"
 #include "image_policy.h"
 #include "esp_log.h"
@@ -34,13 +39,24 @@ static bool in_ap;
 static char address[32] = "Offline";
 static char ap_ssid[33];
 static char ap_pass[16];
-static char ota_pin[10];
-static uint8_t ota_pin_attempts;
-static TickType_t ota_expiry;
 static httpd_handle_t server;
 static const char *ota_result = "idle";
 static uint32_t ota_received;
 static uint32_t ota_total;
+static atomic_bool ota_busy = false;
+/* Explain OTA HTTPS failures to the browser without leaking Wi-Fi credentials. */
+static const char *ota_detail = "";
+static atomic_int ota_error_code = 0;
+static atomic_int ota_http_status = 0;
+static atomic_int ota_tls_code = 0;
+static atomic_int ota_tls_flags = 0;
+static atomic_int ota_socket_errno = 0;
+/* URL is taken only from the official LyricFlash GitHub Pages beta asset
+   or versioned Github Release assets belonging to this repository. */
+typedef struct {
+    char url[384];
+    char version[33];
+} lf_github_request_t;
 static bool time_sync_started;
 static void reboot_task(void *arg);
 
@@ -149,7 +165,9 @@ bool lf_network_is_connected(void)
    as a user setting. NTP needs Wi-Fi but does not require a cloud account. */
 static void start_time_sync(void)
 {
-    setenv("TZ", "PST8PDT,M3.2.0,M11.1.0", 1);
+    /* British Columbia (most regions) has used permanent UTC-7 PCT since 2026.
+       POSIX TZ signs are reversed: PCT7 means UTC minus seven hours. */
+    setenv("TZ", "PCT7", 1);
     tzset();
     if (time_sync_started) return;
     esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
@@ -192,90 +210,22 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         xEventGroupSetBits(connected_event, LF_CONNECTED);
     }
 }
-static bool pin_matches(httpd_req_t *req)
-{
-    char pin[20];
-    size_t n=httpd_req_get_hdr_value_len(req,"X-LyricFlash-PIN");
-    if(!n || n>=sizeof(pin)) return false;
-    if(httpd_req_get_hdr_value_str(req,"X-LyricFlash-PIN",pin,sizeof(pin))!=ESP_OK)
-        return false;
-    /* No OTA unless explicitly armed from the device touchscreen. */
-    if (!lf_network_ota_armed() || ota_pin_attempts >= 5) return false;
-    ota_pin_attempts++;
-    return strcmp(pin,ota_pin)==0;
-}
 static void reboot_task(void *arg)
 {
     (void)arg; vTaskDelay(pdMS_TO_TICKS(900)); esp_restart();
 }
-static const char home_page[] =
-"<!doctype html><html lang='en'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-"<title>LyricFlash Device</title><meta name='theme-color' content='#050910'>"
-"<style>*{box-sizing:border-box}body{font:16px system-ui,sans-serif;"
-"background:radial-gradient(circle at 15% 0%,#102d56,#050910 52%);"
-"color:#f0f6ff;max-width:560px;margin:35px auto;padding:20px;line-height:1.55}"
-"h1{letter-spacing:.08em;color:#62b5ff;margin-bottom:0}p{color:#aabbd4}"
-"h2{font-size:20px;margin-top:0;color:#eaf5ff}"
-"button,input,select{font:inherit;padding:14px;border-radius:12px;width:100%;margin:7px 0}"
-"button{background:#62b5ff;border:1px solid #8fc8ff;color:#07182d;font-weight:750;cursor:pointer}"
-"button:hover{background:#91ccff}button:focus-visible,input:focus-visible{outline:2px solid #9cd6ff;outline-offset:2px}"
-"input,select{background:#0b1525;color:#f0f6ff;border:1px solid #395780}"
-"section{background:#101824;border:1px solid #293b58;border-radius:19px;padding:23px;margin:20px 0}"
-"#msg{color:#a8d7ff;overflow-wrap:anywhere}</style>"
-"<h1>LYRICFLASH</h1><p>ESP32-S3 / Local device manager</p>"
-"<p><a href='/settings' style='color:#8ec9ff'>Open Basic clock studio and diagnostics</a></p>"
-"<section><h2>Wi-Fi setup</h2><p id='wifi-state'>Checking current network...</p><p>Scan for 2.4 GHz Wi-Fi or enter its name.</p>"
-"<button onclick='scan()'>Scan nearby Wi-Fi</button><select id='networks' onchange='pick()'>"
-"<option value=''>Choose a network</option></select><input id='ssid' placeholder='Wi-Fi name'>"
-"<input id='pass' type='password' placeholder='Wi-Fi password'>"
-"<button onclick='save()'>Save Wi-Fi &amp; restart</button></section>"
-"<section><h2>Firmware update</h2><p>Tap <b>ARM OTA</b> on the device, then enter the PIN shown on screen.</p>"
-"<input id='pin' type='password' placeholder='Device OTA PIN' autocomplete='off'>"
-"<input id='bin' type='file' accept='.bin,application/octet-stream'>"
-"<button id='install-btn' onclick='update()'>Install application-only OTA firmware</button></section>"
-"<p id='msg' role='status'></p><script>const msg=t=>document.getElementById('msg').textContent=t;"
-"async function loadState(){try{let r=await fetch('/api/info');let d=await r.json();"
-"let state=document.getElementById('wifi-state');state.textContent=d.connected_ssid?"
-"('Connected: '+d.connected_ssid):d.saved_ssid?('Saved: '+d.saved_ssid+' (not connected)'):'No home Wi-Fi saved';"
-"if(d.saved_ssid)document.getElementById('ssid').value=d.saved_ssid;}catch(e){}}"
-"window.addEventListener('DOMContentLoaded',loadState);"
-"function pick(){const n=document.getElementById('networks');if(n.value)document.getElementById('ssid').value=n.value;}"
-"async function scan(){msg('Scanning Wi-Fi...');try{await fetch('/api/wifi-scan?refresh=1');poll(0);}catch(e){msg('Scan unavailable');}}"
-"async function poll(attempt){try{let r=await fetch('/api/wifi-scan');let d=await r.json();if(d.state==='scanning'&&attempt<16){setTimeout(()=>poll(attempt+1),650);return;}"
-"let select=document.getElementById('networks');select.replaceChildren(new Option('Choose a network',''));"
-"for(let n of d.networks||[])select.add(new Option(n.ssid+(n.secured?' [secured]':' [open]'),n.ssid));"
-"msg(d.state==='ready'?(d.networks.length+' networks found'):'Scan failed. Try again.');}catch(e){msg('Scan unavailable');}}"
-"async function save(){let r=await fetch('/wifi',{method:'POST',headers:{'Content-Type':'application/json'},"
-"body:JSON.stringify({ssid:document.getElementById('ssid').value,password:document.getElementById('pass').value})});msg(await r.text());}"
-"let busy=false;\n"
-"function update(){\n"
-" const f=document.getElementById('bin').files[0];\n"
-" const pin=document.getElementById('pin').value.trim();\n"
-" if(!f)return msg('Choose the application-only OTA .bin file first');\n"
-" if(!/^[0-9]{4}$/.test(pin))return msg('Enter the four-digit PIN shown on device');\n"
-" if(busy)return;\n"
-" const button=document.getElementById('install-btn');\n"
-" const xhr=new XMLHttpRequest();\n"
-" busy=true;button.disabled=true;\n"
-" const done=t=>{busy=false;button.disabled=false;msg(t);};\n"
-" xhr.open('POST','/update',true);xhr.timeout=180000;\n"
-" xhr.setRequestHeader('Content-Type','application/octet-stream');\n"
-" xhr.setRequestHeader('X-LyricFlash-PIN',pin);\n"
-" xhr.upload.onprogress=e=>msg(e.lengthComputable?'Transfer '+Math.round(100*e.loaded/e.total)+'% (not yet verified)':'Transferring...');\n"
-" xhr.upload.onload=()=>msg('Firmware transmitted; waiting for verification...');\n"
-" xhr.onload=()=>done(xhr.status>=200&&xhr.status<300?xhr.responseText:'HTTP '+xhr.status+': '+(xhr.responseText||'Upload rejected'));\n"
-" xhr.onerror=()=>done('Connection failed. Check device status before retrying.');\n"
-" xhr.ontimeout=()=>done('Upload timed out. Check /api/info before retrying.');\n"
-" xhr.onabort=()=>done('Upload cancelled.');\n"
-" msg('Starting upload...');\n"
-" try{xhr.send(f);}catch(e){done('Cannot start upload: '+e.message);}\n"
-"}\n"
-"</script></html>";
-
 static esp_err_t handle_home(httpd_req_t *req)
 {
     httpd_resp_set_type(req,"text/html; charset=utf-8");
-    return httpd_resp_send(req,home_page,HTTPD_RESP_USE_STRLEN);
+    httpd_resp_set_hdr(req,"Cache-Control","no-store");
+    return httpd_resp_send(req,lf_device_settings_html,HTTPD_RESP_USE_STRLEN);
+}
+
+static esp_err_t handle_firmware_page(httpd_req_t *req)
+{
+    httpd_resp_set_type(req,"text/html; charset=utf-8");
+    httpd_resp_set_hdr(req,"Cache-Control","no-store");
+    return httpd_resp_send(req,lf_device_firmware_html,HTTPD_RESP_USE_STRLEN);
 }
 
 static esp_err_t send_json(httpd_req_t *req, cJSON *root)
@@ -317,6 +267,65 @@ static bool boolean_value(const cJSON *root, const char *name, uint8_t *out)
 }
 
 /* Public read-only state; no PIN, Wi-Fi password or cloud credentials. */
+
+/* Global device and lyrics controls (no PIN). Settings are applied under
+   the display lock and committed to the existing NVS namespace. */
+static esp_err_t handle_preferences_get(httpd_req_t *req)
+{
+    lf_settings_t p;
+    if(lf_settings_load(&p)!=ESP_OK)
+        return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot read preferences");
+    cJSON *root=cJSON_CreateObject();
+    if(!root)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddNumberToObject(root,"brightness",p.brightness);
+    cJSON_AddNumberToObject(root,"scroll_speed",p.scroll_speed);
+    cJSON_AddNumberToObject(root,"sleep_seconds",p.sleep_seconds);
+    cJSON_AddNumberToObject(root,"deep_sleep_minutes",p.deep_sleep_minutes);
+    cJSON_AddNumberToObject(root,"font_size",p.font_size);
+    cJSON_AddNumberToObject(root,"system_font_size",p.system_font_size);
+    cJSON_AddNumberToObject(root,"charging_color",p.charging_color);
+    return send_json(req,root);
+}
+static esp_err_t handle_preferences_post(httpd_req_t *req)
+{
+    if(req->content_len<2||req->content_len>440)
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid preferences request");
+    char json[441]={0};int got=0,timeouts=0;
+    while(got<req->content_len){
+        int n=httpd_req_recv(req,json+got,req->content_len-got);
+        if(n==HTTPD_SOCK_ERR_TIMEOUT&&++timeouts<4)continue;
+        if(n<=0)return httpd_resp_send_err(req,HTTPD_408_REQ_TIMEOUT,"Preferences upload interrupted");
+        timeouts=0;got+=n;
+    }
+    cJSON *root=cJSON_Parse(json);
+    lf_settings_t p;
+    int brightness,scroll,timeout,deepmins,font,system,colour;
+    bool valid=root&&cJSON_IsObject(root)&&lf_settings_load(&p)==ESP_OK&&
+        number_in_range(root,"brightness",5,100,&brightness)&&
+        number_in_range(root,"scroll_speed",0,100,&scroll)&&
+        number_in_range(root,"sleep_seconds",0,60,&timeout)&&
+        (timeout==0||timeout==15||timeout==30||timeout==60)&&
+        number_in_range(root,"deep_sleep_minutes",0,60,&deepmins)&&
+        (deepmins==0||deepmins==5||deepmins==15||deepmins==30||deepmins==60)&&
+        number_in_range(root,"font_size",0,2,&font)&&
+        number_in_range(root,"system_font_size",0,2,&system)&&
+        number_in_range(root,"charging_color",0,0xFFFFFF,&colour);
+    cJSON_Delete(root);
+    if(!valid)return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid device preferences");
+    p.brightness=(uint8_t)brightness;
+    p.scroll_speed=(uint8_t)scroll;
+    p.sleep_seconds=(uint8_t)timeout;
+    p.deep_sleep_minutes=(uint16_t)deepmins;
+    p.font_size=(uint8_t)font;
+    p.system_font_size=(uint8_t)system;
+    p.charging_color=(uint32_t)colour;
+    if(lf_ui_apply_device_settings(&p)!=ESP_OK)
+        return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Could not apply preferences");
+    cJSON *answer=cJSON_CreateObject();
+    if(!answer)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddBoolToObject(answer,"saved",true);
+    return send_json(req,answer);
+}
 static esp_err_t handle_basic_get(httpd_req_t *req)
 {
     lf_settings_t s;
@@ -327,6 +336,19 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
     cJSON *root = cJSON_CreateObject();
     if (!root) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
     cJSON_AddNumberToObject(root, "clock_face", s.clock_face);
+    cJSON *faces=cJSON_AddArrayToObject(root,"face_profiles");
+    if(faces) for(unsigned i=0;i<6;i++){
+        cJSON *p=cJSON_CreateObject();
+        if(!p) break;
+        cJSON_AddNumberToObject(p,"background",s.face_background[i]);
+        cJSON_AddNumberToObject(p,"foreground",s.face_foreground[i]);
+        cJSON_AddNumberToObject(p,"accent",s.face_accent[i]);
+        cJSON_AddBoolToObject(p,"show_date",s.face_show_date[i]!=0);
+        cJSON_AddBoolToObject(p,"show_seconds",s.face_show_seconds[i]!=0);
+        cJSON_AddBoolToObject(p,"show_battery",s.face_show_battery[i]!=0);
+        cJSON_AddBoolToObject(p,"time_24h",s.face_24h[i]!=0);
+        cJSON_AddItemToArray(faces,p);
+    }
     cJSON_AddBoolToObject(root, "weather_enabled", weather.enabled);
     cJSON_AddNumberToObject(root, "font_style", s.basic_font_style);
     cJSON_AddNumberToObject(root, "font_size", s.basic_font_size);
@@ -345,16 +367,11 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
 
 static esp_err_t handle_basic_post(httpd_req_t *req)
 {
-    if (!pin_matches(req)) {
-        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "Arm WEB/OTA on device and enter correct PIN");
-        return ESP_FAIL;
-    }
-    ota_expiry = 0; /* Web configuration authorization is single-use. */
-    if (req->content_len < 2 || req->content_len > 1250) {
+    if (req->content_len < 2 || req->content_len > 2500) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid request length");
         return ESP_FAIL;
     }
-    char json[1251];
+    char json[2501];
     int received = 0, retries = 0;
     while (received < req->content_len) {
         int n = httpd_req_recv(req, json + received, req->content_len - received);
@@ -397,6 +414,23 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         (interval == 15 || interval == 30 || interval == 60 || interval == 120) &&
         cJSON_IsString(city) && city->valuestring &&
         strlen(city->valuestring) <= LF_WEATHER_CITY_MAX;
+    const cJSON *profiles=cJSON_GetObjectItemCaseSensitive(root,"face_profiles");
+    uint32_t bg_face[6],fg_face[6],ac_face[6];
+    uint8_t dt_face[6],sc_face[6],bt_face[6],hr_face[6];
+    if(!cJSON_IsArray(profiles)||cJSON_GetArraySize(profiles)!=6) valid=false;
+    if(valid) for(int i=0;i<6;i++){
+        const cJSON *p=cJSON_GetArrayItem(profiles,i);
+        int bgv,fgv,acv;uint8_t dv,sv,bv,hv;
+        if(!p || !number_in_range(p,"background",0,0xFFFFFF,&bgv)
+           || !number_in_range(p,"foreground",0,0xFFFFFF,&fgv)
+           || !number_in_range(p,"accent",0,0xFFFFFF,&acv)
+           || !boolean_value(p,"show_date",&dv)
+           || !boolean_value(p,"show_seconds",&sv)
+           || !boolean_value(p,"show_battery",&bv)
+           || !boolean_value(p,"time_24h",&hv)){valid=false;break;}
+        bg_face[i]=(uint32_t)bgv;fg_face[i]=(uint32_t)fgv;ac_face[i]=(uint32_t)acv;
+        dt_face[i]=dv;sc_face[i]=sv;bt_face[i]=bv;hr_face[i]=hv;
+    }
     if (valid) {
         const char *p = city->valuestring;
         for (; *p; p++) if ((unsigned char)*p < 32) { valid = false; break; }
@@ -417,6 +451,16 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     current.basic_ring_a = (uint32_t)a;
     current.basic_ring_b = (uint32_t)b;
     current.basic_ring_c = (uint32_t)c;
+    for(int i=0;i<6;i++){
+        current.face_background[i]=bg_face[i];current.face_foreground[i]=fg_face[i];
+        current.face_accent[i]=ac_face[i];current.face_show_date[i]=dt_face[i];
+        current.face_show_seconds[i]=sc_face[i];current.face_show_battery[i]=bt_face[i];
+        current.face_24h[i]=hr_face[i];
+    }
+    /* Basic face keeps existing ring/font controls as well. */
+    current.basic_background=current.face_background[5];
+    current.basic_foreground=current.face_foreground[5];
+    current.basic_show_date=current.face_show_date[5];
     strlcpy(weather.city, city->valuestring, sizeof weather.city);
     weather.interval_minutes = (uint16_t)interval;
     weather.enabled = weather_enabled != 0;
@@ -437,6 +481,25 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     if (!reply) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
     cJSON_AddBoolToObject(reply, "saved", true);
     return send_json(req, reply);
+}
+
+/* Explicit on-demand I2C presence test: never starts audio sampling. */
+static esp_err_t handle_mic_check(httpd_req_t *req)
+{
+    lf_mic_probe_result_t result=lf_mic_probe_run();
+    lf_mic_probe_snapshot_t sample={0};
+    lf_mic_probe_snapshot(&sample);
+    cJSON *reply=cJSON_CreateObject();
+    if(!reply) return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddBoolToObject(reply,"adc_detected",result==LF_MIC_PRESENT);
+    cJSON_AddStringToObject(reply,"status",lf_mic_probe_result_text(result));
+    cJSON_AddNumberToObject(reply,"error_code",sample.error_code);
+    cJSON_AddNumberToObject(reply,"test_count",sample.attempts);
+    cJSON_AddBoolToObject(reply,"audio_capture_active",false);
+    cJSON_AddStringToObject(reply,"detail",result==LF_MIC_PRESENT
+        ? "ES7210 detected at I2C 0x40. Audio capture NOT tested or activated."
+        : "ES7210 not confirmed. Check board and retry. No audio captured.");
+    return send_json(req,reply);
 }
 
 static esp_err_t handle_diagnostics(httpd_req_t *req)
@@ -463,11 +526,46 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
         cJSON_AddBoolToObject(root, "usb_connected", d.battery.usb_connected);
         cJSON_AddBoolToObject(root, "charging", d.battery.charging);
     }
-    cJSON_AddStringToObject(root, "microphone", "disabled (not initialized)");
+    /* Electrical presence test only; no audio capture is enabled. */
+    lf_mic_probe_snapshot_t mic={0};
+    lf_mic_probe_snapshot(&mic);
+    cJSON_AddStringToObject(root, "microphone", "inactive (manual ADC probe only)");
+    cJSON_AddStringToObject(root, "microphone_adc_status", lf_mic_probe_result_text(mic.result));
+    cJSON_AddNumberToObject(root, "microphone_adc_test_count", mic.attempts);
+    cJSON_AddNumberToObject(root, "microphone_adc_error_code", mic.error_code);
     cJSON_AddStringToObject(root, "ota_result", ota_result);
+    cJSON_AddStringToObject(root, "ota_detail", ota_detail);
+    cJSON_AddNumberToObject(root, "ota_error_code", atomic_load(&ota_error_code));
+    cJSON_AddNumberToObject(root, "ota_http_status", atomic_load(&ota_http_status));
+    cJSON_AddNumberToObject(root, "ota_tls_code", atomic_load(&ota_tls_code));
+    cJSON_AddNumberToObject(root, "ota_tls_flags", atomic_load(&ota_tls_flags));
+    cJSON_AddNumberToObject(root, "ota_socket_errno", atomic_load(&ota_socket_errno));
     cJSON_AddNumberToObject(root, "ota_received", ota_received);
     cJSON_AddNumberToObject(root, "ota_total", ota_total);
     cJSON_AddNumberToObject(root, "max_ui_tick_gap_ms", lf_ui_max_tick_gap_ms());
+    lf_ui_display_stats_t display_stats={0};
+    lf_ui_display_stats(&display_stats);
+    cJSON_AddNumberToObject(root, "ui_touch_presses", display_stats.touch_presses);
+    cJSON_AddNumberToObject(root, "ui_navigation_commits", display_stats.navigation_commits);
+    cJSON_AddNumberToObject(root, "ui_full_redraws", display_stats.full_redraws);
+    cJSON_AddNumberToObject(root, "display_render_count", display_stats.render_count);
+    cJSON_AddNumberToObject(root, "display_flush_starts", display_stats.flush_starts);
+    cJSON_AddNumberToObject(root, "display_flush_finishes", display_stats.flush_finishes);
+    cJSON_AddNumberToObject(root, "display_refresh_ready", display_stats.refresh_ready);
+    cJSON_AddNumberToObject(root, "clock_scene_builds", display_stats.clock_scene_builds);
+    cJSON_AddNumberToObject(root, "clock_cache_hits", display_stats.clock_cache_hits);
+    cJSON_AddNumberToObject(root, "clock_build_last_ms", display_stats.clock_build_last_ms);
+    cJSON_AddNumberToObject(root, "clock_build_max_ms", display_stats.clock_build_max_ms);
+    cJSON_AddNumberToObject(root, "clock_present_last_ms", display_stats.clock_present_last_ms);
+    cJSON_AddNumberToObject(root, "clock_present_max_ms", display_stats.clock_present_max_ms);
+    cJSON_AddNumberToObject(root, "nav_reveal_completions", display_stats.nav_reveal_completions);
+    cJSON_AddNumberToObject(root, "nav_reveal_last_ms", display_stats.nav_reveal_last_ms);
+    cJSON_AddNumberToObject(root, "pager_forced_snaps", display_stats.pager_forced_snaps);
+    cJSON_AddNumberToObject(root, "pager_snap_last_ms", display_stats.pager_snap_last_ms);
+    cJSON_AddNumberToObject(root, "pager_snap_max_ms", display_stats.pager_snap_max_ms);
+    cJSON_AddNumberToObject(root, "render_cycle_last_ms", display_stats.render_cycle_last_ms);
+    cJSON_AddNumberToObject(root, "render_cycle_max_ms", display_stats.render_cycle_max_ms);
+    cJSON_AddNumberToObject(root, "clock_repaint_recoveries", display_stats.clock_repaint_recoveries);
     lf_weather_config_t weather;
     lf_weather_get_config(&weather);
     cJSON_AddStringToObject(root, "weather_city", weather.city);
@@ -495,8 +593,13 @@ static esp_err_t handle_info(httpd_req_t *req)
     cJSON_AddStringToObject(root, "version", LF_VERSION);
     cJSON_AddStringToObject(root, "mode", in_ap ? "ap" : "station");
     cJSON_AddStringToObject(root, "address", address);
-    cJSON_AddBoolToObject(root, "ota_armed", lf_network_ota_armed());
     cJSON_AddStringToObject(root, "ota_result", ota_result);
+    cJSON_AddStringToObject(root, "ota_detail", ota_detail);
+    cJSON_AddNumberToObject(root, "ota_error_code", atomic_load(&ota_error_code));
+    cJSON_AddNumberToObject(root, "ota_http_status", atomic_load(&ota_http_status));
+    cJSON_AddNumberToObject(root, "ota_tls_code", atomic_load(&ota_tls_code));
+    cJSON_AddNumberToObject(root, "ota_tls_flags", atomic_load(&ota_tls_flags));
+    cJSON_AddNumberToObject(root, "ota_socket_errno", atomic_load(&ota_socket_errno));
     cJSON_AddNumberToObject(root, "ota_received", ota_received);
     cJSON_AddNumberToObject(root, "ota_total", ota_total);
     cJSON_AddStringToObject(root, "connected_ssid", ssid);
@@ -518,7 +621,7 @@ static esp_err_t handle_device(httpd_req_t *req)
     esp_wifi_get_mac(in_ap?WIFI_IF_AP:WIFI_IF_STA,mac);
     char response[220];
     snprintf(response,sizeof(response),
-        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.8.3-alpha\","
+        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.8.4-alpha\","
         "\"device_id\":\"LF-%02X%02X%02X\",\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\"}",
         mac[3],mac[4],mac[5],mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
     httpd_resp_set_type(req,"application/json");
@@ -526,7 +629,9 @@ static esp_err_t handle_device(httpd_req_t *req)
 }
 static esp_err_t handle_wifi(httpd_req_t *req)
 {
-    if(!in_ap) { httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Connect to the device setup AP to change Wi-Fi"); return ESP_FAIL; }
+    /* LAN Settings page must also be able to change the saved home SSID.
+       This endpoint is available on the local device network without PIN,
+       as explicitly requested; no credential is returned by API. */
     if(req->content_len<2 || req->content_len>320){httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid request size");return ESP_FAIL;}
     char json[321]; int n=0;
     while(n<req->content_len){int r=httpd_req_recv(req,json+n,req->content_len-n);if(r<=0){httpd_resp_send_err(req,HTTPD_408_REQ_TIMEOUT,"Request timed out");return ESP_FAIL;}n+=r;}
@@ -577,15 +682,18 @@ static esp_err_t handle_scan(httpd_req_t *req)
 }
 static esp_err_t handle_update(httpd_req_t *req)
 {
-    if(!pin_matches(req)){httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Arm OTA on device and enter the correct PIN");return ESP_FAIL;}
-    ota_expiry=0; /* Single-use PIN; do not require it to remain armed during upload. */
+    if (atomic_exchange(&ota_busy,true)) {
+        httpd_resp_set_status(req,"409 Conflict");
+        httpd_resp_sendstr(req,"Another firmware update is already in progress");
+        return ESP_FAIL;
+    }
     ota_received=0;
     ota_total=req->content_len>0?(uint32_t)req->content_len:0;
     ota_result="validating";
     const esp_partition_t *part=esp_ota_get_next_update_partition(NULL);
     if(!part || req->content_len<512 || req->content_len>(int)part->size){
         ota_result="bad_size"; ESP_LOGE(TAG,"Invalid OTA request size / inactive partition");
-        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"OTA image invalid or too large");return ESP_FAIL;
+        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"OTA image invalid or too large");atomic_store(&ota_busy,false);return ESP_FAIL;
     }
     uint8_t buf[2048];
     uint8_t first[0x120];
@@ -621,33 +729,250 @@ static esp_err_t handle_update(httpd_req_t *req)
         ota_received=(uint32_t)received;
         ota_result="writing";
     }
-    ota_expiry=0; // disarm after a single attempt, whether successful or not
     if(!ok){lf_diag_error("ota",ota_result);if(started) esp_ota_abort(handle);ESP_LOGE(TAG,"OTA incomplete at %u/%u",ota_received,ota_total);
-        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Upload failed, device remains on current firmware");return ESP_FAIL;}
+        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Upload failed, device remains on current firmware");atomic_store(&ota_busy,false);return ESP_FAIL;}
     ota_result="verifying";
     esp_err_t finish_err=esp_ota_end(handle);
-    if(finish_err!=ESP_OK){ota_result="checksum_failed";lf_diag_error("ota",ota_result);ESP_LOGE(TAG,"OTA end: %s",esp_err_to_name(finish_err));httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Firmware checksum / image validation failed");return ESP_FAIL;}
+    if(finish_err!=ESP_OK){ota_result="checksum_failed";lf_diag_error("ota",ota_result);ESP_LOGE(TAG,"OTA end: %s",esp_err_to_name(finish_err));httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Firmware checksum / image validation failed");atomic_store(&ota_busy,false);return ESP_FAIL;}
     esp_err_t boot_err=esp_ota_set_boot_partition(part);
-    if(boot_err!=ESP_OK){ota_result="activation_failed";lf_diag_error("ota",ota_result);ESP_LOGE(TAG,"OTA activate: %s",esp_err_to_name(boot_err));httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot activate new firmware");return ESP_FAIL;}
+    if(boot_err!=ESP_OK){ota_result="activation_failed";lf_diag_error("ota",ota_result);ESP_LOGE(TAG,"OTA activate: %s",esp_err_to_name(boot_err));httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot activate new firmware");atomic_store(&ota_busy,false);return ESP_FAIL;}
     ota_result="verified_rebooting";
     httpd_resp_sendstr(req,"Firmware verified. Rebooting into new application.");
     xTaskCreate(reboot_task,"lf_reboot",2048,NULL,3,NULL);
     return ESP_OK;
 }
+
+/* Every direct GitHub OTA runs in its own worker, never on LVGL or HTTP server.
+   PIN-free does NOT mean bypassing chip checks, TLS validation or NVS isolation. */
+static bool allowed_github_ota_url(const char *url)
+{
+    const char *beta = "https://skiiirt1983.github.io/LyricFlash/beta/firmware/lyricflash-ota.bin";
+    const char *releases = "https://github.com/skiiirt1983/LyricFlash/releases/download/";
+    /* Signed and versioned release binaries on a separate branch avoid the
+       multi-host GitHub Releases download redirect chain. */
+    const char *direct = "https://raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/";
+    if (url && strncmp(url,direct,strlen(direct))==0) {
+        const char *path=url+strlen(direct);
+        const char *file="/lyricflash-ota.bin";
+        if(strncmp(path,"alpha-build-",12)!=0 || strlen(path)!=12+12+strlen(file) ||
+           strcmp(path+24,file)!=0)return false;
+        for(int i=12;i<24;i++) {
+            char c=path[i]; if(!((c>='0'&&c<='9')||(c>='a'&&c<='f')))return false;
+        }
+        return true;
+    }
+    if (!url || strlen(url) >= sizeof(((lf_github_request_t *)0)->url)) return false;
+    if (strcmp(url, beta) == 0) return true;
+    const char *history="https://skiiirt1983.github.io/LyricFlash/beta/firmware/releases/";
+    if(strncmp(url,history,strlen(history))==0){
+        const char *path=url+strlen(history);
+        const char *separator=strchr(path,'/');
+        if(!separator || separator==path ||
+           strcmp(separator,"/lyricflash-ota.bin")!=0 ||
+           (size_t)(separator-path)>64) return false;
+        for(const char *c=path;c<separator;c++)
+            if(!((*c>='0'&&*c<='9')||(*c>='A'&&*c<='Z')||
+                 (*c>='a'&&*c<='z')||*c=='.'||*c=='-'||*c=='_')) return false;
+        return path[0]!='.';
+    }
+    if (strncmp(url, releases, strlen(releases)) != 0) return false;
+    const char *path=url+strlen(releases);
+    if (!*path || strstr(path,"..") || strchr(path,'?') || strchr(path,'#') ||
+        strchr(path,'%') || strchr(path,'@') || strchr(path,'\\')) return false;
+    const char *sep=strchr(path,'/');
+    if (!sep || sep==path || !sep[1] || strchr(sep+1,'/')) return false;
+    const char *filename=sep+1;
+    const size_t length=strlen(filename);
+    if (length < 8 || strcmp(filename+length-4,".bin") != 0) return false;
+    return strstr(filename,"ota") || strstr(filename,"OTA");
+}
+
+/* HTTPS OTA can redirect GitHub release URLs to release-assets hosts.
+   Record the final HTTP status; never disable TLS peer verification. */
+static esp_err_t ota_http_event(esp_http_client_event_t *event)
+{
+    if (event && event->client) {
+        if(event->event_id==HTTP_EVENT_ON_HEADER ||
+           event->event_id==HTTP_EVENT_ON_FINISH) {
+            int status=esp_http_client_get_status_code(event->client);
+            if(status>0)atomic_store(&ota_http_status,status);
+        }
+        if(event->event_id==HTTP_EVENT_ERROR) {
+            int tls_code=0,flags=0;
+            esp_err_t tls=esp_http_client_get_and_clear_last_tls_error(event->client,&tls_code,&flags);
+            atomic_store(&ota_tls_code,tls_code ? tls_code : (int)tls);
+            atomic_store(&ota_tls_flags,flags);
+            atomic_store(&ota_socket_errno,esp_http_client_get_errno(event->client));
+        }
+    }
+    return ESP_OK;
+}
+
+static void github_ota_worker(void *arg)
+{
+    lf_github_request_t *job=(lf_github_request_t *)arg;
+    ota_result="connecting";
+    ota_detail="";
+    atomic_store(&ota_error_code,0);
+    atomic_store(&ota_http_status,0);
+    atomic_store(&ota_tls_code,0);
+    atomic_store(&ota_tls_flags,0);
+    atomic_store(&ota_socket_errno,0);
+    /* Setup AP is local-only. Do not present its lack of Internet as a TLS error. */
+    if (!lf_network_is_connected()) {
+        ota_result="no_internet";
+        ota_detail="Connect LyricFlash to a Wi-Fi network with Internet access.";
+        goto done;
+    }
+    /* HTTPS certificate dates require real UTC, not the local PCT display time. */
+    time_t utc=time(NULL);
+    struct tm calendar={0};
+    gmtime_r(&utc,&calendar);
+    if(calendar.tm_year+1900<2025) {
+        if(!time_sync_started)start_time_sync();
+        ota_result="syncing_time";
+        (void)esp_netif_sntp_sync_wait(pdMS_TO_TICKS(18000));
+        utc=time(NULL);
+        gmtime_r(&utc,&calendar);
+        if(calendar.tm_year+1900<2025){
+            ota_result="time_unsynced";
+            ota_detail="Device clock has not synchronized via NTP; HTTPS certificates cannot be validated.";
+            goto done;
+        }
+    }
+    ota_result="connecting";
+    esp_http_client_config_t config = {
+        .url=job->url,
+        .crt_bundle_attach=esp_crt_bundle_attach,
+        .timeout_ms=30000,
+        .keep_alive_enable=false,
+        .max_redirection_count=10,
+        .disable_auto_redirect=false,
+        .event_handler=ota_http_event,
+        .user_agent="LyricFlash-OTA/0.8",
+        .buffer_size=4096
+    };
+    esp_https_ota_config_t ota_config={.http_config=&config};
+    esp_https_ota_handle_t handle=NULL;
+    esp_err_t err=esp_https_ota_begin(&ota_config,&handle);
+    if(err!=ESP_OK) {
+        ESP_LOGE(TAG,"GitHub OTA connection failed: %s",esp_err_to_name(err));
+        ota_result="download_failed";
+        ota_detail="HTTPS connection failed. Check network access, GitHub redirects and TLS trust.";
+        atomic_store(&ota_error_code,(int)err);
+        goto done;
+    }
+    esp_app_desc_t descriptor={0};
+    err=esp_https_ota_get_img_desc(handle,&descriptor);
+    if(err!=ESP_OK || strcmp(descriptor.project_name,"lyricflash")!=0 ||
+       strcmp(descriptor.version,job->version)!=0) {
+        ota_result="bad_version";
+        ota_detail="Downloaded image is not the selected LyricFlash version.";
+        atomic_store(&ota_error_code,(int)err);
+        ESP_LOGE(TAG,"GitHub OTA app descriptor differs from selected LyricFlash version");
+        esp_https_ota_abort(handle);
+        goto done;
+    }
+    ota_total=(uint32_t)esp_https_ota_get_image_size(handle);
+    const esp_partition_t *slot=esp_ota_get_next_update_partition(NULL);
+    if(!slot || (ota_total && ota_total>slot->size)) {
+        ota_result="bad_size";
+        ota_detail="OTA image is larger than the available firmware partition.";
+        esp_https_ota_abort(handle);
+        goto done;
+    }
+    ota_result="downloading";
+    while((err=esp_https_ota_perform(handle))==ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
+        int n=esp_https_ota_get_image_len_read(handle);
+        if(n>=0) ota_received=(uint32_t)n;
+    }
+    if(err!=ESP_OK || !esp_https_ota_is_complete_data_received(handle)) {
+        ota_result="download_failed";
+        ota_detail="HTTPS download interrupted or incomplete.";
+        atomic_store(&ota_error_code,(int)err);
+        ESP_LOGE(TAG,"GitHub OTA transfer failed: %s",esp_err_to_name(err));
+        esp_https_ota_abort(handle);
+        goto done;
+    }
+    ota_result="verifying";
+    err=esp_https_ota_finish(handle);
+    if(err!=ESP_OK) {
+        ota_result="checksum_failed";
+        ota_detail="Downloaded OTA failed ESP-IDF image verification.";
+        atomic_store(&ota_error_code,(int)err);
+        ESP_LOGE(TAG,"GitHub OTA validation failed: %s",esp_err_to_name(err));
+        goto done;
+    }
+    ota_result="verified_rebooting";
+    ota_detail="Firmware verified; rebooting.";
+    xTaskCreate(reboot_task,"lf_reboot",2048,NULL,3,NULL);
+done:
+    free(job);
+    if(strcmp(ota_result,"verified_rebooting")!=0) atomic_store(&ota_busy,false);
+    vTaskDelete(NULL);
+}
+
+static esp_err_t handle_github_install(httpd_req_t *req)
+{
+    if(req->content_len<2 || req->content_len>600)
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid install request");
+    char json[601]={0};
+    int got=0;
+    while(got<req->content_len) {
+        int n=httpd_req_recv(req,json+got,req->content_len-got);
+        if(n<=0) return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Incomplete install request");
+        got+=n;
+    }
+    cJSON *root=cJSON_Parse(json);
+    const cJSON *url=root?cJSON_GetObjectItemCaseSensitive(root,"url"):NULL;
+    const cJSON *ver=root?cJSON_GetObjectItemCaseSensitive(root,"version"):NULL;
+    lf_github_request_t *job=calloc(1,sizeof(*job));
+    bool valid=job && cJSON_IsString(url) && cJSON_IsString(ver) &&
+        url->valuestring && ver->valuestring &&
+        strlen(ver->valuestring)>0 && strlen(ver->valuestring)<sizeof(job->version) &&
+        allowed_github_ota_url(url->valuestring);
+    if(valid) {
+        strlcpy(job->url,url->valuestring,sizeof(job->url));
+        strlcpy(job->version,ver->valuestring,sizeof(job->version));
+    }
+    cJSON_Delete(root);
+    if(!valid){free(job);return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Unsupported LyricFlash GitHub OTA URL or version");}
+    if(atomic_exchange(&ota_busy,true)){
+        free(job);
+        httpd_resp_set_status(req,"409 Conflict");
+        return httpd_resp_sendstr(req,"Another firmware update is active");
+    }
+    ota_received=0;ota_total=0;ota_result="queued";ota_detail="";
+    atomic_store(&ota_error_code,0);atomic_store(&ota_http_status,0);
+    atomic_store(&ota_tls_code,0);atomic_store(&ota_tls_flags,0);
+    atomic_store(&ota_socket_errno,0);
+    if(xTaskCreate(github_ota_worker,"lf_github_ota",12288,job,tskIDLE_PRIORITY+2,NULL)!=pdPASS){
+        atomic_store(&ota_busy,false);free(job);ota_result="download_failed";
+        return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot start OTA download");
+    }
+    httpd_resp_set_status(req,"202 Accepted");
+    return httpd_resp_sendstr(req,"Firmware download started on device");
+}
+
 static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
-    cfg.max_uri_handlers=16; /* Web settings/telemetry add routes beyond IDF default. */
+    cfg.max_uri_handlers=18; /* Web settings/telemetry add routes beyond IDF default. */
     cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
         {.uri="/",.method=HTTP_GET,.handler=handle_home},
+        {.uri="/firmware",.method=HTTP_GET,.handler=handle_firmware_page},
+        {.uri="/api/install",.method=HTTP_POST,.handler=handle_github_install},
         {.uri="/api/info",.method=HTTP_GET,.handler=handle_info},
         {.uri="/settings",.method=HTTP_GET,.handler=handle_settings_page},
+        {.uri="/api/preferences",.method=HTTP_GET,.handler=handle_preferences_get},
+        {.uri="/api/preferences",.method=HTTP_POST,.handler=handle_preferences_post},
         {.uri="/api/basic",.method=HTTP_GET,.handler=handle_basic_get},
         {.uri="/api/basic",.method=HTTP_POST,.handler=handle_basic_post},
         {.uri="/api/diagnostics",.method=HTTP_GET,.handler=handle_diagnostics},
+        {.uri="/api/hardware/mic-check",.method=HTTP_POST,.handler=handle_mic_check},
         {.uri="/api/device",.method=HTTP_GET,.handler=handle_device},
         {.uri="/wifi",.method=HTTP_POST,.handler=handle_wifi},
         {.uri="/api/wifi-scan",.method=HTTP_GET,.handler=handle_scan},
@@ -663,14 +988,8 @@ uint32_t lf_network_ota_received(void){return ota_received;}
 uint32_t lf_network_ota_total(void){return ota_total;}
 const char *lf_network_ap_ssid(void){return ap_ssid;}
 const char *lf_network_ap_password(void){return ap_pass;}
-const char *lf_network_ota_pin(void){return ota_pin;}
-void lf_network_arm_ota(void){ota_pin_attempts=0;ota_expiry=xTaskGetTickCount()+pdMS_TO_TICKS(120000);}
-bool lf_network_ota_armed(void){return ota_expiry && (int32_t)(ota_expiry-xTaskGetTickCount())>0;}
-
 bool lf_network_start(void)
 {
-    uint32_t seed=esp_random();
-    snprintf(ota_pin,sizeof ota_pin,"%04" PRIu32,seed%10000u);
     if(!connected_event) connected_event=xEventGroupCreate();
     if(!connected_event) return false;
     if(esp_netif_init()!=ESP_OK) return false;
@@ -711,26 +1030,9 @@ bool lf_network_start(void)
     uint8_t mac[6]={0};
     esp_wifi_get_mac(WIFI_IF_STA,mac);
     snprintf(ap_ssid,sizeof ap_ssid,"LyricFlash-%02X%02X",mac[4],mac[5]);
-    /* Keep the setup AP credential stable across reboots and OTA updates.
-       Never print it to logs; it is available only on the device screen. */
-    nvs_handle_t ap_store;
-    bool ap_key_loaded=false;
-    if (nvs_open("lf_network", NVS_READWRITE, &ap_store) == ESP_OK) {
-        size_t key_len=sizeof ap_pass;
-        if (nvs_get_str(ap_store,"ap_key",ap_pass,&key_len)==ESP_OK &&
-            strlen(ap_pass)>=8 && strlen(ap_pass)<=15) ap_key_loaded=true;
-        if (!ap_key_loaded) {
-            snprintf(ap_pass,sizeof ap_pass,"LF%08" PRIu32,
-                     (uint32_t)(esp_random()%100000000u));
-            if (nvs_set_str(ap_store,"ap_key",ap_pass)==ESP_OK)
-                (void)nvs_commit(ap_store);
-        }
-        nvs_close(ap_store);
-    } else {
-        snprintf(ap_pass,sizeof ap_pass,"LF%08" PRIu32,
-                 (uint32_t)(esp_random()%100000000u));
-        lf_diag_error("wifi","Setup AP key could not be saved in NVS");
-    }
+    /* Private device's intentionally simple WPA2 setup password.
+       Never replace/erase the saved home Wi-Fi credentials. */
+    strlcpy(ap_pass, "lyricflash", sizeof ap_pass);
     wifi_config_t apcfg={0};
     strlcpy((char *)apcfg.ap.ssid,ap_ssid,sizeof(apcfg.ap.ssid));
     strlcpy((char *)apcfg.ap.password,ap_pass,sizeof(apcfg.ap.password));
