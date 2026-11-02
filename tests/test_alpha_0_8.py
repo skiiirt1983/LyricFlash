@@ -21,7 +21,7 @@ assert 'lv_obj_delete_async(old_screen);' in ui
 assert 'LF_SWIPE_MIN_PX 38' in ui
 assert 'LF_CLOCK_SETTINGS_HOLD_MS 2000ULL' in ui
 assert 'show_clock_settings_popup' in ui
-assert 'lv_obj_add_event_cb(screen, on_lvgl_gesture, LV_EVENT_GESTURE, NULL)' in ui
+assert 'lv_obj_add_event_cb(screen,on_lvgl_gesture,LV_EVENT_GESTURE,NULL)' in ui
 assert 'lv_obj_add_event_cb(b, on_lvgl_gesture, LV_EVENT_GESTURE, NULL)' in ui
 assert 'LV_EVENT_PRESS_LOST means the finger left the original widget' in ui
 assert 'lv_indev_get_state(gesture_indev) == LV_INDEV_STATE_RELEASED' in ui
