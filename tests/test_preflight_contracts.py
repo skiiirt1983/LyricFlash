@@ -114,7 +114,7 @@ require('"/firmware"' in network and '"/api/install"' in network
 require("/api/install" in pages["firmware"]
         and "skiiirt1983.github.io/LyricFlash/beta/catalog.json" in pages["firmware"],
         "GitHub build selector not linked to install endpoint")
-require("select.disabled=!entries.length;el('install').disabled=true;" in pages["firmware"]
+require("selector.disabled=!entries.length;el('install').disabled=true;" in pages["firmware"]
         and "selection===''?null" in pages["firmware"],
         "OTA install button must require an explicit version selection")
 require("lf_weather_save_config" in network and "xTaskNotifyGive(weather_task)" in weather,
@@ -161,6 +161,13 @@ require(len(settings_nav) == 2 and
         "Settings page must swipe home in both horizontal directions")
 require('class="lf-mark"' in pages["settings"] and 'class="lf-mark"' in pages["firmware"],
         "LyricFlash logo/header branding missing")
+require('class="toolbar-links"' in pages["settings"] and 'class="toolbar-links"' in pages["firmware"]
+        and 'class="firmware-link active"' in pages["firmware"],
+        "Firmware navigation must use the same toolbar as Settings")
+require('id="refresh-builds"' in pages["firmware"] and 'loadBuilds(true)' in pages["firmware"]
+        and 'entries.sort((a,b)=>versionCompare' in pages["firmware"]
+        and 'OLDER THAN INSTALLED' in pages["firmware"] and ' — NEW' not in pages["firmware"],
+        "Firmware picker must support refresh and correctly order versions")
 require('class="subnav"' in pages["settings"], "Settings section menu missing")
 for key in ("network", "clocks", "lyrics", "device", "status-section"):
     require('id="'+key+'"' in pages["settings"],
