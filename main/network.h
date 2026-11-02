@@ -3,15 +3,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Local device web manager + PIN-armed OTA. The ESP32 also supports
-   touchscreen Wi-Fi scanning/provisioning without joining its setup AP. */
+/* Local device Web UI and OTA. Wi-Fi setup supports browser and touch.
+   No PIN or on-device OTA arming is required. */
 bool lf_network_start(void);
 const char *lf_network_address(void);
 const char *lf_network_ap_ssid(void);
 const char *lf_network_ap_password(void);
-const char *lf_network_ota_pin(void);
-void lf_network_arm_ota(void);
-bool lf_network_ota_armed(void);
 
 #define LF_WIFI_MAX_RESULTS 12
 typedef struct {
