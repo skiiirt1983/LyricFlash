@@ -313,7 +313,7 @@ require('#define LF_SAFE_BOOT_SINGLE_SCREEN 1' in ui and
 
 # Touch failure regression: LVGL's short scroll gesture must never outrun
 # the deliberate page-transition displacement threshold on a button.
-gesture_handler=ui.split('static void on_lvgl_gesture(lv_event_t *e)\\n{',1)[1].split('static void on_touch_release',1)[0]
+gesture_handler=ui.split('static void on_lvgl_gesture(lv_event_t *e)\n{',1)[1].split('static void on_touch_release',1)[0]
 guard='if(dx*dx+dy*dy < LF_SWIPE_MIN_PX*LF_SWIPE_MIN_PX) return;'
 require(guard in gesture_handler and
         gesture_handler.index(guard) < gesture_handler.index('swipe_intent(') and
