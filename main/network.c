@@ -518,7 +518,7 @@ static esp_err_t handle_device(httpd_req_t *req)
     esp_wifi_get_mac(in_ap?WIFI_IF_AP:WIFI_IF_STA,mac);
     char response[220];
     snprintf(response,sizeof(response),
-        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.8.2-alpha\","
+        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.8.3-alpha\","
         "\"device_id\":\"LF-%02X%02X%02X\",\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\"}",
         mac[3],mac[4],mac[5],mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
     httpd_resp_set_type(req,"application/json");
