@@ -12,6 +12,13 @@ assert 'lv_screen_load_anim(screen, next_screen_animation, 160, 0, true);' in ui
 assert 'LF_SWIPE_MIN_PX 38' in ui
 assert 'LF_CLOCK_SETTINGS_HOLD_MS 2000ULL' in ui
 assert 'show_clock_settings_popup' in ui
+assert 'lv_obj_add_event_cb(screen, on_lvgl_gesture, LV_EVENT_GESTURE, NULL)' in ui
+assert 'lv_obj_add_event_cb(b, on_lvgl_gesture, LV_EVENT_GESTURE, NULL)' in ui
+assert 'LV_EVENT_PRESS_LOST means the finger left the original widget' in ui
+assert 'lv_indev_get_state(gesture_indev) == LV_INDEV_STATE_RELEASED' in ui
+assert 'static void finish_touch(void)' in ui
+assert 'swipe_intent(lv_indev_get_gesture_dir(indev))' in ui
+assert 'do NOT clear' not in ui /* no-op to guard exact source assumptions */
 assert 'touch_held' in ui and 'on_touch_release' in ui
 assert 'lv_screen_load(screen);' in ui
 assert 'lv_obj_delete_async(old_screen);' in ui
@@ -33,10 +40,10 @@ for key in ['font_style','font_size','ring_mode','show_date','weather','backgrou
     assert key in web and key in net, key
 assert 'microphone' in net and 'recent_errors' in net
 assert 'uxTaskGetNumberOfTasks' in diag
-assert '0.8.3-alpha' in (p/'main/version.h').read_text()
-assert 'set(PROJECT_VER "0.8.3-alpha")' in (p/'CMakeLists.txt').read_text()
+assert '0.8.4-alpha' in (p/'main/version.h').read_text()
+assert 'set(PROJECT_VER "0.8.4-alpha")' in (p/'CMakeLists.txt').read_text()
 assert 'ESP-IDF image descriptor version' in (p/'tools/check_build.py').read_text()
-assert 'LyricFlash-Alpha-0.8.3-FULL-USB-and-OTA-UNTESTED' in workflow
+assert 'LyricFlash-Alpha-0.8.4-FULL-USB-and-OTA-UNTESTED' in workflow
 print('PASS: Alpha 0.8 diagnostics, local settings auth and navigation gates')
 
 assert 'clock_face' in net and 'weather_enabled' in net
