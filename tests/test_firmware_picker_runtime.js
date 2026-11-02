@@ -31,7 +31,7 @@ for(const id of htmlIds)elements[id]={
  add(option){this.options.push(option)}
 };
 const el=id=>{assert(elements[id],"Missing DOM id "+id);return elements[id]};
-const Option=(label,value)=>({label,value});
+function Option(label,value){this.label=label;this.value=value;}
 let phase=0,requests=[],installed="0.8.4-alpha";
 const makeResponse=data=>({ok:true,json:async()=>data,text:async()=>JSON.stringify(data)});
 async function fetchStub(url,opts={}){
