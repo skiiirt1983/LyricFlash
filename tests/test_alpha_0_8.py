@@ -35,7 +35,10 @@ assert 'lf_diag_snapshot(&d);' in ui and 'lf_ui_max_tick_gap_ms' in ui
 assert 'add_space(' in wheel and 'SPACE' in wheel and "input[n]=' '" in wheel
 for endpoint in ['/settings','/api/basic','/api/diagnostics']:
     assert endpoint in net, endpoint
-assert 'if (!pin_matches(req))' in net
+assert 'pin_matches' not in net and 'X-LyricFlash-PIN' not in net
+assert 'lf_network_arm_ota' not in ui and 'lf_network_ota_pin' not in ui
+assert 'config_pin' not in web
+assert 'handle_github_install' in net and 'handle_firmware_page' in net
 assert 'lf_ui_apply_basic_settings' in net
 assert 'lf_weather_save_config(&weather)' in net
 assert 'httpd_resp_set_hdr(req, "Cache-Control", "no-store")' in net
@@ -47,7 +50,7 @@ assert '0.8.4-alpha' in (p/'main/version.h').read_text()
 assert 'set(PROJECT_VER "0.8.4-alpha")' in (p/'CMakeLists.txt').read_text()
 assert 'ESP-IDF image descriptor version' in (p/'tools/check_build.py').read_text()
 assert 'LyricFlash-Alpha-0.8.4-FULL-USB-and-OTA-UNTESTED' in workflow
-print('PASS: Alpha 0.8 diagnostics, local settings auth and navigation gates')
+print('PASS: Alpha 0.8 diagnostics, PIN-free Web UI and navigation gates')
 
 assert 'clock_face' in net and 'weather_enabled' in net
 assert 'clock_face' in web and 'weather_enabled' in web
