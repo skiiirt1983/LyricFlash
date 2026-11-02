@@ -11,6 +11,7 @@ assert "python3 tools/package_release.py _site" in workflow
 assert "python3 tools/package_release.py --verify _site" in workflow
 assert "LyricFlash-*.zip" in workflow
 assert "if-no-files-found: error" in workflow
+assert "python3 tools/create_preserve_usb.py _site" in workflow
 
 spec = importlib.util.spec_from_file_location("release_packager", root / "tools/package_release.py")
 mod = importlib.util.module_from_spec(spec)
@@ -35,6 +36,17 @@ with TemporaryDirectory() as temporary:
         "version": "0.8.1-alpha", "builds": [{"chipFamily":"ESP32-S3",
         "parts":[{"path":"firmware/lyricflash-full.bin","offset":0}]}]
     }))
+    spec_preserve = importlib.util.spec_from_file_location(
+        "preserve_usb", root / "tools/create_preserve_usb.py")
+    preserve = importlib.util.module_from_spec(spec_preserve)
+    spec_preserve.loader.exec_module(preserve)
+    preserve.create(site)
+    manifest = json.loads((site/"beta/manifest-preserve.json").read_text())
+    parts = manifest["builds"][0]["parts"]
+    assert {(p["offset"],p["path"]) for p in parts} == {
+        (0x110000, "firmware/lyricflash-ota.bin"),
+        (0x109000, "firmware/lyricflash-otadata-reset.bin")
+    }
     mod.package(site)
     mod.verify(site)
     (folder/"lyricflash-full.bin").unlink()
