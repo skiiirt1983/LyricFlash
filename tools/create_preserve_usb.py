@@ -4,7 +4,7 @@
 This is ONLY for a device already running LyricFlash with the unchanged 16MB
 layout. Flash the application to OTA_0 and reset OTA selection metadata.
 Unlike the merged recovery image, neither write touches the NVS partition
-(0x9000..0x108FFF). The standalone FULL image remains mandatory for recovery.
+(0x9000..0x108FFF). The standalone FULL image remains mandatory for recovery. ESP Web Tools\nMUST present the erase-choice prompt if the device is treated as a new install;\nthe user must choose not to erase. This cannot be silently assumed.
 """
 import json
 import pathlib
@@ -30,7 +30,7 @@ def create(site):
     m = {
         "name": "LyricFlash Existing-Device Update (preserves Wi-Fi NVS)",
         "version": version,
-        "new_install_prompt_erase": False,
+        "new_install_prompt_erase": True,
         "builds": [{"chipFamily": "ESP32-S3", "parts": [
             {"path": "firmware/lyricflash-ota.bin", "offset": APP_BEGIN},
             {"path": "firmware/lyricflash-otadata-reset.bin", "offset": OTA_DATA_BEGIN},
