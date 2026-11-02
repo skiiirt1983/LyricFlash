@@ -11,7 +11,7 @@ void lf_settings_defaults(lf_settings_t *s)
 {
     *s = (lf_settings_t){
         .brightness = 55,
-        .scroll_speed = 45,
+        .scroll_speed = 70,
         .font_size = 1,
         .system_font_size = 2,
         .sleep_seconds = 60,
@@ -51,6 +51,19 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     }
     (void)nvs_get_u8(h, "brightness", &s->brightness);
     (void)nvs_get_u8(h, "scroll", &s->scroll_speed);
+    /* One-time migration: the OLD 35% rate becomes the NEW 100% cap.
+       Convert old persisted rate to the closest new equivalent without
+       overwriting NVS until the next regular save. */
+    if (schema < 6) {
+        uint8_t old_speed = s->scroll_speed;
+        if (old_speed <= 35) {
+            float prior_px = 18.0f + 1.3f * (float)old_speed;
+            int mapped = (int)((prior_px - 3.0f) / 0.605f + 0.5f);
+            s->scroll_speed = (uint8_t)(mapped > 100 ? 100 : (mapped < 10 ? 10 : mapped));
+        } else {
+            s->scroll_speed = 100;
+        }
+    }
     (void)nvs_get_u8(h, "font", &s->font_size);
     (void)nvs_get_u8(h, "uifont", &s->system_font_size);
     (void)nvs_get_u8(h, "timeout", &s->sleep_seconds);
@@ -74,7 +87,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     nvs_close(h);
 
     s->brightness = in_range(s->brightness, 5, 100, 55);
-    s->scroll_speed = in_range(s->scroll_speed, 10, 100, 45);
+    s->scroll_speed = in_range(s->scroll_speed, 10, 100, 70);
     s->font_size = in_range(s->font_size, 0, 2, 1);
     s->system_font_size = in_range(s->system_font_size, 0, 2, 2);
     if (s->sleep_seconds != 0 && s->sleep_seconds != 15 &&
