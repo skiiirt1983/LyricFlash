@@ -17,6 +17,7 @@ idf_component_register(
         "power.c"
         "power_logic.c"
         "network.c"
+        "ota_pull.c"
         "wifi_json.c"
     INCLUDE_DIRS "."
     REQUIRES
