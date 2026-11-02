@@ -28,3 +28,7 @@ bool lf_network_save_wifi(const char *ssid, const char *password);
 void lf_network_restart(void);
 bool lf_network_is_connected(void);
 bool lf_network_connected_ssid(char *out, size_t size);
+
+const char *lf_network_ota_result(void);
+uint32_t lf_network_ota_received(void);
+uint32_t lf_network_ota_total(void);

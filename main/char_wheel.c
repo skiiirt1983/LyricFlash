@@ -63,6 +63,12 @@ static void add(lv_event_t *e)
         refresh();
     }
 }
+static void add_space(lv_event_t *e)
+{
+    (void)e;
+    size_t n=strlen(input);
+    if(n<max_chars){input[n]=' ';input[n+1]=0;refresh();}
+}
 static void erase(lv_event_t *e)
 {
     (void)e;
@@ -123,9 +129,10 @@ void lf_charwheel_show(lv_obj_t *parent,const char *title,const char *initial,
     lv_obj_set_style_text_font(roller,&lv_font_montserrat_24,0);
     lv_obj_set_style_bg_color(roller,lv_color_hex(0x12293B),0);
     lv_obj_set_style_text_color(roller,lv_color_hex(0xEEF7FF),0);
-    btn(parent,"ADD",-101,87,91,add);
-    btn(parent,"DEL",0,87,91,erase);
-    mode_button=btn(parent,"abc",101,87,91,mode_change);
+    btn(parent,"ADD",-119,87,70,add);
+    btn(parent,"SPACE",-40,87,75,add_space);
+    btn(parent,"DEL",40,87,70,erase);
+    mode_button=btn(parent,"abc",119,87,70,mode_change);
     btn(parent,"BACK",-71,164,117,cancel);
     btn(parent,"SAVE",71,164,117,save);
 }

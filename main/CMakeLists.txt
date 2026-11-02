@@ -2,6 +2,7 @@
 idf_component_register(
     SRCS
         "main.c"
+        "diagnostics.c"
         "ui.c"
         "char_wheel.c"
         "clock_face.c"

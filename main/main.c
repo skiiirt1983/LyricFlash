@@ -5,6 +5,8 @@
 #include "ui.h"
 #include "ota_guard.h"
 #include "network.h"
+#include "diagnostics.h"
+#include "version.h"
 #include "weather.h"
 
 static const char *TAG = "LyricFlash";
@@ -15,6 +17,7 @@ void app_main(void)
     esp_err_t err = nvs_flash_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "NVS initialization failed: %s; no erase attempted", esp_err_to_name(err));
+        lf_diag_error("boot", "NVS init failed");
         lf_ota_guard_failure("NVS init failed");
         return;
     }
@@ -22,25 +25,32 @@ void app_main(void)
     err = lf_settings_load(&settings);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Settings read failed: %s", esp_err_to_name(err));
+        lf_diag_error("boot", "Settings read failed");
         lf_ota_guard_failure("Settings read failed");
         return;
     }
     if (bsp_display_start() == NULL) {
         ESP_LOGE(TAG, "Display initialization failed");
+        lf_diag_error("boot", "Display start failed");
         lf_ota_guard_failure("Display start failed");
         return;
     }
-    ESP_LOGI(TAG, "LyricFlash alpha 0.7.0: demo UI and local firmware update; microphones OFF");
+    ESP_LOGI(TAG, "LyricFlash %s: demo UI and local firmware update; microphones OFF", LF_VERSION);
     if (!lf_ui_start(&settings)) {
+        lf_diag_error("boot", "UI init failed");
         lf_ota_guard_failure("UI init failed");
         return;
     }
     if (!lf_network_start()) {
         ESP_LOGE(TAG,"Wi-Fi/OTA service initialization failed");
+        lf_diag_error("boot", "Network init failed");
         lf_ota_guard_failure("Network recovery/update interface failed");
         return;
     }
-    if (!lf_weather_start()) ESP_LOGW(TAG, "Background weather service unavailable");
+    if (!lf_weather_start()) {
+        lf_diag_error("weather", "Background weather service unavailable");
+        ESP_LOGW(TAG, "Background weather service unavailable");
+    }
     // Confirm only after display, settings, and local update server initialize.
     // This guards early boot failures, NOT future Wi-Fi/touch failures.
     lf_ota_guard_confirm_startup();
