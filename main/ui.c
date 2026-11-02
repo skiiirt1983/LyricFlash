@@ -39,9 +39,13 @@ static lv_obj_t *speed_text;
 static lv_obj_t *brightness_text;
 static lv_obj_t *timeout_text;
 static lv_obj_t *screen;
-/* PrintSphere-style touch-synchronous pager, isolated to the three core pages.
+/* Swiper touch-synchronous pager, isolated to the three core pages.
    All submenus (including Weather) remain standalone and release the pager. */
 #define LF_PAGER_WIDTH 466
+/* Recovery gate for the startup/touch lockup in 0.8.10. Keep exactly one
+   live full-screen tree until the multi-page compositor passes hardware tests.
+   The normal touch gesture navigation and explicit buttons remain available. */
+#define LF_SAFE_BOOT_SINGLE_SCREEN 1
 static lv_obj_t *pager_root;
 static lv_obj_t *pager_scroll;
 static lv_obj_t *pager_clock;
@@ -1180,8 +1184,16 @@ static void pager_request_async(void *arg)
     pager_requested_index=-1;
     pager_rebuild_requested=false;
     if(index<0 || index>2)return;
-    if(!rebuild && pager_root && lv_screen_active()==pager_root)
-        pager_show(index,LV_ANIM_ON);
+    /* A single-screen recovery path prevents a costly Clock + Home + Settings
+       allocation from blocking touchscreen input on boot or button presses.
+       Rebuild requests continue to work; each operation owns one root. */
+    if(LF_SAFE_BOOT_SINGLE_SCREEN || !pager_root || lv_screen_active()!=pager_root) {
+        if(index==0)render_clock();
+        else if(index==1)render_home();
+        else render_settings();
+        return;
+    }
+    if(!rebuild) pager_show(index,LV_ANIM_ON);
     else pager_build(index);
 }
 static void pager_request(int index, bool rebuild)
@@ -1803,7 +1815,10 @@ bool lf_ui_start(lf_settings_t *s)
     }
     apply_brightness();
     (void)lf_power_background_start();
-    pager_build(1);
+    /* Do not construct all three core pages before the first usable frame.
+       The 0.8.10 three-tree startup could overwhelm LVGL input handling. */
+    if(LF_SAFE_BOOT_SINGLE_SCREEN) render_home();
+    else pager_build(1);
     lv_indev_t *input=lv_indev_get_next(NULL);
     while(input) {
         if(lv_indev_get_type(input)==LV_INDEV_TYPE_POINTER){
