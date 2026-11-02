@@ -666,13 +666,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // display_manager_pick_render_mode / display_manager_default_buffer_pixels).
 // These heights therefore only size max_transfer_sz and the partial-buffer
 // fallback path when tear mode ends up as NONE.
-/* Keep ~21% of the screen in the PSRAM LVGL drawing stripe.
- * Old 24-row stripes (~5%) required excessive LVGL flushes while swiping.
- * Preserve the proven four-row DMA staging, queue depth 1, and 80 MHz QSPI.
- * Do not scale the SPI host's internal-RAM transaction limit with PSRAM
- * stripe height: the panel sends at most four rows per staged transfer. */
-#define LVGL_BUFFER_HEIGHT_PSRAM (96)
-#define BSP_LCD_SPI_TRANSFER_ROWS (24)
+#define LVGL_BUFFER_HEIGHT_PSRAM (24)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
 
 esp_err_t bsp_display_brightness_init(void)
@@ -873,8 +867,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
     const bool use_psram = psram_available;
 
     const uint32_t buffer_height = use_psram ? LVGL_BUFFER_HEIGHT_PSRAM : LVGL_BUFFER_HEIGHT_INTERNAL;
-    const size_t max_transfer_sz =
-        BSP_LCD_H_RES * BSP_LCD_SPI_TRANSFER_ROWS * BSP_LCD_BITS_PER_PIXEL / 8;
+    const size_t max_transfer_sz = BSP_LCD_H_RES * buffer_height * BSP_LCD_BITS_PER_PIXEL / 8;
     const bsp_display_config_t disp_config = {
         .max_transfer_sz = max_transfer_sz,
     };
