@@ -9,6 +9,11 @@ web=(p/'main/web_basic_html.h').read_text()
 diag=(p/'main/diagnostics.c').read_text()
 workflow=(p/'.github/workflows/pages-and-firmware.yml').read_text()
 assert 'lv_screen_load_anim(' not in ui
+assert 'nav_settle(direction)' in ui
+assert 'lv_obj_set_style_translate_x(screen,amount,0);' in ui
+assert 'lv_obj_set_style_translate_y(screen,amount,0);' in ui
+assert 'lv_anim_set_duration(&a,175);' in ui
+assert 'lv_anim_delete(old_screen,nav_translate_x);' in ui
 assert 'lv_screen_load(screen);' in ui
 assert 'lv_obj_delete_async(old_screen);' in ui
 assert 'LF_SWIPE_MIN_PX 38' in ui
