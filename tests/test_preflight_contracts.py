@@ -153,7 +153,7 @@ require('lv_screen_load(screen);' in ui and
         'lv_async_call(commit_swipe, NULL)' in ui and
         'lv_async_call(weather_back_deferred,NULL)' in ui,
         "No synchronous screen delete within LVGL click/gesture callbacks")
-require('if (!touch_held && is_swipe_page() && !clock_settings_popup)' in ui and
+require('if (!asleep && !touch_held && is_swipe_page() && !clock_settings_popup)' in ui and
         'lv_indev_get_state(ptr)==LV_INDEV_STATE_PRESSED' in ui and
         'lv_indev_get_state(gesture_indev) == LV_INDEV_STATE_RELEASED' in ui and
         'lv_obj_add_flag(scrollbox,LV_OBJ_FLAG_EVENT_BUBBLE);' in read("main/weather_visual.c"),
