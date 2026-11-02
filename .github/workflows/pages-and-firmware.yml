@@ -14,6 +14,7 @@ on:
       - '.github/workflows/pages-and-firmware.yml'
       - 'tools/**'
       - 'tests/**'
+      - 'tests/**'
 
 permissions:
   contents: read
