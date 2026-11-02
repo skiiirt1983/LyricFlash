@@ -496,6 +496,9 @@ static esp_err_t handle_info(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "ota_total", ota_total);
     cJSON_AddStringToObject(root, "connected_ssid", ssid);
     cJSON_AddStringToObject(root, "saved_ssid", saved);
+    cJSON_AddBoolToObject(root, "wifi_saved", saved[0] != 0);
+    cJSON_AddStringToObject(root, "setup_ssid", in_ap ? ap_ssid : "");
+    /* Never expose setup-network passwords via an unauthenticated HTTP API. */
     char *body = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (!body) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
@@ -510,7 +513,7 @@ static esp_err_t handle_device(httpd_req_t *req)
     esp_wifi_get_mac(in_ap?WIFI_IF_AP:WIFI_IF_STA,mac);
     char response[220];
     snprintf(response,sizeof(response),
-        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.8.1-alpha\","
+        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.8.2-alpha\","
         "\"device_id\":\"LF-%02X%02X%02X\",\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\"}",
         mac[3],mac[4],mac[5],mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
     httpd_resp_set_type(req,"application/json");
@@ -693,6 +696,8 @@ bool lf_network_start(void)
                 return serve();
             }
         }
+        ESP_LOGW(TAG,"Saved home Wi-Fi did not connect; offering setup AP (credentials retained)");
+        lf_diag_error("wifi", "Home network connection timed out; setup AP enabled");
         in_ap=true;
         esp_wifi_stop();
     }
@@ -701,7 +706,26 @@ bool lf_network_start(void)
     uint8_t mac[6]={0};
     esp_wifi_get_mac(WIFI_IF_STA,mac);
     snprintf(ap_ssid,sizeof ap_ssid,"LyricFlash-%02X%02X",mac[4],mac[5]);
-    snprintf(ap_pass,sizeof ap_pass,"LF%06" PRIu32,(uint32_t)(esp_random()%1000000u));
+    /* Keep the setup AP credential stable across reboots and OTA updates.
+       Never print it to logs; it is available only on the device screen. */
+    nvs_handle_t ap_store;
+    bool ap_key_loaded=false;
+    if (nvs_open("lf_network", NVS_READWRITE, &ap_store) == ESP_OK) {
+        size_t key_len=sizeof ap_pass;
+        if (nvs_get_str(ap_store,"ap_key",ap_pass,&key_len)==ESP_OK &&
+            strlen(ap_pass)>=8 && strlen(ap_pass)<=15) ap_key_loaded=true;
+        if (!ap_key_loaded) {
+            snprintf(ap_pass,sizeof ap_pass,"LF%08" PRIu32,
+                     (uint32_t)(esp_random()%100000000u));
+            if (nvs_set_str(ap_store,"ap_key",ap_pass)==ESP_OK)
+                (void)nvs_commit(ap_store);
+        }
+        nvs_close(ap_store);
+    } else {
+        snprintf(ap_pass,sizeof ap_pass,"LF%08" PRIu32,
+                 (uint32_t)(esp_random()%100000000u));
+        lf_diag_error("wifi","Setup AP key could not be saved in NVS");
+    }
     wifi_config_t apcfg={0};
     strlcpy((char *)apcfg.ap.ssid,ap_ssid,sizeof(apcfg.ap.ssid));
     strlcpy((char *)apcfg.ap.password,ap_pass,sizeof(apcfg.ap.password));
