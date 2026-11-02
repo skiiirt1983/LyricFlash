@@ -310,3 +310,12 @@ require('#define LF_SAFE_BOOT_SINGLE_SCREEN 1' in ui and
         'lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, arg);' in ui and
         'if (target >= 0) queue_swipe(target, animation);' in ui,
         "Post-reboot single-screen Home and independent tap/swipe fallback missing")
+
+# Touch failure regression: LVGL's short scroll gesture must never outrun
+# the deliberate page-transition displacement threshold on a button.
+gesture_handler=ui.split('static void on_lvgl_gesture(lv_event_t *e)\\n{',1)[1].split('static void on_touch_release',1)[0]
+guard='if(dx*dx+dy*dy < LF_SWIPE_MIN_PX*LF_SWIPE_MIN_PX) return;'
+require(guard in gesture_handler and
+        gesture_handler.index(guard) < gesture_handler.index('swipe_intent(') and
+        'if(swipe_candidate_page < 0)' in gesture_handler,
+        "Gesture notifications must honor the full touch-swipe threshold and dispatch once")
