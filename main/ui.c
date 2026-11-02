@@ -1241,6 +1241,7 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
     esp_err_t err = esp_lv_adapter_lock(2000);
     if (err != ESP_OK) return err;
     lf_settings_t previous = *prefs;
+    prefs->clock_face = basic->clock_face;
     prefs->basic_font_style = basic->basic_font_style;
     prefs->basic_font_size = basic->basic_font_size;
     prefs->basic_ring_mode = basic->basic_ring_mode;
