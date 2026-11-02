@@ -40,7 +40,7 @@ async function fetchStub(url,opts={}){
  if(url.includes("api.github.com/repos/skiiirt1983/LyricFlash/releases")){
    if(phase!==2)return makeResponse([]);
    return makeResponse([{tag_name:"alpha-build-abc123456789",draft:false,prerelease:true,
-      published_at:"2026-11-02T22:00:00Z",body:"LyricFlash-OTA-Version: 0.8.6-alpha",
+      published_at:"2026-11-02T22:00:00Z",body:"LyricFlash-OTA-Version: 0.8.8-alpha\\nLyricFlash-OTA-Direct: https://raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/alpha-build-abc123456789/lyricflash-ota.bin",
       assets:[{name:"lyricflash-ota.bin",size:2100000,
        browser_download_url:"https://github.com/skiiirt1983/LyricFlash/releases/download/alpha-build-abc123456789/lyricflash-ota.bin"}]}]);
  }
@@ -57,7 +57,7 @@ async function fetchStub(url,opts={}){
 const safe=script.replace("loadInstalled().then(()=>loadBuilds());","")
                  .replace("loadInstalled().then(loadBuilds);","");
 const runtime=new Function("document","fetch","Option","confirm","setTimeout",
- safe+"\nreturn {loadInstalled,loadBuilds,versionCompare};")(
+ safe+"\nreturn {loadInstalled,loadBuilds,versionCompare,getEntries:()=>entries};")(
  {getElementById:el},fetchStub,Option,()=>false,()=>{});
 (async()=>{
  assert(runtime.versionCompare("0.8.4-alpha","0.8.3-alpha")>0);
@@ -82,7 +82,10 @@ const runtime=new Function("document","fetch","Option","confirm","setTimeout",
  assert.equal(el("install").disabled,false,"Valid newer build should be selectable");
  phase=2;
  await el("refresh-builds").onclick();
- assert.match(el("builds").options[1].label,/0\.8\.6-alpha.*LATEST DEVELOPMENT/);
+ assert.match(el("builds").options[1].label,/0\.8\.8-alpha.*LATEST DEVELOPMENT/);
+ assert.equal(runtime.getEntries()[0].url,
+ "https://raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/alpha-build-abc123456789/lyricflash-ota.bin",
+ "Picker must prefer a verified direct asset URL");
  el("builds").value="0";el("builds").onchange();
  assert.equal(el("install").disabled,false,"Alpha prerelease build must be selectable");
  assert(el("build-info").textContent.includes("alpha development builds"));

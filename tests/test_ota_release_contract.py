@@ -34,3 +34,8 @@ assert "0.8.7-alpha" in preparer
 assert "Alpha 0.8.7" in page
 assert "LF_VERSION" in main
 print("PASS: Alpha 0.8.7 OTA and full-USB packaging contract")
+
+assert "tools/publish_alpha_ota.py" in workflow
+assert "LyricFlash-OTA-Direct:" in workflow
+assert "raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/" in ui
+print("PASS: direct OTA host and release picker contract")
