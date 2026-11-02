@@ -5,6 +5,10 @@
 #include "diagnostics.h"
 #include "version.h"
 #include "web_basic_html.h"
+#include "web_device_html.h"
+#include "esp_https_ota.h"
+#include "esp_crt_bundle.h"
+#include <stdatomic.h>
 #include "cJSON.h"
 #include "image_policy.h"
 #include "esp_log.h"
@@ -34,13 +38,17 @@ static bool in_ap;
 static char address[32] = "Offline";
 static char ap_ssid[33];
 static char ap_pass[16];
-static char ota_pin[10];
-static uint8_t ota_pin_attempts;
-static TickType_t ota_expiry;
 static httpd_handle_t server;
 static const char *ota_result = "idle";
 static uint32_t ota_received;
 static uint32_t ota_total;
+static atomic_bool ota_busy = false;
+/* URL is taken only from the official LyricFlash GitHub Pages beta asset
+   or versioned Github Release assets belonging to this repository. */
+typedef struct {
+    char url[384];
+    char version[33];
+} lf_github_request_t;
 static bool time_sync_started;
 static void reboot_task(void *arg);
 
@@ -192,90 +200,22 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         xEventGroupSetBits(connected_event, LF_CONNECTED);
     }
 }
-static bool pin_matches(httpd_req_t *req)
-{
-    char pin[20];
-    size_t n=httpd_req_get_hdr_value_len(req,"X-LyricFlash-PIN");
-    if(!n || n>=sizeof(pin)) return false;
-    if(httpd_req_get_hdr_value_str(req,"X-LyricFlash-PIN",pin,sizeof(pin))!=ESP_OK)
-        return false;
-    /* No OTA unless explicitly armed from the device touchscreen. */
-    if (!lf_network_ota_armed() || ota_pin_attempts >= 5) return false;
-    ota_pin_attempts++;
-    return strcmp(pin,ota_pin)==0;
-}
 static void reboot_task(void *arg)
 {
     (void)arg; vTaskDelay(pdMS_TO_TICKS(900)); esp_restart();
 }
-static const char home_page[] =
-"<!doctype html><html lang='en'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-"<title>LyricFlash Device</title><meta name='theme-color' content='#050910'>"
-"<style>*{box-sizing:border-box}body{font:16px system-ui,sans-serif;"
-"background:radial-gradient(circle at 15% 0%,#102d56,#050910 52%);"
-"color:#f0f6ff;max-width:560px;margin:35px auto;padding:20px;line-height:1.55}"
-"h1{letter-spacing:.08em;color:#62b5ff;margin-bottom:0}p{color:#aabbd4}"
-"h2{font-size:20px;margin-top:0;color:#eaf5ff}"
-"button,input,select{font:inherit;padding:14px;border-radius:12px;width:100%;margin:7px 0}"
-"button{background:#62b5ff;border:1px solid #8fc8ff;color:#07182d;font-weight:750;cursor:pointer}"
-"button:hover{background:#91ccff}button:focus-visible,input:focus-visible{outline:2px solid #9cd6ff;outline-offset:2px}"
-"input,select{background:#0b1525;color:#f0f6ff;border:1px solid #395780}"
-"section{background:#101824;border:1px solid #293b58;border-radius:19px;padding:23px;margin:20px 0}"
-"#msg{color:#a8d7ff;overflow-wrap:anywhere}</style>"
-"<h1>LYRICFLASH</h1><p>ESP32-S3 / Local device manager</p>"
-"<p><a href='/settings' style='color:#8ec9ff'>Open Basic clock studio and diagnostics</a></p>"
-"<section><h2>Wi-Fi setup</h2><p id='wifi-state'>Checking current network...</p><p>Scan for 2.4 GHz Wi-Fi or enter its name.</p>"
-"<button onclick='scan()'>Scan nearby Wi-Fi</button><select id='networks' onchange='pick()'>"
-"<option value=''>Choose a network</option></select><input id='ssid' placeholder='Wi-Fi name'>"
-"<input id='pass' type='password' placeholder='Wi-Fi password'>"
-"<button onclick='save()'>Save Wi-Fi &amp; restart</button></section>"
-"<section><h2>Firmware update</h2><p>Tap <b>ARM OTA</b> on the device, then enter the PIN shown on screen.</p>"
-"<input id='pin' type='password' placeholder='Device OTA PIN' autocomplete='off'>"
-"<input id='bin' type='file' accept='.bin,application/octet-stream'>"
-"<button id='install-btn' onclick='update()'>Install application-only OTA firmware</button></section>"
-"<p id='msg' role='status'></p><script>const msg=t=>document.getElementById('msg').textContent=t;"
-"async function loadState(){try{let r=await fetch('/api/info');let d=await r.json();"
-"let state=document.getElementById('wifi-state');state.textContent=d.connected_ssid?"
-"('Connected: '+d.connected_ssid):d.saved_ssid?('Saved: '+d.saved_ssid+' (not connected)'):'No home Wi-Fi saved';"
-"if(d.saved_ssid)document.getElementById('ssid').value=d.saved_ssid;}catch(e){}}"
-"window.addEventListener('DOMContentLoaded',loadState);"
-"function pick(){const n=document.getElementById('networks');if(n.value)document.getElementById('ssid').value=n.value;}"
-"async function scan(){msg('Scanning Wi-Fi...');try{await fetch('/api/wifi-scan?refresh=1');poll(0);}catch(e){msg('Scan unavailable');}}"
-"async function poll(attempt){try{let r=await fetch('/api/wifi-scan');let d=await r.json();if(d.state==='scanning'&&attempt<16){setTimeout(()=>poll(attempt+1),650);return;}"
-"let select=document.getElementById('networks');select.replaceChildren(new Option('Choose a network',''));"
-"for(let n of d.networks||[])select.add(new Option(n.ssid+(n.secured?' [secured]':' [open]'),n.ssid));"
-"msg(d.state==='ready'?(d.networks.length+' networks found'):'Scan failed. Try again.');}catch(e){msg('Scan unavailable');}}"
-"async function save(){let r=await fetch('/wifi',{method:'POST',headers:{'Content-Type':'application/json'},"
-"body:JSON.stringify({ssid:document.getElementById('ssid').value,password:document.getElementById('pass').value})});msg(await r.text());}"
-"let busy=false;\n"
-"function update(){\n"
-" const f=document.getElementById('bin').files[0];\n"
-" const pin=document.getElementById('pin').value.trim();\n"
-" if(!f)return msg('Choose the application-only OTA .bin file first');\n"
-" if(!/^[0-9]{4}$/.test(pin))return msg('Enter the four-digit PIN shown on device');\n"
-" if(busy)return;\n"
-" const button=document.getElementById('install-btn');\n"
-" const xhr=new XMLHttpRequest();\n"
-" busy=true;button.disabled=true;\n"
-" const done=t=>{busy=false;button.disabled=false;msg(t);};\n"
-" xhr.open('POST','/update',true);xhr.timeout=180000;\n"
-" xhr.setRequestHeader('Content-Type','application/octet-stream');\n"
-" xhr.setRequestHeader('X-LyricFlash-PIN',pin);\n"
-" xhr.upload.onprogress=e=>msg(e.lengthComputable?'Transfer '+Math.round(100*e.loaded/e.total)+'% (not yet verified)':'Transferring...');\n"
-" xhr.upload.onload=()=>msg('Firmware transmitted; waiting for verification...');\n"
-" xhr.onload=()=>done(xhr.status>=200&&xhr.status<300?xhr.responseText:'HTTP '+xhr.status+': '+(xhr.responseText||'Upload rejected'));\n"
-" xhr.onerror=()=>done('Connection failed. Check device status before retrying.');\n"
-" xhr.ontimeout=()=>done('Upload timed out. Check /api/info before retrying.');\n"
-" xhr.onabort=()=>done('Upload cancelled.');\n"
-" msg('Starting upload...');\n"
-" try{xhr.send(f);}catch(e){done('Cannot start upload: '+e.message);}\n"
-"}\n"
-"</script></html>";
-
 static esp_err_t handle_home(httpd_req_t *req)
 {
     httpd_resp_set_type(req,"text/html; charset=utf-8");
-    return httpd_resp_send(req,home_page,HTTPD_RESP_USE_STRLEN);
+    httpd_resp_set_hdr(req,"Cache-Control","no-store");
+    return httpd_resp_send(req,lf_device_settings_html,HTTPD_RESP_USE_STRLEN);
+}
+
+static esp_err_t handle_firmware_page(httpd_req_t *req)
+{
+    httpd_resp_set_type(req,"text/html; charset=utf-8");
+    httpd_resp_set_hdr(req,"Cache-Control","no-store");
+    return httpd_resp_send(req,lf_device_firmware_html,HTTPD_RESP_USE_STRLEN);
 }
 
 static esp_err_t send_json(httpd_req_t *req, cJSON *root)
@@ -345,11 +285,6 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
 
 static esp_err_t handle_basic_post(httpd_req_t *req)
 {
-    if (!pin_matches(req)) {
-        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "Arm WEB/OTA on device and enter correct PIN");
-        return ESP_FAIL;
-    }
-    ota_expiry = 0; /* Web configuration authorization is single-use. */
     if (req->content_len < 2 || req->content_len > 1250) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid request length");
         return ESP_FAIL;
@@ -495,7 +430,6 @@ static esp_err_t handle_info(httpd_req_t *req)
     cJSON_AddStringToObject(root, "version", LF_VERSION);
     cJSON_AddStringToObject(root, "mode", in_ap ? "ap" : "station");
     cJSON_AddStringToObject(root, "address", address);
-    cJSON_AddBoolToObject(root, "ota_armed", lf_network_ota_armed());
     cJSON_AddStringToObject(root, "ota_result", ota_result);
     cJSON_AddNumberToObject(root, "ota_received", ota_received);
     cJSON_AddNumberToObject(root, "ota_total", ota_total);
@@ -577,15 +511,17 @@ static esp_err_t handle_scan(httpd_req_t *req)
 }
 static esp_err_t handle_update(httpd_req_t *req)
 {
-    if(!pin_matches(req)){httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Arm OTA on device and enter the correct PIN");return ESP_FAIL;}
-    ota_expiry=0; /* Single-use PIN; do not require it to remain armed during upload. */
+    if (atomic_exchange(&ota_busy,true)) {
+        httpd_resp_send_err(req,HTTPD_409_CONFLICT,"Another firmware update is already in progress");
+        return ESP_FAIL;
+    }
     ota_received=0;
     ota_total=req->content_len>0?(uint32_t)req->content_len:0;
     ota_result="validating";
     const esp_partition_t *part=esp_ota_get_next_update_partition(NULL);
     if(!part || req->content_len<512 || req->content_len>(int)part->size){
         ota_result="bad_size"; ESP_LOGE(TAG,"Invalid OTA request size / inactive partition");
-        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"OTA image invalid or too large");return ESP_FAIL;
+        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"OTA image invalid or too large");atomic_store(&ota_busy,false);return ESP_FAIL;
     }
     uint8_t buf[2048];
     uint8_t first[0x120];
@@ -621,19 +557,139 @@ static esp_err_t handle_update(httpd_req_t *req)
         ota_received=(uint32_t)received;
         ota_result="writing";
     }
-    ota_expiry=0; // disarm after a single attempt, whether successful or not
     if(!ok){lf_diag_error("ota",ota_result);if(started) esp_ota_abort(handle);ESP_LOGE(TAG,"OTA incomplete at %u/%u",ota_received,ota_total);
-        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Upload failed, device remains on current firmware");return ESP_FAIL;}
+        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Upload failed, device remains on current firmware");atomic_store(&ota_busy,false);return ESP_FAIL;}
     ota_result="verifying";
     esp_err_t finish_err=esp_ota_end(handle);
-    if(finish_err!=ESP_OK){ota_result="checksum_failed";lf_diag_error("ota",ota_result);ESP_LOGE(TAG,"OTA end: %s",esp_err_to_name(finish_err));httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Firmware checksum / image validation failed");return ESP_FAIL;}
+    if(finish_err!=ESP_OK){ota_result="checksum_failed";lf_diag_error("ota",ota_result);ESP_LOGE(TAG,"OTA end: %s",esp_err_to_name(finish_err));httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Firmware checksum / image validation failed");atomic_store(&ota_busy,false);return ESP_FAIL;}
     esp_err_t boot_err=esp_ota_set_boot_partition(part);
-    if(boot_err!=ESP_OK){ota_result="activation_failed";lf_diag_error("ota",ota_result);ESP_LOGE(TAG,"OTA activate: %s",esp_err_to_name(boot_err));httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot activate new firmware");return ESP_FAIL;}
+    if(boot_err!=ESP_OK){ota_result="activation_failed";lf_diag_error("ota",ota_result);ESP_LOGE(TAG,"OTA activate: %s",esp_err_to_name(boot_err));httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot activate new firmware");atomic_store(&ota_busy,false);return ESP_FAIL;}
     ota_result="verified_rebooting";
     httpd_resp_sendstr(req,"Firmware verified. Rebooting into new application.");
     xTaskCreate(reboot_task,"lf_reboot",2048,NULL,3,NULL);
     return ESP_OK;
 }
+
+/* Every direct GitHub OTA runs in its own worker, never on LVGL or HTTP server.
+   PIN-free does NOT mean bypassing chip checks, TLS validation or NVS isolation. */
+static bool allowed_github_ota_url(const char *url)
+{
+    const char *beta = "https://skiiirt1983.github.io/LyricFlash/beta/firmware/lyricflash-ota.bin";
+    const char *releases = "https://github.com/skiiirt1983/LyricFlash/releases/download/";
+    if (!url || strlen(url) >= sizeof(((lf_github_request_t *)0)->url)) return false;
+    if (strcmp(url, beta) == 0) return true;
+    if (strncmp(url, releases, strlen(releases)) != 0) return false;
+    const char *path=url+strlen(releases);
+    if (!*path || strstr(path,"..") || strchr(path,'?') || strchr(path,'#') ||
+        strchr(path,'%') || strchr(path,'@') || strchr(path,'\\')) return false;
+    const char *sep=strchr(path,'/');
+    if (!sep || sep==path || !sep[1] || strchr(sep+1,'/')) return false;
+    const char *filename=sep+1;
+    const size_t length=strlen(filename);
+    if (length < 8 || strcmp(filename+length-4,".bin") != 0) return false;
+    return strstr(filename,"ota") || strstr(filename,"OTA");
+}
+
+static void github_ota_worker(void *arg)
+{
+    lf_github_request_t *job=(lf_github_request_t *)arg;
+    ota_result="connecting";
+    esp_http_client_config_t config = {
+        .url=job->url,
+        .crt_bundle_attach=esp_crt_bundle_attach,
+        .timeout_ms=15000,
+        .keep_alive_enable=false,
+        .max_redirection_count=5,
+        .disable_auto_redirect=false,
+        .buffer_size=2048
+    };
+    esp_https_ota_config_t ota_config={.http_config=&config};
+    esp_https_ota_handle_t handle=NULL;
+    esp_err_t err=esp_https_ota_begin(&ota_config,&handle);
+    if(err!=ESP_OK) {
+        ESP_LOGE(TAG,"GitHub OTA connection failed: %s",esp_err_to_name(err));
+        ota_result="download_failed";
+        goto done;
+    }
+    esp_app_desc_t descriptor={0};
+    err=esp_https_ota_get_img_desc(handle,&descriptor);
+    if(err!=ESP_OK || strcmp(descriptor.project_name,"lyricflash")!=0 ||
+       strcmp(descriptor.version,job->version)!=0) {
+        ota_result="bad_version";
+        ESP_LOGE(TAG,"GitHub OTA app descriptor differs from selected LyricFlash version");
+        esp_https_ota_abort(handle);
+        goto done;
+    }
+    ota_total=(uint32_t)esp_https_ota_get_image_size(handle);
+    const esp_partition_t *slot=esp_ota_get_next_update_partition(NULL);
+    if(!slot || (ota_total && ota_total>slot->size)) {
+        ota_result="bad_size";
+        esp_https_ota_abort(handle);
+        goto done;
+    }
+    ota_result="downloading";
+    while((err=esp_https_ota_perform(handle))==ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
+        int n=esp_https_ota_get_image_len_read(handle);
+        if(n>=0) ota_received=(uint32_t)n;
+    }
+    if(err!=ESP_OK || !esp_https_ota_is_complete_data_received(handle)) {
+        ota_result="download_failed";
+        ESP_LOGE(TAG,"GitHub OTA transfer failed: %s",esp_err_to_name(err));
+        esp_https_ota_abort(handle);
+        goto done;
+    }
+    ota_result="verifying";
+    err=esp_https_ota_finish(handle);
+    if(err!=ESP_OK) {
+        ota_result="checksum_failed";
+        ESP_LOGE(TAG,"GitHub OTA validation failed: %s",esp_err_to_name(err));
+        goto done;
+    }
+    ota_result="verified_rebooting";
+    xTaskCreate(reboot_task,"lf_reboot",2048,NULL,3,NULL);
+done:
+    free(job);
+    if(strcmp(ota_result,"verified_rebooting")!=0) atomic_store(&ota_busy,false);
+    vTaskDelete(NULL);
+}
+
+static esp_err_t handle_github_install(httpd_req_t *req)
+{
+    if(req->content_len<2 || req->content_len>600)
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid install request");
+    char json[601]={0};
+    int got=0;
+    while(got<req->content_len) {
+        int n=httpd_req_recv(req,json+got,req->content_len-got);
+        if(n<=0) return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Incomplete install request");
+        got+=n;
+    }
+    cJSON *root=cJSON_Parse(json);
+    const cJSON *url=root?cJSON_GetObjectItemCaseSensitive(root,"url"):NULL;
+    const cJSON *ver=root?cJSON_GetObjectItemCaseSensitive(root,"version"):NULL;
+    lf_github_request_t *job=calloc(1,sizeof(*job));
+    bool valid=job && cJSON_IsString(url) && cJSON_IsString(ver) &&
+        url->valuestring && ver->valuestring &&
+        strlen(ver->valuestring)>0 && strlen(ver->valuestring)<sizeof(job->version) &&
+        allowed_github_ota_url(url->valuestring);
+    if(valid) {
+        strlcpy(job->url,url->valuestring,sizeof(job->url));
+        strlcpy(job->version,ver->valuestring,sizeof(job->version));
+    }
+    cJSON_Delete(root);
+    if(!valid){free(job);return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Unsupported LyricFlash GitHub OTA URL or version");}
+    if(atomic_exchange(&ota_busy,true)){
+        free(job);return httpd_resp_send_err(req,HTTPD_409_CONFLICT,"Another firmware update is active");
+    }
+    ota_received=0;ota_total=0;ota_result="queued";
+    if(xTaskCreate(github_ota_worker,"lf_github_ota",12288,job,tskIDLE_PRIORITY+2,NULL)!=pdPASS){
+        atomic_store(&ota_busy,false);free(job);ota_result="download_failed";
+        return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot start OTA download");
+    }
+    httpd_resp_set_status(req,"202 Accepted");
+    return httpd_resp_sendstr(req,"Firmware download started on device");
+}
+
 static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
@@ -643,6 +699,8 @@ static bool serve(void)
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
         {.uri="/",.method=HTTP_GET,.handler=handle_home},
+        {.uri="/firmware",.method=HTTP_GET,.handler=handle_firmware_page},
+        {.uri="/api/install",.method=HTTP_POST,.handler=handle_github_install},
         {.uri="/api/info",.method=HTTP_GET,.handler=handle_info},
         {.uri="/settings",.method=HTTP_GET,.handler=handle_settings_page},
         {.uri="/api/basic",.method=HTTP_GET,.handler=handle_basic_get},
@@ -663,14 +721,8 @@ uint32_t lf_network_ota_received(void){return ota_received;}
 uint32_t lf_network_ota_total(void){return ota_total;}
 const char *lf_network_ap_ssid(void){return ap_ssid;}
 const char *lf_network_ap_password(void){return ap_pass;}
-const char *lf_network_ota_pin(void){return ota_pin;}
-void lf_network_arm_ota(void){ota_pin_attempts=0;ota_expiry=xTaskGetTickCount()+pdMS_TO_TICKS(120000);}
-bool lf_network_ota_armed(void){return ota_expiry && (int32_t)(ota_expiry-xTaskGetTickCount())>0;}
-
 bool lf_network_start(void)
 {
-    uint32_t seed=esp_random();
-    snprintf(ota_pin,sizeof ota_pin,"%04" PRIu32,seed%10000u);
     if(!connected_event) connected_event=xEventGroupCreate();
     if(!connected_event) return false;
     if(esp_netif_init()!=ESP_OK) return false;
