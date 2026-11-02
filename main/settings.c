@@ -32,7 +32,8 @@ void lf_settings_defaults(lf_settings_t *s)
         .basic_ring_a = 0x268BFF,
         .basic_ring_b = 0x8E48FF,
         .basic_ring_c = 0x20C9D4,
-        .show_progress = 1
+        .show_progress = 1,
+        .charging_color = 0x42DC89
     };
     static const uint32_t b[6]={0x070F14,0x030815,0x080C13,0xA7C7A0,0xC8BB94,0x030810};
     static const uint32_t f[6]={0xD8ECE9,0xEDF7FF,0xE5EDF8,0x162C1F,0x332719,0xF0F8FF};
@@ -82,6 +83,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     (void)nvs_get_i32(h, "offset_ms", &s->timing_offset_ms);
     (void)nvs_get_u8(h, "spacing", &s->line_spacing_px);
     (void)nvs_get_u8(h, "progress", &s->show_progress);
+    (void)nvs_get_u32(h, "chargeclr", &s->charging_color);
     (void)nvs_get_u8(h, "clockface", &s->clock_face);
     (void)nvs_get_u8(h, "basicfont", &s->basic_font_style);
     (void)nvs_get_u8(h, "basicsize", &s->basic_font_size);
@@ -117,6 +119,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     if (s->timing_offset_ms < -10000 || s->timing_offset_ms > 10000) s->timing_offset_ms = 0;
     s->line_spacing_px = in_range(s->line_spacing_px, 0, 24, 5);
     s->show_progress = in_range(s->show_progress, 0, 1, 1);
+    s->charging_color &= 0xFFFFFF;
     s->clock_face = in_range(s->clock_face, 0, 5, 0);
     s->basic_font_style = in_range(s->basic_font_style, 0, 4, 0);
     s->basic_font_size = in_range(s->basic_font_size, 0, 100, 60);
@@ -161,6 +164,7 @@ esp_err_t lf_settings_save(const lf_settings_t *s)
     TRY_NVS(nvs_set_i32(h, "offset_ms", s->timing_offset_ms));
     TRY_NVS(nvs_set_u8(h, "spacing", s->line_spacing_px));
     TRY_NVS(nvs_set_u8(h, "progress", s->show_progress));
+    TRY_NVS(nvs_set_u32(h, "chargeclr", s->charging_color));
     TRY_NVS(nvs_set_u8(h, "clockface", s->clock_face));
     TRY_NVS(nvs_set_u8(h, "basicfont", s->basic_font_style));
     TRY_NVS(nvs_set_u8(h, "basicsize", s->basic_font_size));
