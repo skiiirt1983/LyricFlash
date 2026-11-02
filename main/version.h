@@ -1,13 +1,10 @@
 #pragma once
-/* 0.8.23 experimental Clock/Home/Settings pager stabilization.
-   One deterministic LVGL snap with timeout recovery for missed scroll-end
-   events, and an OPTIONAL 16-bit static clock snapshot during page motion
-   to avoid repainting the detailed dial every frame. Snapshot failure keeps
-   original live clock; live scene restored after paging. Retains 0.8.22's
-   single-root touchscreen and the 0.8.19 fast Basic Clock cache.
-   CO5300 QSPI DMA staging, TE off, queue=1, core=1 unchanged.
-   OTA, Wi-Fi, power, settings and partitions unchanged.
-   Hardware performance and input safety still require testing. */
-#define LF_VERSION "0.8.23-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.23"
-/* 0.8.23 snap cache compile checkpoint: preflight green; driver unchanged. */
+/* 0.8.24 alpha: reduce QSPI DMA submission overhead during a sliding pager.
+   Prefer 24-row staging per 24-row LVGL render tile, with memory-guarded
+   16/8/4-row fallback. Allocate before first DMA transfer, hold two slots.
+   CO5300 transport still uses 80MHz QSPI, TE OFF, queue depth 1.
+   0.8.23 snap recovery, optional RGB565 Clock image, one LVGL root,
+   OTA, Wi-Fi, power, NVS, settings and partition layout unchanged.
+   Requires physical smoothness, stability, and memory-pressure testing. */
+#define LF_VERSION "0.8.24-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.24"

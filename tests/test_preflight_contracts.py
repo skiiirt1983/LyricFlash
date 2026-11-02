@@ -433,3 +433,17 @@ require('CONFIG_LV_USE_SNAPSHOT=y' in read('sdkconfig.defaults') and
         'pager_forced_snaps' in network and
         'clock_frame_cache_count' in network,
         "Optional RGB565 clock cache and recovery safety missing")
+
+# 0.8.24: the 4-row DMA batches were producing up to six QSPI
+# submissions per 24-row LVGL tile; select the largest safe batch
+# before first flush without changing the known-good driver queue/TE mode.
+require('bsp_display_dma_staging_rows(void)' in bsp and
+        'uint32_t bsp_display_dma_staging_rows(void);' in display_header and
+        'BSP_LCD_DMA_STAGING_ROWS (24)' in bsp and
+        'static const uint8_t options[] = {24, 16, 8, 4};' in bsp and
+        'heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)' in bsp and
+        'MALLOC_CAP_DMA | MALLOC_CAP_8BIT' in bsp and
+        'ctx->rotation_buffer_pixels=pixels;' in bsp and
+        'const bool use_chunked = ctx->te_sync_mode || src_in_psram;' in bsp and
+        '"display_dma_stage_rows"' in network,
+        "QSPI stage must select 24/16/8/4 with 4-row fallback and expose result")
