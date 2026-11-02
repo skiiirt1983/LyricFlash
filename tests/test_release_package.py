@@ -42,6 +42,7 @@ with TemporaryDirectory() as temporary:
     spec_preserve.loader.exec_module(preserve)
     preserve.create(site)
     manifest = json.loads((site/"beta/manifest-preserve.json").read_text())
+    assert manifest["new_install_prompt_erase"] is True
     parts = manifest["builds"][0]["parts"]
     assert {(p["offset"],p["path"]) for p in parts} == {
         (0x110000, "firmware/lyricflash-ota.bin"),
