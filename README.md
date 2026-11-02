@@ -14,7 +14,7 @@ Private alpha/beta development only. Stable v1.0 is not yet released.
 
 Run the GitHub Actions workflow 'LyricFlash USB Build and Pages' from this Alpha 0.7 branch, or use its successful PR build. Download the artifact 'LyricFlash-Alpha-0.7-FULL-USB-and-OTA-UNTESTED' and extract it.
 
-Use lyricflash-full.bin at address 0x0 with a compatible ESP32-S3 browser/serial flasher for a 16 MB flash device. Never flash lyricflash-ota.bin at 0x0. Do not select 'erase entire flash' if retaining existing NVS settings is important.
+Use lyricflash-full.bin at address 0x0 with a compatible ESP32-S3 browser/serial flasher for a 16 MB flash device. Never flash lyricflash-ota.bin at 0x0. The full merged image contains FF padding over NVS and otadata, so flashing it will erase saved Wi-Fi/settings. Record anything needed before proceeding; no additional full-chip erase is required.
 
 The project beta browser installer uses the verified full merged image after the branch is merged to main and GitHub Pages deploys; do not assume the live installer has Alpha 0.7 until it says so.
 
