@@ -125,6 +125,12 @@ static void style_button(lv_obj_t *b, uint32_t color)
     lv_obj_set_style_bg_color(b, lv_color_hex(0x9BCFFF), LV_STATE_PRESSED);
     lv_obj_set_style_pad_hor(b, 8, 0);
 }
+/* Capture drags that start on the large Home button, not just empty glass. */
+static void on_gesture_press(lv_event_t *e);
+static void on_touch_pressing(lv_event_t *e);
+static void on_touch_release(lv_event_t *e);
+static void on_touch_cancel(lv_event_t *e);
+
 static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int height,
                         int x, int y, uint32_t bg, lv_event_cb_t cb, void *arg)
 {
@@ -137,6 +143,10 @@ static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int heigh
     lv_obj_align(b, LV_ALIGN_CENTER, x, y);
     style_button(b, bg);
     lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, arg);
+    lv_obj_add_event_cb(b, on_gesture_press, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(b, on_touch_pressing, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(b, on_touch_release, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(b, on_touch_cancel, LV_EVENT_PRESS_LOST, NULL);
     lv_obj_t *l = lv_label_create(b);
     lv_label_set_text(l, text);
     lv_obj_set_width(l, width - 16);
@@ -232,6 +242,7 @@ static void queue_swipe(int target, lv_screen_load_anim_t animation)
 static void on_gesture_press(lv_event_t *e)
 {
     (void)e;
+    if (page != 0 && page != 6 && page != 11 && page != 14) return;
     lv_indev_t *indev = lv_indev_active();
     gesture_origin_valid = indev != NULL;
     if (indev) {
