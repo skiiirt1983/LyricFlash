@@ -140,8 +140,8 @@ require('lv_obj_set_flex_flow(container,LV_FLEX_FLOW_ROW);' in ui and
         'lv_obj_set_scroll_dir(container,LV_DIR_HOR);' in ui and
         'lv_obj_set_scroll_snap_x(container,LV_SCROLL_SNAP_NONE);' in ui and
         'lv_obj_scroll_to_x(pager_scroll,target_x,LV_ANIM_ON);' in ui and
-        'lv_indev_set_scroll_throw(input,90);' in ui and
-        'if(abs(movement)>=LF_PAGER_WIDTH/5)' in ui,
+        'lv_indev_set_scroll_throw(input,95);' in ui and
+        'if(abs(movement)>=LF_PAGER_WIDTH/10)' in ui,
         "Core pager must track finger and snap once with PrintSphere physics")
 require('lv_obj_set_style_translate_x(screen,' not in ui and
         'lv_anim_set_exec_cb(' not in ui and
@@ -274,3 +274,16 @@ require('lf_ui_mark_services_ready();' in read("main/main.c") and
         'max_ui_tick_gap_ms<2000' in ui and
         'lf_ota_guard_confirm_startup();' in ui,
         "OTA must not confirm an app before the UI remains responsive")
+
+# Hardware regressions from 0.8.10.
+require('sleep_overlay=lv_obj_create(lv_screen_active());' in ui and
+        'lv_anim_delete(pager_scroll,NULL);' in ui and
+        'if(event!=LV_EVENT_SCROLL_END || !pager_scroll || asleep)return;' in ui,
+        "Sleep cover must be mounted on whole root, with animations stopped")
+require('if(abs(movement)>=LF_PAGER_WIDTH/10)' in ui and
+        'lv_indev_set_scroll_limit(input,18);' in ui and
+        'lv_indev_set_scroll_throw(input,95);' in ui,
+        "Short swipes should engage without button misfires")
+require('button(screen, "HOME", 134, 50, 75, 173,' in ui and
+        'if(direction == LV_DIR_LEFT)swipe_candidate_page=0;' in ui,
+        "Weather must provide a direct Home exit")

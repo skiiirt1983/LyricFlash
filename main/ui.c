@@ -352,9 +352,12 @@ static void swipe_intent(lv_dir_t direction)
     } else if (page == 14 && (direction == LV_DIR_TOP || direction == LV_DIR_RIGHT)) {
         swipe_candidate_page = 0;
         swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
-    } else if (page == 11 && (direction == LV_DIR_BOTTOM || direction == LV_DIR_RIGHT)) {
-        swipe_candidate_page = 6;
-        swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
+    } else if (page == 11) {
+        /* Weather swipe left returns Home; right/down returns Clock. */
+        if(direction == LV_DIR_LEFT)swipe_candidate_page=0;
+        else if(direction == LV_DIR_BOTTOM || direction == LV_DIR_RIGHT)
+            swipe_candidate_page=6;
+        swipe_candidate_animation=LV_SCR_LOAD_ANIM_NONE;
     } else if (direction == LV_DIR_RIGHT || direction == LV_DIR_LEFT) {
         /* Consistent exit for all settings submenus, either horizontal
            direction. Clock and weather paths keep their parent structure. */
@@ -520,6 +523,9 @@ static void make_base(void)
 {
     lv_obj_t *old_screen=pager_render_target ? NULL : lv_screen_active();
     if(!pager_render_target) {
+        /* Disarm pending animation callbacks before leaving the core pager. */
+        if(pager_scroll && old_screen==pager_root)
+            lv_anim_delete(pager_scroll,NULL);
         lf_weather_visual_clear();
         lf_clock_clear();
     }
@@ -1031,6 +1037,7 @@ static void pager_select(int index)
     if(index<0)index=0;
     if(index>2)index=2;
     pager_index=index;
+    pager_origin_index=index;
     screen=pager_page(index);
     page=index==0 ? 6 : index==1 ? 0 : 2;
     battery_status=index==1 ? pager_home_battery : NULL;
@@ -1052,6 +1059,7 @@ static void pager_scroll_event(lv_event_t *e)
     if(lv_event_get_target(e)!=pager_scroll)return;
     lv_event_code_t event=lv_event_get_code(e);
     if(event==LV_EVENT_SCROLL_BEGIN) {
+        if(asleep)return;
         pager_scrolling=true;
         lv_indev_t *indev=lv_indev_active();
         if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED) {
@@ -1060,7 +1068,7 @@ static void pager_scroll_event(lv_event_t *e)
         }
         return;
     }
-    if(event!=LV_EVENT_SCROLL_END || !pager_scroll)return;
+    if(event!=LV_EVENT_SCROLL_END || !pager_scroll || asleep)return;
     lv_indev_t *indev=lv_indev_active();
     if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)
         return; /* Let the physical drag finish before snapping. */
@@ -1076,7 +1084,7 @@ static void pager_scroll_event(lv_event_t *e)
     /* 20% drag advances one page, even when the nearest page is the origin. */
     if(nearest==pager_origin_index) {
         int movement=pos-lv_obj_get_x(pager_page(pager_origin_index));
-        if(abs(movement)>=LF_PAGER_WIDTH/5) {
+        if(abs(movement)>=LF_PAGER_WIDTH/10) {
             nearest=pager_origin_index+(movement>0?1:-1);
             if(nearest<0)nearest=0;
             if(nearest>2)nearest=2;
@@ -1176,10 +1184,7 @@ static void pager_request_async(void *arg)
 static void pager_request(int index, bool rebuild)
 {
     if(index<0 || index>2)return;
-    if(!rebuild && pager_root && lv_screen_active()==pager_root) {
-        pager_show(index,LV_ANIM_ON);
-        return;
-    }
+    /* Defer button navigation until the LVGL input callback is finished. */
     pager_requested_index=index;
     pager_rebuild_requested|=rebuild;
     if(!pager_request_queued) {
@@ -1483,6 +1488,7 @@ static void build_weather_details(void)
        simultaneously. The handoff is the active root until make_base loads
        the standalone Weather scene; it cannot expose an old page underneath. */
     if(pager_root && lv_screen_active()==pager_root) {
+        lv_anim_delete(pager_scroll,NULL);
         lv_obj_t *cached=lv_screen_active();
         lv_obj_t *handoff=lv_obj_create(NULL);
         lv_obj_set_style_bg_color(handoff,lv_color_hex(prefs->background_color),0);
@@ -1502,8 +1508,10 @@ static void build_weather_details(void)
     lf_weather_get_view(&weather);
     lf_weather_visual_update(&weather);
     weather_detail_refresh = now_ms();
-    button(screen, "BACK TO CLOCK", 188, 50, 0, 173,
+    button(screen, "CLOCK", 134, 50, -75, 173,
            0x9ACBF1, on_clock_back, NULL);
+    button(screen, "HOME", 134, 50, 75, 173,
+           0xA8D6FF, on_home, NULL);
 }
 static void build_weather_location(void)
 {
@@ -1528,6 +1536,11 @@ static void on_wake(lv_event_t *e)
     lv_obj_t *cover=sleep_overlay;
     sleep_overlay=NULL;
     if(cover) lv_obj_delete_async(cover);
+    touch_held=false;
+    gesture_origin_valid=false;
+    gesture_indev=NULL;
+    swipe_candidate_page=-1;
+    touch_pressed_at_ms=0;
 }
 /* Optional hardware-level deep sleep. GPIO11 is CST9217 TP_INT on the
    Waveshare 1.75-in board (RTC GPIO). Requires physical wake testing: an
@@ -1556,8 +1569,14 @@ static void sleep_display(void)
     /* A screen timeout is not a page transition: leave the active page
        and all its UI pointers alive. The cover absorbs the wake tap so
        it cannot inadvertently click a hidden button. */
-    sleep_overlay=lv_obj_create(screen);
-    lv_obj_set_size(sleep_overlay,466,466);
+    /* Protect the entire active root, not just the visible pager child. */
+    asleep=true;
+    if(pager_scroll && lv_screen_active()==pager_root) {
+        lv_anim_delete(pager_scroll,NULL);
+        pager_show(pager_index,LV_ANIM_OFF);
+    }
+    sleep_overlay=lv_obj_create(lv_screen_active());
+    lv_obj_set_size(sleep_overlay,LF_PAGER_WIDTH,LF_PAGER_WIDTH);
     lv_obj_center(sleep_overlay);
     lv_obj_set_style_radius(sleep_overlay,0,0);
     lv_obj_set_style_border_width(sleep_overlay,0,0);
@@ -1566,7 +1585,6 @@ static void sleep_display(void)
     lv_obj_remove_flag(sleep_overlay,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(sleep_overlay,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(sleep_overlay,on_wake,LV_EVENT_PRESSED,NULL);
-    asleep=true;
     apply_brightness();
 }
 static void on_tick(lv_timer_t *timer)
@@ -1718,7 +1736,9 @@ static void on_tick(lv_timer_t *timer)
         clock_last_refresh = current;
         lf_clock_update();
     }
-    if (prefs->sleep_seconds && !(page == 1 && !paused) && page != 14 && page != 15 && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
+    if (prefs->sleep_seconds && !pager_scrolling && !touch_held &&
+        !(page == 1 && !paused) && page != 14 && page != 15 &&
+        current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
         sleep_display();
         return;
     }
@@ -1784,7 +1804,8 @@ bool lf_ui_start(lf_settings_t *s)
     lv_indev_t *input=lv_indev_get_next(NULL);
     while(input) {
         if(lv_indev_get_type(input)==LV_INDEV_TYPE_POINTER){
-            lv_indev_set_scroll_throw(input,90);
+            lv_indev_set_scroll_throw(input,95);
+            lv_indev_set_scroll_limit(input,18);
             break;
         }
         input=lv_indev_get_next(input);
