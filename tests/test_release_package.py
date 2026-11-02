@@ -28,7 +28,7 @@ with TemporaryDirectory() as temporary:
     full = bytearray(0x120100)
     full[0] = 0xE9
     full[0x8000:0x8002] = b"\xaa\x50"
-    full[mod.APP_OFFSET:] = app
+    full[mod.APP_OFFSET:mod.APP_OFFSET + len(app)] = app
     (folder/"lyricflash-full.bin").write_bytes(full)
     (folder/"lyricflash-ota.bin").write_bytes(app)
     (site/"beta/manifest.json").write_text(json.dumps({
