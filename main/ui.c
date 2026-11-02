@@ -5,6 +5,8 @@
 #include "esp_timer.h"
 #include "power.h"
 #include "network.h"
+#include "diagnostics.h"
+#include "version.h"
 #include "clock_face.h"
 #include "weather.h"
 #include "weather_visual.h"
@@ -55,7 +57,11 @@ static lv_obj_t *basic_font_size_label;
 static lv_obj_t *basic_colour_swatch;
 static lv_obj_t *basic_hue_label;
 static uint8_t selected_colour_target;
-static int page; // 0 home, 1 lyrics, 2 settings, 3 sleep, 4 wifi, 5 password, 6 clock, 7 clock settings, 8 city, 9 lyrics settings, 10 device, 11 detail, 12 Basic settings, 13 hue picker
+static lv_obj_t *debug_text;
+static uint64_t last_debug_refresh;
+static uint64_t last_ui_tick_ms;
+static uint32_t max_ui_tick_gap_ms;
+static int page; // 14 diagnostics, 0 home, 1 lyrics, 2 settings, 3 sleep, 4 wifi, 5 password, 6 clock, 7 clock settings, 8 city, 9 lyrics settings, 10 device, 11 detail, 12 Basic settings, 13 hue picker
 
 static const uint32_t PALETTE[] = {0xFFFFFF, 0x86E3AE, 0x76C6FF, 0xFFD18B, 0xF6A1D2};
 static const char *DEMO_TEXT =
@@ -163,6 +169,8 @@ static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int heigh
 }
 
 static void build_home(void);
+static void build_debug(void);
+static void refresh_debug(void);
 static void build_preview(void);
 static void build_settings(void);
 static void build_wifi(void);
@@ -219,6 +227,9 @@ static void on_swipe(lv_event_t *e)
     if (page == 0) {
         if (dir == LV_DIR_LEFT) build_settings();
         else if (dir == LV_DIR_RIGHT) build_clock();
+        else if (dir == LV_DIR_BOTTOM) build_debug();
+    } else if (page == 14 && dir == LV_DIR_TOP) {
+        build_home();
     } else if (page == 6) {
         if (dir == LV_DIR_LEFT) build_home();
         else if (dir == LV_DIR_TOP) build_weather_details();
@@ -234,14 +245,14 @@ static void on_clock_long_press(lv_event_t *e)
     build_clock_settings();
 }
 
-/* Every navigation action creates a real LVGL screen and animates both
-   screens sideways, instead of clearing/repainting the active one. */
+/* Heavy full-screen slide animations caused jitter with complex faces.
+   Swap atomically to minimize extra redraw and memory pressure. */
 static bool screen_initialized;
-static int previous_page = -1;
 static void make_base(void)
 {
     lv_obj_t *old_screen = lv_screen_active();
     lf_weather_visual_clear();
+    lf_clock_clear();
     screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(screen, lv_color_hex(prefs->background_color), 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
@@ -249,27 +260,10 @@ static void make_base(void)
     lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(screen, on_gesture_press, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(screen, on_swipe, LV_EVENT_GESTURE, NULL);
-    if (!screen_initialized) {
-        screen_initialized = true;
-        lv_screen_load(screen);
-        if (old_screen != screen) lv_obj_delete(old_screen);
-    } else {
-        lv_screen_load_anim_t direction = LV_SCREEN_LOAD_ANIM_MOVE_LEFT;
-        if ((previous_page == 0 && page == 6) ||
-            (previous_page == 2 && page == 0) ||
-            (previous_page == 6 && page == 11) ||
-            (page == 2 && previous_page != 0) ||
-            (page == 6 && previous_page == 11) ||
-            (page == 0 && previous_page == 11)) {
-            direction = LV_SCREEN_LOAD_ANIM_MOVE_RIGHT;
-        }
-        if (previous_page == 6 && page == 11)
-            direction = LV_SCREEN_LOAD_ANIM_MOVE_TOP;
-        if (previous_page == 11 && page == 6)
-            direction = LV_SCREEN_LOAD_ANIM_MOVE_BOTTOM;
-        lv_screen_load_anim(screen, direction, 240, 0, true);
-    }
-    previous_page = page;
+    screen_initialized = true;
+    lv_screen_load(screen);
+    if (old_screen != screen) lv_obj_delete(old_screen);
+    debug_text = NULL;
     scroll_panel = NULL;
     lyrics_label = NULL;
     battery_status = NULL;
@@ -305,11 +299,12 @@ static void build_home(void)
     make_base();
     lf_clock_clear();
     label(screen, "LYRICFLASH", 56, &lv_font_montserrat_24, prefs->text_color);
-    label(screen, "ALPHA 0.7", 103, &lv_font_montserrat_20, 0xB7C7D7);
+    label(screen, LF_VERSION_LABEL, 103, &lv_font_montserrat_20, 0xB7C7D7);
     battery_status = label(screen, "BATTERY", 151, &lv_font_montserrat_20, 0xDCE8F0);
     button(screen, "LYRICS", 242, 82, 0, 0, 0xA8D6FF, on_preview, NULL);
     label(screen, "Mic off", 302, system_font(), 0xB9CADB);
     label(screen, "CLOCK  <          >  SETTINGS", 344, &lv_font_montserrat_18, 0xB9CADB);
+    label(screen, "SWIPE DOWN FOR DEBUG", 398, &lv_font_montserrat_16, 0x6E8CAC);
 }
 
 static void on_toggle_pause(lv_event_t *e)
@@ -639,7 +634,7 @@ static void build_device_settings(void)
     timeout_text = label(screen, text, 259, system_font(), 0xE4EDF3);
     lv_obj_add_flag(timeout_text, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(timeout_text, on_timeout, LV_EVENT_CLICKED, NULL);
-    button(screen, "ARM OTA", 163, 46, 0, 91, 0xB2C6D3, on_arm_ota, NULL);
+    button(screen, "ARM WEB / OTA", 208, 46, 0, 91, 0xB2C6D3, on_arm_ota, NULL);
     ota_status = label(screen, "", 342, system_font(), 0x8BCCFF);
     button(screen, "BACK", 152, 45, 0, 178, prefs->text_color, on_settings, NULL);
 }
@@ -869,6 +864,68 @@ static void build_basic_settings(void)
            0xB2C6D3,on_basic_weather,NULL);
     button(screen, "BACK", 150, 50, 0, 175, 0xB2C6D3, on_clock_options, NULL);
 }
+static void refresh_debug(void)
+{
+    if (!debug_text) return;
+    lf_diag_snapshot_t d;
+    lf_diag_snapshot(&d);
+    char output[1100], battery[64], signal[24];
+    if (d.battery_valid)
+        snprintf(battery, sizeof battery, "%d%% %s%s",
+                 d.battery.percentage,
+                 d.battery.usb_connected ? "USB" : "Battery",
+                 d.battery.charging ? " charging" : "");
+    else snprintf(battery, sizeof battery, "unavailable");
+    if (d.wifi_connected && d.wifi_rssi_dbm)
+        snprintf(signal, sizeof signal, "%d dBm", d.wifi_rssi_dbm);
+    else snprintf(signal, sizeof signal, "unavailable");
+    snprintf(output, sizeof output,
+             "Firmware: %s\nIP: %s\nWi-Fi: %.32s\nRSSI: %s\n"
+             "Uptime: %lu seconds\nHeap: %lu KB free\n"
+             "Min heap: %lu KB\nPSRAM: %lu KB free\n"
+             "Max UI tick gap: %lu ms\nBattery: %s\n"
+             "Microphone: OFF (not enabled)\n"
+             "OTA: %s\nOTA bytes: %lu/%lu\n"
+             "Recent errors:\n%s\n%s\n%s",
+             LF_VERSION, d.ip_address,
+             d.wifi_connected ? d.wifi_ssid : "offline",
+             signal, (unsigned long)d.uptime_seconds,
+             (unsigned long)(d.heap_free_bytes / 1024),
+             (unsigned long)(d.heap_min_bytes / 1024),
+             (unsigned long)(d.psram_free_bytes / 1024),
+             (unsigned long)max_ui_tick_gap_ms, battery,
+             lf_network_ota_result(),
+             (unsigned long)lf_network_ota_received(),
+             (unsigned long)lf_network_ota_total(),
+             d.errors[0][0] ? d.errors[0] : "None recorded", d.errors[1], d.errors[2]);
+    lv_label_set_text(debug_text, output);
+}
+
+static void build_debug(void)
+{
+    page = 14;
+    make_base();
+    label(screen, "DEVICE DIAGNOSTICS", 33, &lv_font_montserrat_24, prefs->text_color);
+    lv_obj_t *panel = lv_obj_create(screen);
+    lv_obj_set_size(panel, 336, 287);
+    lv_obj_align(panel, LV_ALIGN_CENTER, 0, -6);
+    lv_obj_set_style_bg_color(panel, lv_color_hex(0x091625), 0);
+    lv_obj_set_style_radius(panel, 15, 0);
+    lv_obj_set_style_border_width(panel, 0, 0);
+    lv_obj_set_style_pad_all(panel, 10, 0);
+    lv_obj_set_scroll_dir(panel, LV_DIR_VER);
+    debug_text = lv_label_create(panel);
+    lv_obj_set_width(debug_text, 290);
+    lv_label_set_long_mode(debug_text, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_color(debug_text, lv_color_hex(0xDFEAFE), 0);
+    lv_obj_set_style_text_font(debug_text, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_line_space(debug_text, 7, 0);
+    lv_obj_align(debug_text, LV_ALIGN_TOP_LEFT, 0, 0);
+    last_debug_refresh = now_ms();
+    refresh_debug();
+    button(screen, "BACK HOME", 158, 49, 0, 172, 0xA8D6FF, on_home, NULL);
+}
+
 static void build_weather_details(void)
 {
     page = 11;
@@ -917,6 +974,15 @@ static void on_tick(lv_timer_t *timer)
 {
     (void)timer;
     uint64_t current = now_ms();
+    if (last_ui_tick_ms && current > last_ui_tick_ms) {
+        uint64_t gap = current - last_ui_tick_ms;
+        if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
+    }
+    last_ui_tick_ms = current;
+    if (page == 14 && current - last_debug_refresh >= 2500) {
+        last_debug_refresh = current;
+        refresh_debug();
+    }
     if (page == 4 && !asleep && current - last_wifi_poll_ms >= 350) {
         last_wifi_poll_ms = current;
         size_t n = 0;
@@ -984,7 +1050,7 @@ static void on_tick(lv_timer_t *timer)
         clock_last_refresh = current;
         lf_clock_update();
     }
-    if (prefs->sleep_seconds && !(page == 1 && !paused) && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
+    if (prefs->sleep_seconds && !(page == 1 && !paused) && page != 14 && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
         sleep_display();
         return;
     }
@@ -1040,4 +1106,31 @@ bool lf_ui_start(lf_settings_t *s)
     lv_timer_create(on_clock_sweep, 16, NULL);
     esp_lv_adapter_unlock();
     return true;
+}
+
+esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
+{
+    if (!prefs || !basic) return ESP_ERR_INVALID_ARG;
+    esp_err_t err = esp_lv_adapter_lock(2000);
+    if (err != ESP_OK) return err;
+    lf_settings_t previous = *prefs;
+    prefs->basic_font_style = basic->basic_font_style;
+    prefs->basic_font_size = basic->basic_font_size;
+    prefs->basic_ring_mode = basic->basic_ring_mode;
+    prefs->basic_show_date = basic->basic_show_date;
+    prefs->basic_weather = basic->basic_weather;
+    prefs->basic_background = basic->basic_background;
+    prefs->basic_foreground = basic->basic_foreground;
+    prefs->basic_ring_a = basic->basic_ring_a;
+    prefs->basic_ring_b = basic->basic_ring_b;
+    prefs->basic_ring_c = basic->basic_ring_c;
+    err = lf_settings_save(prefs);
+    if (err == ESP_OK) {
+        if (page == 6) build_clock();
+    } else {
+        *prefs = previous;
+        lf_diag_error("settings", "Basic settings NVS save failed");
+    }
+    esp_lv_adapter_unlock();
+    return err;
 }
