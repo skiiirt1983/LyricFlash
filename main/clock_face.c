@@ -343,6 +343,7 @@ const char *lf_clock_style_name(uint8_t style)
 }
 void lf_clock_clear(void)
 {
+    lf_basic_clock_clear();
     clock_active = false;
     for (int i = 0; i < 3; i++) hands[i] = NULL;
     info_label = NULL;

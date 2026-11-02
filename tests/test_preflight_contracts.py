@@ -287,3 +287,13 @@ require('if(abs(movement)>=LF_PAGER_WIDTH/10)' in ui and
 require('button(screen, "HOME", 134, 50, 75, 173,' in ui and
         'if(direction == LV_DIR_LEFT)swipe_candidate_page=0;' in ui,
         "Weather must provide a direct Home exit")
+
+# Hardware regression: gradient ring geometry is baked into an ARGB canvas
+# once per configuration change; no expensive redraw on every Clock tick.
+require('lv_canvas_init_layer(ring_canvas,&layer);' in read("main/basic_clock.c") and
+        'lv_canvas_finish_layer(ring_canvas,&layer);' in read("main/basic_clock.c") and
+        'heap_caps_aligned_alloc' in read("main/basic_clock.c") and
+        'ring_last_a==ring_prefs->basic_ring_a' in read("main/basic_clock.c") and
+        'lf_basic_clock_prepare();' in ui and
+        'lf_basic_clock_clear();' in read("main/clock_face.c"),
+        "Basic ring must be a persistent one-time rasterized snapshot")

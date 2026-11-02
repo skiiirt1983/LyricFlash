@@ -10,6 +10,7 @@
 #include "diagnostics.h"
 #include "version.h"
 #include "clock_face.h"
+#include "basic_clock.h"
 #include "weather.h"
 #include "weather_visual.h"
 #include "char_wheel.h"
@@ -1014,6 +1015,7 @@ static void render_clock(void)
     make_base();
     lf_clock_build(screen, prefs->clock_face, prefs);
     clock_children_input_transparent(screen);
+    if(!pager_render_target) lf_basic_clock_prepare();
     /* A deliberate 2-second hold produces a confirmation popup.
        The global LVGL short-long-press event no longer opens settings. */
     lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
@@ -1164,7 +1166,8 @@ static void pager_build(int index)
     pager_origin_index=1;
     lv_screen_load(root);
     lv_obj_delete_async(handoff);
-    /* PrintSphere's 90% momentum reduction yields one short ease-out snap. */
+    /* Finish the one-time ring snapshot only after LVGL has a display. */
+    lf_basic_clock_prepare();
     lv_obj_update_layout(container);
     pager_show(index,LV_ANIM_OFF);
 }
