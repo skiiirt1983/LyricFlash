@@ -182,23 +182,31 @@ static void on_settings(lv_event_t *e)
 {
     (void)e; activity(); build_settings();
 }
+/* Phone-style touch semantics: pause moving content immediately, allow an
+   easy swipe, and navigate only once the finger leaves the glass. Building
+   screens inside a touch event previously caused a crash/jank regression. */
+#define LF_SWIPE_MIN_PX 38
+#define LF_CLOCK_SETTINGS_HOLD_MS 2000ULL
+#define LF_HOLD_MOVE_CANCEL_PX 20
 static lv_point_t gesture_origin;
 static bool gesture_origin_valid;
-static void on_gesture_press(lv_event_t *e)
-{
-    (void)e;
-    lv_indev_t *indev=lv_indev_active();
-    gesture_origin_valid = indev != NULL;
-    if(indev) lv_indev_get_point(indev,&gesture_origin);
-}
-/* Decouple expensive UI construction from the touchscreen input event.
-   Only one gesture may be queued while the old screen is still in use. */
+static bool touch_held;
+static uint64_t touch_pressed_at_ms;
 static int pending_swipe_page = -1;
 static uint64_t next_swipe_allowed_ms;
+static lv_obj_t *clock_settings_popup;
+
+static void build_home(void);
+static void build_settings(void);
+static void build_clock(void);
+static void build_weather_details(void);
+static void build_debug(void);
+static void build_clock_settings(void);
+
 static void commit_swipe(void *arg)
 {
     (void)arg;
-    int target = pending_swipe_page;
+    const int target = pending_swipe_page;
     pending_swipe_page = -1;
     switch(target) {
     case 0: build_home(); break;
@@ -211,50 +219,124 @@ static void commit_swipe(void *arg)
 }
 static void queue_swipe(int target)
 {
-    uint64_t current=now_ms();
-    if (pending_swipe_page >= 0 || current < next_swipe_allowed_ms) return;
-    pending_swipe_page=target;
-    next_swipe_allowed_ms=current+250;
-    lv_async_call(commit_swipe,NULL);
+    uint64_t current = now_ms();
+    if (clock_settings_popup || pending_swipe_page >= 0 ||
+        current < next_swipe_allowed_ms) return;
+    pending_swipe_page = target;
+    next_swipe_allowed_ms = current + 220;
+    lv_async_call(commit_swipe, NULL);
 }
-static void on_swipe(lv_event_t *e)
+static void on_gesture_press(lv_event_t *e)
 {
     (void)e;
     lv_indev_t *indev = lv_indev_active();
-    if (!indev) return;
-    lv_point_t p = {0};
-    lv_indev_get_point(indev, &p);
-    int dx = p.x - 233, dy = p.y - 233;
-    /* Physical travel threshold: small/edge drags do not navigate. */
-    if (!gesture_origin_valid) return;
-    int travel_x = p.x - gesture_origin.x;
-    int travel_y = p.y - gesture_origin.y;
-    if (travel_x*travel_x + travel_y*travel_y < 78*78) return;
-    /* Ignore edge gestures that previously bounced users to the home page. */
-    if (dx * dx + dy * dy > 188 * 188) return;
-    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
-    activity();
-    if (page == 0) {
-        if (dir == LV_DIR_LEFT) queue_swipe(2);
-        else if (dir == LV_DIR_RIGHT) queue_swipe(6);
-        else if (dir == LV_DIR_BOTTOM) queue_swipe(14);
-    } else if (page == 14 && dir == LV_DIR_TOP) {
-        queue_swipe(0);
-    } else if (page == 6) {
-        if (dir == LV_DIR_LEFT) queue_swipe(0);
-        else if (dir == LV_DIR_TOP) queue_swipe(11);
-    } else if (page == 11 && dir == LV_DIR_BOTTOM) {
-        queue_swipe(6);
+    gesture_origin_valid = indev != NULL;
+    if (indev) {
+        lv_indev_get_point(indev, &gesture_origin);
+        touch_held = true;
+        touch_pressed_at_ms = now_ms();
     }
+    activity();
 }
-static void on_clock_long_press(lv_event_t *e)
+static void on_touch_pressing(lv_event_t *e)
 {
     (void)e;
-    if (page != 6) return;
+    if (!touch_held || !gesture_origin_valid) return;
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev) return;
+    lv_point_t now={0};
+    lv_indev_get_point(indev, &now);
+    int dx=now.x-gesture_origin.x, dy=now.y-gesture_origin.y;
+    if (page == 6 && dx*dx + dy*dy > LF_HOLD_MOVE_CANCEL_PX*LF_HOLD_MOVE_CANCEL_PX)
+        touch_pressed_at_ms = 0; /* Swiping never opens clock settings. */
+}
+static void on_touch_release(lv_event_t *e)
+{
+    (void)e;
+    if (!touch_held || !gesture_origin_valid) return;
+    touch_held = false;
+    uint64_t held_since=touch_pressed_at_ms;
+    touch_pressed_at_ms = 0;
+    lv_indev_t *indev=lv_indev_active();
+    if (!indev || clock_settings_popup) {gesture_origin_valid=false;return;}
+    lv_point_t end={0};
+    lv_indev_get_point(indev,&end);
+    const int dx=end.x-gesture_origin.x, dy=end.y-gesture_origin.y;
+    gesture_origin_valid=false;
+    if (dx*dx+dy*dy < LF_SWIPE_MIN_PX*LF_SWIPE_MIN_PX) {
+        /* Simple taps do not navigate or open clock settings. */
+        (void)held_since;
+        return;
+    }
+    if (abs(dx) > abs(dy)) {
+        if (page==0 && dx<0) queue_swipe(2);
+        else if (page==0 && dx>0) queue_swipe(6);
+        else if (page==6 && dx<0) queue_swipe(0);
+    } else {
+        if (page==0 && dy>0) queue_swipe(14);
+        else if (page==14 && dy<0) queue_swipe(0);
+        else if (page==6 && dy<0) queue_swipe(11);
+        else if (page==11 && dy>0) queue_swipe(6);
+    }
     activity();
+}
+static void on_touch_cancel(lv_event_t *e)
+{
+    (void)e;
+    touch_held=false;
+    gesture_origin_valid=false;
+    touch_pressed_at_ms=0;
+}
+static void on_popup_cancel(lv_event_t *e)
+{
+    (void)e;
+    lv_obj_t *popup=clock_settings_popup;
+    clock_settings_popup=NULL;
+    if (popup) lv_obj_delete_async(popup);
+}
+static void on_popup_settings(lv_event_t *e)
+{
+    (void)e;
+    clock_settings_popup=NULL;
     build_clock_settings();
 }
-
+static void show_clock_settings_popup(void)
+{
+    if (page!=6 || clock_settings_popup) return;
+    touch_held=false;
+    gesture_origin_valid=false;
+    touch_pressed_at_ms=0;
+    lv_obj_t *overlay=lv_obj_create(screen);
+    clock_settings_popup=overlay;
+    lv_obj_set_size(overlay, 466, 466);
+    lv_obj_center(overlay);
+    lv_obj_set_style_radius(overlay, 0, 0);
+    lv_obj_set_style_bg_color(overlay, lv_color_hex(0x06111D), 0);
+    lv_obj_set_style_bg_opa(overlay, LV_OPA_80, 0);
+    lv_obj_set_style_border_width(overlay, 0, 0);
+    lv_obj_remove_flag(overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(overlay, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *panel=lv_obj_create(overlay);
+    lv_obj_set_size(panel, 322, 220);
+    lv_obj_center(panel);
+    lv_obj_set_style_radius(panel, 23, 0);
+    lv_obj_set_style_bg_color(panel,lv_color_hex(0x13283F),0);
+    lv_obj_set_style_border_width(panel,1,0);
+    lv_obj_set_style_border_color(panel,lv_color_hex(0x497DA7),0);
+    lv_obj_remove_flag(panel,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *heading=lv_label_create(panel);
+    lv_label_set_text(heading,"CLOCK SETTINGS");
+    lv_obj_set_style_text_font(heading,&lv_font_montserrat_24,0);
+    lv_obj_set_style_text_color(heading,lv_color_hex(0xEAF6FF),0);
+    lv_obj_align(heading,LV_ALIGN_TOP_MID,0,12);
+    lv_obj_t *sub=lv_label_create(panel);
+    lv_label_set_text(sub,"Open settings on this device?");
+    lv_obj_set_style_text_font(sub,&lv_font_montserrat_16,0);
+    lv_obj_set_style_text_color(sub,lv_color_hex(0xBDD4E8),0);
+    lv_obj_align(sub,LV_ALIGN_TOP_MID,0,60);
+    button(panel,"CANCEL",125,50,-72,68,0xB4C7DB,on_popup_cancel,NULL);
+    button(panel,"SETTINGS",125,50,72,68,0x82C8FF,on_popup_settings,NULL);
+}
 /* Heavy full-screen slide animations caused jitter with complex faces.
    Swap atomically to minimize extra redraw and memory pressure. */
 static void make_base(void)
@@ -268,13 +350,19 @@ static void make_base(void)
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(screen, on_gesture_press, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(screen, on_swipe, LV_EVENT_GESTURE, NULL);
+    lv_obj_add_event_cb(screen, on_touch_pressing, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(screen, on_touch_release, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(screen, on_touch_cancel, LV_EVENT_PRESS_LOST, NULL);
     /* A gesture/click callback may still be dispatching against old_screen.
        Deleting it synchronously invalidates the event target / input-device
        references and can reboot ESP32-S3. Keep the instant screen swap, but
        free the old LVGL tree on the next timer-handler pass. */
     lv_screen_load(screen);
     if (old_screen != screen) lv_obj_delete_async(old_screen);
+    touch_held=false;
+    gesture_origin_valid=false;
+    touch_pressed_at_ms=0;
+    clock_settings_popup=NULL;
     debug_text = NULL;
     scroll_panel = NULL;
     lyrics_label = NULL;
@@ -679,9 +767,9 @@ static void build_clock(void)
     page = 6;
     make_base();
     lf_clock_build(screen, prefs->clock_face, prefs);
-    /* Clock settings are a long press, not an accidental edge tap. */
+    /* A deliberate 2-second hold produces a confirmation popup.
+       The global LVGL short-long-press event no longer opens settings. */
     lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(screen, on_clock_long_press, LV_EVENT_LONG_PRESSED, NULL);
     clock_last_refresh = 0;
     activity();
 }
@@ -1014,6 +1102,9 @@ static void on_tick(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
+    if (page == 6 && touch_held && touch_pressed_at_ms &&
+        current - touch_pressed_at_ms >= LF_CLOCK_SETTINGS_HOLD_MS)
+        show_clock_settings_popup();
     if (page == 14 && current - last_debug_refresh >= 2500) {
         last_debug_refresh = current;
         refresh_debug();
@@ -1076,13 +1167,13 @@ static void on_tick(lv_timer_t *timer)
             lv_label_set_text(ota_status, "Tap ARM OTA for a two-minute PIN");
     }
     if (asleep) return;
-    if (page == 11 && current - weather_detail_refresh >= 4000) {
+    if (page == 11 && !touch_held && current - weather_detail_refresh >= 4000) {
         weather_detail_refresh = current;
         lf_weather_view_t weather;
         lf_weather_get_view(&weather);
         lf_weather_visual_update(&weather);
     }
-    if (page == 6 && current - clock_last_refresh >= 950) {
+    if (page == 6 && !touch_held && !clock_settings_popup && current - clock_last_refresh >= 950) {
         clock_last_refresh = current;
         lf_clock_update();
     }
@@ -1090,7 +1181,7 @@ static void on_tick(lv_timer_t *timer)
         sleep_display();
         return;
     }
-    if (page != 1 || paused || user_dragging || finger_was_scrolling ||
+    if (page != 1 || paused || touch_held || user_dragging || finger_was_scrolling ||
         !scroll_panel || (touch_resume_at_ms && current < touch_resume_at_ms)) {
         last_scroll_ms = current;
         return;
@@ -1123,7 +1214,7 @@ static void on_tick(lv_timer_t *timer)
 static void on_clock_sweep(lv_timer_t *timer)
 {
     (void)timer;
-    if (page == 6 && !asleep) lf_clock_animate();
+    if (page == 6 && !asleep && !touch_held && !clock_settings_popup) lf_clock_animate();
 }
 
 bool lf_ui_start(lf_settings_t *s)
