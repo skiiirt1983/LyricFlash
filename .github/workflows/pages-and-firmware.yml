@@ -77,7 +77,7 @@ jobs:
       - name: Upload complete USB and OTA release
         uses: actions/upload-artifact@v4
         with:
-          name: LyricFlash-Alpha-0.8.7-FULL-USB-and-OTA-UNTESTED
+          name: LyricFlash-Alpha-0.8.8-FULL-USB-and-OTA-UNTESTED
           path: |
             _site/beta/firmware/lyricflash-full.bin
             _site/beta/firmware/lyricflash-ota.bin
