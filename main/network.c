@@ -550,7 +550,8 @@ static esp_err_t handle_firmware_install(httpd_req_t *req)
     bool started=lf_ota_pull_start(id->valuestring);
     cJSON_Delete(root);
     if(!started){
-        httpd_resp_send_err(req,HTTPD_409_CONFLICT,"Unavailable, incompatible or already installing");
+        httpd_resp_set_status(req,"409 Conflict");
+        httpd_resp_sendstr(req,"Unavailable, incompatible or already installing");
         return ESP_FAIL;
     }
     cJSON *reply=cJSON_CreateObject();
