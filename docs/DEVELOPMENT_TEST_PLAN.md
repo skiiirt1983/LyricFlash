@@ -40,6 +40,15 @@ Implementation sequence may be reprioritized after a failed hardware prerequisit
 
 ## Deferred work / end-of-functional-cycle polish
 
+### Top priority for the next OTA Web UI update — only 3 versions (user request)
+
+**Status: NOT implemented. Keep this in the queue; do not modify the recovery build.**
+
+- Replace the long OTA firmware dropdown with **at most three clearly labeled entries**: **Old** (one immediately previous published alpha relative to the installed device version), **Current** (actually installed firmware), **New** (latest published version newer than the installed one, when available).
+- The old version remains **information-only/disabled** while OTA downgrades are unsupported; the installed current version is also not offered as an install action. Only a valid newer image can be installed via the existing verified OTA mechanism. Never imply the dropdown supports rollback.
+- Use the device's `/api/info` installed version and version-aware release metadata to select the three entries; **do not simply take the newest three overall**. Omit an entry when it does not exist and avoid duplicating versions. Display no more than three entries and preserve refresh/status/error handling.
+- Acceptance checks: test with installed version older than latest, equal to latest, with no preceding release, with a non-numeric/prerelease version, and with an empty or unreachable catalog. Keep local OTA upload and update safety guards unaffected.
+
 - Display swipe hesitation observed on physical 0.8.26: `max_ui_tick_gap_ms=343`, `render_cycle_max_ms=291`; 0.8.28's larger LVGL PSRAM draw stripe caused a first-refresh stall on 0.8.29 hardware and was reverted in 0.8.30. Revisit only after lyrics and input path are operational.
 - Improve swipe start threshold, touch/button hit-testing, page-settle transitions and occasional partial-page stalls. Retest after UI workload changes.
 - Monitor for intermittent black Clock on return and green edge/line artifacts; mitigations exist, hardware regression tests remain necessary.
