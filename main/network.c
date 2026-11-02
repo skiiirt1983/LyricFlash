@@ -766,26 +766,9 @@ bool lf_network_start(void)
     uint8_t mac[6]={0};
     esp_wifi_get_mac(WIFI_IF_STA,mac);
     snprintf(ap_ssid,sizeof ap_ssid,"LyricFlash-%02X%02X",mac[4],mac[5]);
-    /* Keep the setup AP credential stable across reboots and OTA updates.
-       Never print it to logs; it is available only on the device screen. */
-    nvs_handle_t ap_store;
-    bool ap_key_loaded=false;
-    if (nvs_open("lf_network", NVS_READWRITE, &ap_store) == ESP_OK) {
-        size_t key_len=sizeof ap_pass;
-        if (nvs_get_str(ap_store,"ap_key",ap_pass,&key_len)==ESP_OK &&
-            strlen(ap_pass)>=8 && strlen(ap_pass)<=15) ap_key_loaded=true;
-        if (!ap_key_loaded) {
-            snprintf(ap_pass,sizeof ap_pass,"LF%08" PRIu32,
-                     (uint32_t)(esp_random()%100000000u));
-            if (nvs_set_str(ap_store,"ap_key",ap_pass)==ESP_OK)
-                (void)nvs_commit(ap_store);
-        }
-        nvs_close(ap_store);
-    } else {
-        snprintf(ap_pass,sizeof ap_pass,"LF%08" PRIu32,
-                 (uint32_t)(esp_random()%100000000u));
-        lf_diag_error("wifi","Setup AP key could not be saved in NVS");
-    }
+    /* Private device's intentionally simple WPA2 setup password.
+       Never replace/erase the saved home Wi-Fi credentials. */
+    strlcpy(ap_pass, "lyricflash", sizeof ap_pass);
     wifi_config_t apcfg={0};
     strlcpy((char *)apcfg.ap.ssid,ap_ssid,sizeof(apcfg.ap.ssid));
     strlcpy((char *)apcfg.ap.password,ap_pass,sizeof(apcfg.ap.password));
