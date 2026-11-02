@@ -1,4 +1,5 @@
 #include "weather.h"
+#include "diagnostics.h"
 #include "network.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
@@ -340,6 +341,7 @@ static void worker(void *arg)
             portEXIT_CRITICAL(&weather_mux);
             if (unchanged) {
                 set_strip(ok ? reading : "WEATHER UNAVAILABLE");
+                if (!ok) lf_diag_error("weather", "forecast request failed");
                 portENTER_CRITICAL(&weather_mux);
                 snprintf(weather_details, sizeof weather_details, "%s",
                          ok ? detailed : "Weather unavailable. Check Wi-Fi and the selected city.");
