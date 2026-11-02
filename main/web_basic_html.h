@@ -100,5 +100,4 @@ static const char lf_basic_settings_html[] =
 "document.getElementById('refresh').addEventListener('click',diagnostics);\n"
 "load();diagnostics();\n"
 "</script></body></html>\n"
-"
-";
+;
