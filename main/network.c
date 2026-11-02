@@ -4,6 +4,8 @@
 #include "weather.h"
 #include "diagnostics.h"
 #include "version.h"
+#include "ota_pull.h"
+#include "web_updates_html.h"
 #include "web_basic_html.h"
 #include "cJSON.h"
 #include "image_policy.h"
@@ -223,7 +225,8 @@ static const char home_page[] =
 "section{background:#101824;border:1px solid #293b58;border-radius:19px;padding:23px;margin:20px 0}"
 "#msg{color:#a8d7ff;overflow-wrap:anywhere}</style>"
 "<h1>LYRICFLASH</h1><p>ESP32-S3 / Local device manager</p>"
-"<p><a href='/settings' style='color:#8ec9ff'>Open Basic clock studio and diagnostics</a></p>"
+"<p><a href='/settings' style='color:#8ec9ff'>Basic clock studio and diagnostics</a></p>"
+"<p><a href='/updates' style='color:#8ec9ff'>Firmware updates (download on device)</a></p>"
 "<section><h2>Wi-Fi setup</h2><p id='wifi-state'>Checking current network...</p><p>Scan for 2.4 GHz Wi-Fi or enter its name.</p>"
 "<button onclick='scan()'>Scan nearby Wi-Fi</button><select id='networks' onchange='pick()'>"
 "<option value=''>Choose a network</option></select><input id='ssid' placeholder='Wi-Fi name'>"
@@ -473,6 +476,88 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     return send_json(req, root);
 }
 
+
+static esp_err_t handle_updates_page(httpd_req_t *req)
+{
+    httpd_resp_set_type(req,"text/html; charset=utf-8");
+    httpd_resp_set_hdr(req,"Cache-Control","no-store");
+    return httpd_resp_send(req,lf_web_updates_html,HTTPD_RESP_USE_STRLEN);
+}
+static esp_err_t handle_firmware_catalog(httpd_req_t *req)
+{
+    lf_ota_catalog_t c={0};
+    (void)lf_ota_catalog_refresh(&c);
+    cJSON *root=cJSON_CreateObject();
+    if(!root)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddBoolToObject(root,"loaded",c.loaded);
+    cJSON_AddStringToObject(root,"error",c.error);
+    cJSON *versions=cJSON_AddArrayToObject(root,"versions");
+    for(size_t i=0;i<c.count && versions;i++){
+        cJSON *e=cJSON_CreateObject();
+        if(!e)continue;
+        cJSON_AddStringToObject(e,"id",c.entries[i].id);
+        cJSON_AddStringToObject(e,"label",c.entries[i].label);
+        cJSON_AddBoolToObject(e,"ota",c.entries[i].ota);
+        if(c.entries[i].ota)cJSON_AddNumberToObject(e,"bytes",c.entries[i].bytes);
+        cJSON_AddItemToArray(versions,e);
+    }
+    return send_json(req,root);
+}
+static esp_err_t handle_firmware_progress(httpd_req_t *req)
+{
+    lf_ota_pull_status_t status;
+    lf_ota_pull_snapshot(&status);
+    cJSON *root=cJSON_CreateObject();
+    if(!root)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddBoolToObject(root,"active",status.active);
+    cJSON_AddStringToObject(root,"state",status.state);
+    cJSON_AddStringToObject(root,"detail",status.detail);
+    cJSON_AddStringToObject(root,"selected",status.selected);
+    cJSON_AddNumberToObject(root,"received",status.received);
+    cJSON_AddNumberToObject(root,"total",status.total);
+    return send_json(req,root);
+}
+static esp_err_t handle_firmware_install(httpd_req_t *req)
+{
+    if(!pin_matches(req)){
+        httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Arm WEB / OTA on device; enter the correct PIN");
+        return ESP_FAIL;
+    }
+    ota_expiry=0;
+    if(req->content_len<8 || req->content_len>120){
+        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid firmware selection");
+        return ESP_FAIL;
+    }
+    char body[121];
+    int count=0,timeouts=0;
+    while(count<req->content_len){
+        int n=httpd_req_recv(req,body+count,req->content_len-count);
+        if(n==HTTPD_SOCK_ERR_TIMEOUT && ++timeouts<4)continue;
+        if(n<=0){
+            httpd_resp_send_err(req,HTTPD_408_REQ_TIMEOUT,"Selection request interrupted");
+            return ESP_FAIL;
+        }
+        timeouts=0;count+=n;
+    }
+    body[count]=0;
+    cJSON *root=cJSON_Parse(body);
+    const cJSON *id=root?cJSON_GetObjectItemCaseSensitive(root,"id"):NULL;
+    if(!cJSON_IsString(id)||!id->valuestring||strlen(id->valuestring)>=32){
+        cJSON_Delete(root);
+        httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Unknown firmware ID");
+        return ESP_FAIL;
+    }
+    bool started=lf_ota_pull_start(id->valuestring);
+    cJSON_Delete(root);
+    if(!started){
+        httpd_resp_send_err(req,HTTPD_409_CONFLICT,"Unavailable, incompatible or already installing");
+        return ESP_FAIL;
+    }
+    cJSON *reply=cJSON_CreateObject();
+    cJSON_AddBoolToObject(reply,"started",true);
+    return send_json(req,reply);
+}
+
 static esp_err_t handle_info(httpd_req_t *req)
 {
     char ssid[33] = {0};
@@ -630,13 +715,17 @@ static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
-    cfg.max_uri_handlers=16; /* Web settings/telemetry add routes beyond IDF default. */
+    cfg.max_uri_handlers=20; /* Web settings/telemetry add routes beyond IDF default. */
     cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
         {.uri="/",.method=HTTP_GET,.handler=handle_home},
         {.uri="/api/info",.method=HTTP_GET,.handler=handle_info},
         {.uri="/settings",.method=HTTP_GET,.handler=handle_settings_page},
+        {.uri="/updates",.method=HTTP_GET,.handler=handle_updates_page},
+        {.uri="/api/firmware",.method=HTTP_GET,.handler=handle_firmware_catalog},
+        {.uri="/api/firmware/install",.method=HTTP_POST,.handler=handle_firmware_install},
+        {.uri="/api/firmware/status",.method=HTTP_GET,.handler=handle_firmware_progress},
         {.uri="/api/basic",.method=HTTP_GET,.handler=handle_basic_get},
         {.uri="/api/basic",.method=HTTP_POST,.handler=handle_basic_post},
         {.uri="/api/diagnostics",.method=HTTP_GET,.handler=handle_diagnostics},
