@@ -8,7 +8,9 @@ net=(p/'main/network.c').read_text()
 web=(p/'main/web_basic_html.h').read_text()
 diag=(p/'main/diagnostics.c').read_text()
 workflow=(p/'.github/workflows/pages-and-firmware.yml').read_text()
-assert 'lv_screen_load_anim(screen, next_screen_animation, 160, 0, true);' in ui
+assert 'lv_screen_load_anim(' not in ui
+assert 'lv_screen_load(screen);' in ui
+assert 'lv_obj_delete_async(old_screen);' in ui
 assert 'LF_SWIPE_MIN_PX 38' in ui
 assert 'LF_CLOCK_SETTINGS_HOLD_MS 2000ULL' in ui
 assert 'show_clock_settings_popup' in ui
@@ -18,7 +20,8 @@ assert 'LV_EVENT_PRESS_LOST means the finger left the original widget' in ui
 assert 'lv_indev_get_state(gesture_indev) == LV_INDEV_STATE_RELEASED' in ui
 assert 'static void finish_touch(void)' in ui
 assert 'swipe_intent(lv_indev_get_gesture_dir(indev))' in ui
-assert 'do NOT clear' not in ui /* no-op to guard exact source assumptions */
+assert 'Do NOT clear gesture state' in ui
+assert 'swipe_candidate_page' in ui
 assert 'touch_held' in ui and 'on_touch_release' in ui
 assert 'lv_screen_load(screen);' in ui
 assert 'lv_obj_delete_async(old_screen);' in ui
