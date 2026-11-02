@@ -113,32 +113,15 @@ static lv_obj_t *label(lv_obj_t *parent, const char *text, int y,
 
 /* Shared touchscreen button treatment, including a 110 ms tactile press
    animation. Big hit areas and labels clamped to usable circle geometry. */
-static lv_style_transition_dsc_t button_transition;
-static bool button_transition_ready;
-static const lv_style_prop_t button_props[] = {
-    LV_STYLE_TRANSFORM_WIDTH, LV_STYLE_TRANSFORM_HEIGHT,
-    LV_STYLE_BG_COLOR, LV_STYLE_SHADOW_WIDTH, 0
-};
 static void style_button(lv_obj_t *b, uint32_t color)
 {
-    if (!button_transition_ready) {
-        lv_style_transition_dsc_init(&button_transition, button_props,
-                                     lv_anim_path_ease_out, 110, 0, NULL);
-        button_transition_ready = true;
-    }
+    /* Avoid costly per-widget gradients, shadows and pressed transforms. */
     lv_obj_set_style_radius(b, 19, 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(color), 0);
-    lv_obj_set_style_bg_grad_color(b, lv_color_hex(0x699FCD), 0);
-    lv_obj_set_style_bg_grad_dir(b, LV_GRAD_DIR_VER, 0);
-    lv_obj_set_style_border_width(b, 2, 0);
+    lv_obj_set_style_bg_grad_dir(b, LV_GRAD_DIR_NONE, 0);
+    lv_obj_set_style_border_width(b, 1, 0);
     lv_obj_set_style_border_color(b, lv_color_hex(0xAACBE6), 0);
-    lv_obj_set_style_shadow_width(b, 11, 0);
-    lv_obj_set_style_shadow_color(b, lv_color_hex(0x183D69), 0);
-    lv_obj_set_style_shadow_opa(b, LV_OPA_40, 0);
-    lv_obj_set_style_transition(b, &button_transition, 0);
-    lv_obj_set_style_transform_width(b, -4, LV_STATE_PRESSED);
-    lv_obj_set_style_transform_height(b, -4, LV_STATE_PRESSED);
-    lv_obj_set_style_shadow_width(b, 2, LV_STATE_PRESSED);
+    lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(0x9BCFFF), LV_STATE_PRESSED);
     lv_obj_set_style_pad_hor(b, 8, 0);
 }
@@ -247,7 +230,6 @@ static void on_clock_long_press(lv_event_t *e)
 
 /* Heavy full-screen slide animations caused jitter with complex faces.
    Swap atomically to minimize extra redraw and memory pressure. */
-static bool screen_initialized;
 static void make_base(void)
 {
     lv_obj_t *old_screen = lv_screen_active();
@@ -260,7 +242,6 @@ static void make_base(void)
     lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(screen, on_gesture_press, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(screen, on_swipe, LV_EVENT_GESTURE, NULL);
-    screen_initialized = true;
     lv_screen_load(screen);
     if (old_screen != screen) lv_obj_delete(old_screen);
     debug_text = NULL;
@@ -1133,4 +1114,9 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
     }
     esp_lv_adapter_unlock();
     return err;
+}
+
+uint32_t lf_ui_max_tick_gap_ms(void)
+{
+    return max_ui_tick_gap_ms;
 }
