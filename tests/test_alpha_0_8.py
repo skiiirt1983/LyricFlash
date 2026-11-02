@@ -17,7 +17,7 @@ assert 'lv_screen_load(screen);' in ui
 assert 'lv_obj_delete_async(old_screen);' in ui
 assert 'button(screen, "CONNECT / OTA"' in ui
 assert 'static void build_connection_help(void)' in ui
-assert 'lv_async_call(commit_swipe,NULL)' in ui
+assert 'lv_async_call(commit_swipe, NULL)' in ui
 assert 'network_status = label(screen, "Wi-Fi starting..."' in ui
 assert 'lv_obj_delete(old_screen);' not in ui
 assert 'build_debug();' in ui and 'page == 14' in ui
