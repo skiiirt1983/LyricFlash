@@ -265,15 +265,23 @@ bool lf_weather_save_config(const lf_weather_config_t *next)
     nvs_close(h);
     if (e != ESP_OK) return false;
     portENTER_CRITICAL(&weather_mux);
-    config = *next;
-    config_generation++;
+    bool changed = config.enabled != next->enabled ||
+                   config.interval_minutes != next->interval_minutes ||
+                   strcmp(config.city,next->city) != 0;
+    if(changed) {
+        config=*next;
+        config_generation++;
+        weather_details[0]=0;
+        weather_numeric_valid=false;
+        view_cache.valid=false;
+    }
     portEXIT_CRITICAL(&weather_mux);
-    set_strip("");
-    portENTER_CRITICAL(&weather_mux);
-    weather_details[0] = 0;
-    weather_numeric_valid = false;
-    view_cache.valid = false;
-    portEXIT_CRITICAL(&weather_mux);
+    /* The Web UI saves all controls together. Do not erase valid weather
+       when a clock-only setting is saved; refresh only on weather changes. */
+    if(changed) {
+        set_strip(next->enabled ? "UPDATING WEATHER" : "");
+        if(weather_task) xTaskNotifyGive(weather_task);
+    }
     return true;
 }
 bool lf_weather_get_current(int *temp_c, int *wmo_code)
@@ -313,6 +321,7 @@ static void worker(void *arg)
     (void)arg;
     uint32_t prior_generation = 0;
     TickType_t next_poll = 0;
+    bool was_connected = false;
     for (;;) {
         lf_weather_config_t c;
         uint32_t generation;
@@ -327,8 +336,11 @@ static void worker(void *arg)
             set_strip("SET WEATHER CITY");
         } else if (!lf_network_is_connected()) {
             set_strip("WEATHER OFFLINE");
-        } else if (generation != prior_generation ||
+            was_connected=false;
+        } else if (!was_connected || generation != prior_generation ||
                    (int32_t)(xTaskGetTickCount() - next_poll) >= 0) {
+            was_connected=true;
+            set_strip("UPDATING WEATHER");
             char reading[68] = {0};
             char detailed[256] = {0};
             int t=0, code=0;
@@ -357,7 +369,9 @@ static void worker(void *arg)
             next_poll = xTaskGetTickCount() + pdMS_TO_TICKS(delay_ms);
         }
         prior_generation = generation;
-        vTaskDelay(pdMS_TO_TICKS(3000));
+        /* Notification from Save wakes the worker immediately. Normal
+           polling still happens every 3 seconds without blocking LVGL. */
+        ulTaskNotifyTake(pdTRUE,pdMS_TO_TICKS(3000));
     }
 }
 bool lf_weather_start(void)
