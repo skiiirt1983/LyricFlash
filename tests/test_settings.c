@@ -9,7 +9,7 @@ int main(void)
     lf_settings_t initial={0},next={0};
     mock_nvs_reset();
     assert(lf_settings_load(&initial)==ESP_OK);
-    assert(initial.brightness==55 && initial.scroll_speed==45);
+    assert(initial.brightness==55 && initial.scroll_speed==70);
     assert(initial.line_spacing_px==5 && initial.show_progress==1);
     initial.brightness=77;
     initial.scroll_speed=24;
