@@ -5,7 +5,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, fix/alpha-0-8-4-reliable-swipe]
+    branches: [main, fix/alpha-0-8-4-reliable-swipe, work/webui-first-no-pins]
     paths:
       - 'docs/**'
       - 'main/**'
@@ -30,7 +30,12 @@ jobs:
   build:
     # Full firmware compilations are intentional: explicit manual validation,
     # or publishing main only. Never compile on every draft PR update.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/work/webui-first-no-pins' &&
+       contains(github.event.head_commit.message, '[compile-once]'))
     needs: preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 60
