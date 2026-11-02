@@ -180,7 +180,6 @@ static void build_weather_location(void);
 static void build_lyrics_settings(void);
 static void build_device_settings(void);
 static void build_weather_details(void);
-static void on_arm_ota(lv_event_t *e);
 static void on_clock_options(lv_event_t *e);
 static void on_clock_back(lv_event_t *e);
 static void on_home(lv_event_t *e)
@@ -457,17 +456,6 @@ static void make_base(void)
     pause_button = NULL;
 }
 
-static void on_arm_ota(lv_event_t *e)
-{
-    (void)e;
-    lf_network_arm_ota();
-    activity();
-    if(ota_status) {
-        char text[60];
-        snprintf(text,sizeof text,"OTA PIN: %s  (2 min)",lf_network_ota_pin());
-        lv_label_set_text(ota_status,text);
-    }
-}
 static void on_wifi(lv_event_t *e)
 {
     (void)e; activity(); build_wifi();
@@ -478,17 +466,15 @@ static void on_connection_help(lv_event_t *e)
 }
 static void build_connection_help(void)
 {
-    /* A non-gesture route to Wi-Fi provisioning and OTA authorization,
-       including the AP password and exact web address. */
+    /* Local connection portal: no PIN or touch authorization required. */
     page = 15;
     make_base();
     label(screen, "CONNECT / UPDATE", 37, &lv_font_montserrat_24, prefs->text_color);
     network_status = label(screen, "Checking Wi-Fi...", 92, &lv_font_montserrat_16, 0xE4EDF3);
     network_password = label(screen, "", 126, &lv_font_montserrat_16, 0xDDE9FB);
     network_url = label(screen, "", 161, &lv_font_montserrat_16, 0x8BCCFF);
-    ota_status = label(screen, "Tap ARM OTA for a two-minute PIN", 210,
+    ota_status = label(screen, "Web settings and OTA: no PIN required", 215,
                        &lv_font_montserrat_16, 0x8BCCFF);
-    button(screen, "ARM OTA", 190, 51, 0, 78, 0xA8D6FF, on_arm_ota, NULL);
     button(screen, "HOME", 154, 49, 0, 172, 0xB2C6D3, on_home, NULL);
     last_power_refresh_ms = 0; /* Refresh the network details immediately. */
 }
@@ -502,8 +488,7 @@ static void build_home(void)
     label(screen, LF_VERSION_LABEL, 103, &lv_font_montserrat_20, 0xB7C7D7);
     battery_status = label(screen, "BATTERY", 151, &lv_font_montserrat_20, 0xDCE8F0);
     button(screen, "LYRICS", 242, 82, 0, 0, 0xA8D6FF, on_preview, NULL);
-    /* Physical OTA arming must remain reachable even if navigation breaks.
-       No browser/remote endpoint can arm updates without touching the device. */
+    /* Connection and browser settings are always reachable without a PIN. */
     button(screen, "CONNECT / OTA", 206, 49, 0, 83, 0xA8D6FF, on_connection_help, NULL);
     network_status = label(screen, "Wi-Fi starting...", 354, &lv_font_montserrat_16, 0xB9CADB);
     label(screen, "SWIPE LEFT / RIGHT", 394, &lv_font_montserrat_16, 0x6E8CAC);
@@ -837,8 +822,8 @@ static void build_device_settings(void)
     timeout_text = label(screen, text, 259, system_font(), 0xE4EDF3);
     lv_obj_add_flag(timeout_text, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(timeout_text, on_timeout, LV_EVENT_CLICKED, NULL);
-    button(screen, "ARM WEB / OTA", 208, 46, 0, 91, 0xB2C6D3, on_arm_ota, NULL);
-    ota_status = label(screen, "", 342, system_font(), 0x8BCCFF);
+    ota_status = label(screen, "Web settings and updates: no PIN required", 325,
+                       &lv_font_montserrat_16, 0x8BCCFF);
     button(screen, "BACK", 152, 45, 0, 178, prefs->text_color, on_settings, NULL);
 }
 
@@ -1263,8 +1248,6 @@ static void on_tick(lv_timer_t *timer)
             snprintf(url_text, sizeof url_text, "Open browser to http://%s/", lf_network_address());
             lv_label_set_text(network_url, url_text);
         }
-        if (ota_status && !lf_network_ota_armed()) 
-            lv_label_set_text(ota_status, "Tap ARM OTA for a two-minute PIN");
     }
     if (asleep) return;
     if (page == 11 && !touch_held && current >= screen_animation_until_ms && current - weather_detail_refresh >= 4000) {
