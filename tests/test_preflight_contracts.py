@@ -116,6 +116,11 @@ require('"/api/install"' in pages["firmware"]
         "GitHub build selector not linked to install endpoint")
 require("lf_weather_save_config" in network and "xTaskNotifyGive(weather_task)" in weather,
         "Weather refresh on save missing")
+require("weather_numeric_valid = false;" in weather and
+        "view_cache.valid = false;" in weather,
+        "Weather failure must clear a stale forecast")
+require("Connect to the device setup AP to change Wi-Fi" not in network,
+        "Wi-Fi settings are inaccessible while connected to home Wi-Fi")
 require("if (schema > 0 && schema < 6)" in settings and
         "0.003f + prefs->scroll_speed * 0.000605f" in ui,
         "Saved lyric speed migration or cap missing")
