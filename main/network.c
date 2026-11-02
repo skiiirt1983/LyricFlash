@@ -1,5 +1,6 @@
 #include "network.h"
 #include "ui.h"
+#include "bsp/display.h"
 #include "settings.h"
 #include "weather.h"
 #include "diagnostics.h"
