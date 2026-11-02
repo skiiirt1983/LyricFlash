@@ -32,6 +32,12 @@ static lv_obj_t *speed_text;
 static lv_obj_t *brightness_text;
 static lv_obj_t *timeout_text;
 static lv_obj_t *screen;
+static lv_obj_t *sleep_overlay;
+/* Every navigation request is executed from the LVGL async queue, after the
+   originating input event has finished. No active touch target is destroyed
+   inside its own PRESSED/CLICKED/RELEASED callback. */
+static bool nav_queued;
+static void (*nav_pending)(void);
 /* Recovery mode: exactly one LVGL screen, no pager. */
 static bool pager_scrolling; /* Always false for clock refresh guard. */
 static lv_obj_t *battery_status;
@@ -481,10 +487,25 @@ static void show_clock_settings_popup(void)
    until LVGL finishes processing the callback that initiated navigation. */
 static void make_base(void)
 {
-    lv_obj_t *old_screen=lv_screen_active();
+    /* One LVGL screen for the lifetime of the application. Rebuild its child
+       tree ONLY in a deferred navigation callback. Unlike swapping screen
+       roots, this cannot leave old framebuffer roots layered after touches. */
     lf_weather_visual_clear();
     lf_clock_clear();
-    screen=lv_obj_create(NULL);
+    if (!screen) {
+        lv_obj_t *old_screen=lv_screen_active();
+        screen=lv_obj_create(NULL);
+        lv_screen_load(screen);
+        if(old_screen && old_screen!=screen)lv_obj_delete_async(old_screen);
+        lv_obj_add_event_cb(screen,on_gesture_press,LV_EVENT_PRESSED,NULL);
+        lv_obj_add_event_cb(screen,on_touch_pressing,LV_EVENT_PRESSING,NULL);
+        lv_obj_add_event_cb(screen,on_touch_release,LV_EVENT_RELEASED,NULL);
+        lv_obj_add_event_cb(screen,on_touch_cancel,LV_EVENT_PRESS_LOST,NULL);
+        lv_obj_add_event_cb(screen,on_lvgl_gesture,LV_EVENT_GESTURE,NULL);
+    } else {
+        lv_obj_clean(screen);
+    }
+    sleep_overlay=NULL;
     lv_obj_set_style_bg_color(screen,lv_color_hex(prefs->background_color),0);
     lv_obj_set_style_bg_opa(screen,LV_OPA_COVER,0);
     lv_obj_set_style_border_width(screen,0,0);
@@ -492,13 +513,6 @@ static void make_base(void)
     lv_obj_set_style_pad_all(screen,0,0);
     lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(screen,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(screen,on_gesture_press,LV_EVENT_PRESSED,NULL);
-    lv_obj_add_event_cb(screen,on_touch_pressing,LV_EVENT_PRESSING,NULL);
-    lv_obj_add_event_cb(screen,on_touch_release,LV_EVENT_RELEASED,NULL);
-    lv_obj_add_event_cb(screen,on_touch_cancel,LV_EVENT_PRESS_LOST,NULL);
-    lv_obj_add_event_cb(screen,on_lvgl_gesture,LV_EVENT_GESTURE,NULL);
-    lv_screen_load(screen);
-    if(old_screen && old_screen!=screen)lv_obj_delete_async(old_screen);
     screen_animation_until_ms=0;
     touch_held=false;
     gesture_origin_valid=false;
@@ -529,7 +543,7 @@ static void on_connection_help(lv_event_t *e)
 {
     (void)e; activity(); build_connection_help();
 }
-static void build_connection_help(void)
+static void build_connection_help_now(void)
 {
     /* Local connection portal: no PIN or touch authorization required. */
     page = 15;
@@ -563,7 +577,7 @@ static void render_home(void)
     label(screen, "SWIPE FOR NAVIGATION", 406, &lv_font_montserrat_16, 0x6E8CAC);
     last_power_refresh_ms = 0;
 }
-static void build_home(void)
+static void build_home_now(void)
 {
     render_home();
 }
@@ -605,7 +619,7 @@ static void on_touch_scroll(lv_event_t *e)
     }
 }
 
-static void build_preview(void)
+static void build_preview_now(void)
 {
     page = 1;
     make_base();
@@ -723,7 +737,7 @@ static void on_wifi_scan(lv_event_t *e)
         wifi_state_previous = 1;
     } else if (wifi_status) lv_label_set_text(wifi_status, "Scan unavailable. Retry.");
 }
-static void build_wifi(void)
+static void build_wifi_now(void)
 {
     page = 4;
     make_base();
@@ -764,7 +778,7 @@ static void wheel_weather_save(const char *city)
     if (lf_weather_save_config(&cfg)) build_clock_settings();
 }
 static void wheel_weather_cancel(void) { build_clock_settings(); }
-static void build_wifi_password(void)
+static void build_wifi_password_now(void)
 {
     page = 5;
     make_base();
@@ -840,7 +854,7 @@ static void render_settings(void)
     button(screen, "WI-FI", 250, 54, 0, 99, 0xB2C6D3, on_wifi, NULL);
     button(screen, "HOME", 153, 44, 0, 175, prefs->text_color, on_home, NULL);
 }
-static void build_settings(void)
+static void build_settings_now(void)
 {
     render_settings();
 }
@@ -851,7 +865,7 @@ static void on_lyric_font(lv_event_t *e)
     save_settings();
     build_lyrics_settings();
 }
-static void build_lyrics_settings(void)
+static void build_lyrics_settings_now(void)
 {
     page = 9;
     make_base();
@@ -883,7 +897,7 @@ static void on_system_font(lv_event_t *e)
     save_settings();
     build_device_settings();
 }
-static void build_device_settings(void)
+static void build_device_settings_now(void)
 {
     page = 10;
     make_base();
@@ -927,7 +941,7 @@ static void render_clock(void)
     clock_last_refresh = 0;
     activity();
 }
-static void build_clock(void)
+static void build_clock_now(void)
 {
     render_clock();
 }
@@ -978,7 +992,7 @@ static void on_basic_settings(lv_event_t *e)
 {
     (void)e; activity(); build_basic_settings();
 }
-static void build_clock_settings(void)
+static void build_clock_settings_now(void)
 {
     page = 7;
     make_base();
@@ -1092,7 +1106,7 @@ static void on_basic_hue(lv_event_t *e)
     }
     if (lv_event_get_code(e)==LV_EVENT_RELEASED) save_settings();
 }
-static void build_basic_colour(void)
+static void build_basic_colour_now(void)
 {
     page = 13;
     make_base();
@@ -1112,7 +1126,7 @@ static void build_basic_colour(void)
     add_slider(screen, 283, 210, 0, 359, on_basic_hue);
     button(screen, "BACK", 161, 51, 0, 169, 0xB2C6D3, on_basic_back, NULL);
 }
-static void build_basic_settings(void)
+static void build_basic_settings_now(void)
 {
     page = 12;
     make_base();
@@ -1193,7 +1207,7 @@ static void refresh_debug(void)
     lv_label_set_text(debug_text, output);
 }
 
-static void build_debug(void)
+static void build_debug_now(void)
 {
     page = 14;
     make_base();
@@ -1218,7 +1232,7 @@ static void build_debug(void)
     button(screen, "BACK HOME", 158, 49, 0, 172, 0xA8D6FF, on_home, NULL);
 }
 
-static void build_weather_details(void)
+static void build_weather_details_now(void)
 {
     page = 11;
     make_base();
@@ -1232,7 +1246,7 @@ static void build_weather_details(void)
     button(screen, "BACK TO CLOCK", 188, 50, 0, 173,
            0x9ACBF1, on_clock_back, NULL);
 }
-static void build_weather_location(void)
+static void build_weather_location_now(void)
 {
     page = 8;
     make_base();
@@ -1246,10 +1260,20 @@ static void build_weather_location(void)
 static void on_wake(lv_event_t *e)
 {
     (void)e;
-    asleep = false;
+    if(!asleep)return;
+    /* The old code rebuilt Home inside LV_EVENT_PRESSED. That discarded the
+       input target during input dispatch and could freeze or stack screens. */
+    asleep=false;
     activity();
     apply_brightness();
-    build_home();
+    lv_obj_t *cover=sleep_overlay;
+    sleep_overlay=NULL;
+    if(cover)lv_obj_delete_async(cover);
+    touch_held=false;
+    gesture_origin_valid=false;
+    gesture_indev=NULL;
+    swipe_candidate_page=-1;
+    touch_pressed_at_ms=0;
 }
 /* Optional hardware-level deep sleep. GPIO11 is CST9217 TP_INT on the
    Waveshare 1.75-in board (RTC GPIO). Requires physical wake testing: an
@@ -1274,13 +1298,24 @@ static void sleep_deep(void)
 }
 static void sleep_display(void)
 {
-    asleep = true;
-    page = 3;
-    make_base();
-    // CPU and touch controller remain running in alpha 0.1.
-    // We avoid promising unverified deep-sleep wake behavior.
-    lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(screen, on_wake, LV_EVENT_PRESSED, NULL);
+    if(asleep)return;
+    /* Preserve the current page, clock pointers and button tree. A single
+       black touch-capture child handles wake without screen reconstruction. */
+    asleep=true;
+    touch_held=false;
+    gesture_origin_valid=false;
+    gesture_indev=NULL;
+    swipe_candidate_page=-1;
+    sleep_overlay=lv_obj_create(screen);
+    lv_obj_set_size(sleep_overlay,466,466);
+    lv_obj_center(sleep_overlay);
+    lv_obj_set_style_bg_color(sleep_overlay,lv_color_black(),0);
+    lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_COVER,0);
+    lv_obj_set_style_border_width(sleep_overlay,0,0);
+    lv_obj_set_style_radius(sleep_overlay,0,0);
+    lv_obj_remove_flag(sleep_overlay,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(sleep_overlay,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(sleep_overlay,on_wake,LV_EVENT_PRESSED,NULL);
     apply_brightness();
 }
 static void on_tick(lv_timer_t *timer)
@@ -1292,6 +1327,20 @@ static void on_tick(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
+    /* Polling fallback for wake when the cover misses a press. A wake touch
+       must never trigger navigation or click the previously shown buttons. */
+    if(asleep) {
+        lv_indev_t *wake=lv_indev_get_next(NULL);
+        while(wake) {
+            if(lv_indev_get_type(wake)==LV_INDEV_TYPE_POINTER &&
+               lv_indev_get_state(wake)==LV_INDEV_STATE_PRESSED) {
+                on_wake(NULL);
+                return;
+            }
+            wake=lv_indev_get_next(wake);
+        }
+        return;
+    }
     /* Collect touch directly from the hardware input device, including
        gestures beginning over Weather's scrolling forecast children. */
     if (!touch_held && is_swipe_page() && !clock_settings_popup) {
@@ -1447,6 +1496,41 @@ static void on_clock_sweep(lv_timer_t *timer)
     if (page == 6 && !pager_scrolling && !asleep && !touch_held && !clock_settings_popup && now_ms() >= screen_animation_until_ms) lf_clock_animate();
 }
 
+/* Navigation dispatcher: no page creation/deletion during a touch callback.
+   A subsequent request replaces the pending one so a single touch cannot
+   queue overlapping scene rebuilds. */
+static void nav_drain(void *arg)
+{
+    (void)arg;
+    nav_queued=false;
+    void (*target)(void)=nav_pending;
+    nav_pending=NULL;
+    if(target)target();
+}
+static void nav_schedule(void (*target)(void))
+{
+    nav_pending=target;
+    if(!nav_queued) {
+        nav_queued=true;
+        lv_async_call(nav_drain,NULL);
+    }
+}
+static void build_connection_help(void) { nav_schedule(build_connection_help_now); }
+static void build_home(void) { nav_schedule(build_home_now); }
+static void build_preview(void) { nav_schedule(build_preview_now); }
+static void build_wifi(void) { nav_schedule(build_wifi_now); }
+static void build_wifi_password(void) { nav_schedule(build_wifi_password_now); }
+static void build_settings(void) { nav_schedule(build_settings_now); }
+static void build_lyrics_settings(void) { nav_schedule(build_lyrics_settings_now); }
+static void build_device_settings(void) { nav_schedule(build_device_settings_now); }
+static void build_clock(void) { nav_schedule(build_clock_now); }
+static void build_clock_settings(void) { nav_schedule(build_clock_settings_now); }
+static void build_basic_colour(void) { nav_schedule(build_basic_colour_now); }
+static void build_basic_settings(void) { nav_schedule(build_basic_settings_now); }
+static void build_debug(void) { nav_schedule(build_debug_now); }
+static void build_weather_details(void) { nav_schedule(build_weather_details_now); }
+static void build_weather_location(void) { nav_schedule(build_weather_location_now); }
+
 bool lf_ui_start(lf_settings_t *s)
 {
     prefs = s;
@@ -1458,7 +1542,8 @@ bool lf_ui_start(lf_settings_t *s)
     }
     apply_brightness();
     (void)lf_power_background_start();
-    build_home();
+    /* First root is built during startup, before any touch callback exists. */
+    render_home();
     lv_timer_create(on_tick, 50, NULL);
     lv_timer_create(on_clock_sweep, 16, NULL);
     esp_lv_adapter_unlock();
