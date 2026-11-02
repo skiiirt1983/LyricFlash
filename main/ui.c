@@ -1218,7 +1218,7 @@ static void primary_pager_scroll_event(lv_event_t *e)
         if(primary_pager_snapping && anim) {
             int32_t remaining=abs(primary_pager_snap_to*466-abs(lv_obj_get_scroll_x(primary_pager)));
             if(remaining>466)remaining=466;
-            lv_anim_set_duration(anim,95U+(uint32_t)(85U*remaining/466U));
+            lv_anim_set_duration(anim,85U+(uint32_t)(70U*remaining/466U));
             lv_anim_set_path_cb(anim,lv_anim_path_ease_out);
         }
         pager_scrolling=true;

@@ -433,7 +433,7 @@ require('lv_snapshot_take(' not in ui and
 
 # 0.8.26: controlled short snaps must not remove hardware regression safety.
 require('lv_event_get_scroll_anim(e)' in ui and
-        'lv_anim_set_duration(anim,95U+' in ui and
+        'lv_anim_set_duration(anim,85U+' in ui and
         'lv_anim_set_path_cb(anim,lv_anim_path_ease_out)' in ui and
         'lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_MOMENTUM);' in ui and
         '"pager_snap_last_ms"' in network and
@@ -441,3 +441,11 @@ require('lv_event_get_scroll_anim(e)' in ui and
         'lv_obj_invalidate(clock_scene);' in ui and
         'current-primary_pager_snap_started_ms>700' in watchdog,
         "Fast pager snap and retained Clock recovery contract")
+
+# Guard against making the release gesture overly abrupt or changing the
+# live finger-following behavior when tuning the terminal animation.
+require('lv_anim_set_duration(anim,85U+(uint32_t)(70U*remaining/466U));' in ui and
+        'lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);' in ui and
+        'lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_MOMENTUM);' in ui and
+        'lv_obj_invalidate(clock_scene);' in ui,
+        "0.8.27 short pager settle and live-Clock retention")
