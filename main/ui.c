@@ -242,8 +242,12 @@ static void make_base(void)
     lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(screen, on_gesture_press, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(screen, on_swipe, LV_EVENT_GESTURE, NULL);
+    /* A gesture/click callback may still be dispatching against old_screen.
+       Deleting it synchronously invalidates the event target / input-device
+       references and can reboot ESP32-S3. Keep the instant screen swap, but
+       free the old LVGL tree on the next timer-handler pass. */
     lv_screen_load(screen);
-    if (old_screen != screen) lv_obj_delete(old_screen);
+    if (old_screen != screen) lv_obj_delete_async(old_screen);
     debug_text = NULL;
     scroll_panel = NULL;
     lyrics_label = NULL;
