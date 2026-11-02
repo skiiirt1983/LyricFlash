@@ -1263,7 +1263,7 @@ static void on_tick(lv_timer_t *timer)
             else snprintf(value,sizeof value,"%s  BATTERY",LV_SYMBOL_BATTERY_FULL);
             if (success) {
                 lv_label_set_text(battery_status,value);
-                lv_obj_set_style_text_color(battery_status,lv_color_hex(lf_power_color(&st)),0);
+                lv_obj_set_style_text_color(battery_status,lv_color_hex(st.usb_connected ? prefs->charging_color : lf_power_color(&st)),0);
             }
         }
         if (network_status) {
@@ -1396,4 +1396,30 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
 uint32_t lf_ui_max_tick_gap_ms(void)
 {
     return max_ui_tick_gap_ms;
+}
+
+/* The ESP32 Web UI must apply preferences on the LVGL task lock, not on the
+   HTTP server thread. Preserve every setting not explicitly editable here. */
+esp_err_t lf_ui_apply_device_settings(const lf_settings_t *requested)
+{
+    if(!prefs||!requested)return ESP_ERR_INVALID_ARG;
+    esp_err_t err=esp_lv_adapter_lock(2000);
+    if(err!=ESP_OK)return err;
+    lf_settings_t old=*prefs;
+    prefs->brightness=requested->brightness;
+    prefs->scroll_speed=requested->scroll_speed;
+    prefs->font_size=requested->font_size;
+    prefs->system_font_size=requested->system_font_size;
+    prefs->sleep_seconds=requested->sleep_seconds;
+    prefs->charging_color=requested->charging_color;
+    err=lf_settings_save(prefs);
+    if(err==ESP_OK){
+        apply_brightness();
+        if(page==0)build_home();
+        else if(page==1)build_preview();
+        else if(page==2)build_settings();
+        else if(page==6)build_clock();
+    }else *prefs=old;
+    esp_lv_adapter_unlock();
+    return err;
 }
