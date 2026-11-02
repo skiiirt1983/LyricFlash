@@ -218,8 +218,13 @@ require("strlcpy(ap_pass, \"lyricflash\", sizeof ap_pass);" in network,
         "Simple fixed setup AP credential not configured")
 require("lv_draw_line_dsc_init" in read("main/clock_face.c"),
         "Analog ticks still create 60 separate LVGL objects")
-require("segment_count" in read("main/basic_clock.c"),
-        "Basic ring still creates 60 individual LVGL objects")
+basic_clock=read("main/basic_clock.c")
+require("segment_count" in basic_clock and
+        "static void basic_ring_draw(lv_event_t *e)" in basic_clock and
+        "lv_draw_arc_dsc_init(&dsc);" in basic_clock and
+        "lv_draw_arc(layer,&dsc);" in basic_clock and
+        "lv_arc_create(" not in basic_clock,
+        "Basic Clock must draw the ring as one custom LVGL object")
 require("charging_color" in read("main/settings.h") and
         "charging_color" in pages["settings"],
         "Configurable charging indicator absent")
@@ -231,7 +236,9 @@ print(f"PASS: {tests_passed} source-only LyricFlash preflight assertions")
 
 # First-touch lockup regression: the active LVGL root must remain constant and
 # no scene rebuild may occur inside a CLICKED/PRESSED event handler.
-require('if (!screen) {' in ui and 'lv_obj_clean(screen);' in ui and
+require('if (!screen) {' in ui and
+        'lv_obj_get_child_count(screen)' in ui and
+        'if (child != clock_scene) lv_obj_delete(child);' in ui and
         ui.count('screen=lv_obj_create(NULL);')==1 and
         ui.count('lv_screen_load(screen);')==1 and
         'static void nav_drain(void *arg)' in ui and
@@ -306,7 +313,7 @@ require('esp_ptr_external_ram(color_data)' in bsp and
 clock_face=read("main/clock_face.c")
 nav_drain=ui.split('static void nav_drain(void *arg)\n{',1)[1].split('static void nav_schedule',1)[0]
 require('invalidate_full_screen();' not in nav_drain and
-        'lv_obj_clean(screen);' in ui and
+        'if (child != clock_scene) lv_obj_delete(child);' in ui and
         'lv_async_call(wake_finish_async,NULL);' in ui and
         'invalidate_full_screen();' in ui,
         "Navigation still triggers redundant root invalidation or wake is unprotected")
@@ -317,3 +324,22 @@ require('static void update_label_if_changed(' in clock_face and
         'update_label_if_changed(weather_label, value);' in clock_face and
         'displayed_battery_color' in clock_face,
         "Basic Clock unchanged-value LVGL invalidation guard missing")
+
+# Clock warm navigation: retain one clock child under the single root, never
+# create an additional active screen; invalidate cached content on settings.
+render_clock=ui.split('static void render_clock(void)\n{',1)[1].split('static void build_clock_now',1)[0]
+make_base=ui.split('static void make_base(void)\n{',1)[1].split('static void on_wifi',1)[0]
+require('static lv_obj_t *clock_scene;' in ui and
+        'if (clock_scene) lv_obj_add_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);' in make_base and
+        'if (child != clock_scene) lv_obj_delete(child);' in make_base and
+        'clock_scene_stale || clock_scene_style != prefs->clock_face' in make_base and
+        'lf_clock_build(clock_scene,prefs->clock_face,prefs);' in render_clock and
+        'lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);' in render_clock and
+        'lf_clock_update();' in render_clock and
+        'clock_scene_stale=true;' in ui and
+        ui.count('screen=lv_obj_create(NULL);') == 1,
+        "Clock must remain cached as one child of the only LVGL screen")
+for key in ('clock_scene_builds','clock_cache_hits','clock_build_last_ms',
+            'clock_build_max_ms','clock_present_last_ms','clock_present_max_ms'):
+    require('"' + key + '"' in network and key in read('main/ui.h'),
+            "Clock load timing/scene cache diagnostics missing: "+key)

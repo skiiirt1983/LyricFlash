@@ -33,6 +33,20 @@ static lv_obj_t *speed_text;
 static lv_obj_t *brightness_text;
 static lv_obj_t *timeout_text;
 static lv_obj_t *screen;
+/* Keep the clock as a hidden child on the one safe LVGL root instead of
+   reconstructing 30+ decorative widgets on every visit. Never create a
+   second active LVGL screen or swap roots during touch dispatch. */
+static lv_obj_t *clock_scene;
+static bool clock_scene_stale = true;
+static uint8_t clock_scene_style = UINT8_MAX;
+static atomic_uint ui_clock_scene_builds;
+static atomic_uint ui_clock_cache_hits;
+static atomic_uint ui_clock_build_last_ms;
+static atomic_uint ui_clock_build_max_ms;
+static atomic_uint ui_clock_present_last_ms;
+static atomic_uint ui_clock_present_max_ms;
+/* LVGL thread only. Measures from entering Clock until first completed refresh. */
+static int64_t clock_present_start_us;
 static lv_obj_t *sleep_overlay;
 /* Display diagnostic counters must be readable from the HTTP task without
    taking the LVGL mutex (which could block during a display failure). */
@@ -54,6 +68,12 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->flush_starts=atomic_load(&ui_flush_start_count);
     out->flush_finishes=atomic_load(&ui_flush_finish_count);
     out->refresh_ready=atomic_load(&ui_refresh_ready_count);
+    out->clock_scene_builds=atomic_load(&ui_clock_scene_builds);
+    out->clock_cache_hits=atomic_load(&ui_clock_cache_hits);
+    out->clock_build_last_ms=atomic_load(&ui_clock_build_last_ms);
+    out->clock_build_max_ms=atomic_load(&ui_clock_build_max_ms);
+    out->clock_present_last_ms=atomic_load(&ui_clock_present_last_ms);
+    out->clock_present_max_ms=atomic_load(&ui_clock_present_max_ms);
 }
 static void display_render_event(lv_event_t *e)
 {
@@ -74,6 +94,15 @@ static void display_refresh_ready_event(lv_event_t *e)
 {
     (void)e;
     atomic_fetch_add(&ui_refresh_ready_count,1);
+    if (clock_present_start_us) {
+        int64_t elapsed_us=esp_timer_get_time()-clock_present_start_us;
+        clock_present_start_us=0;
+        if (elapsed_us < 0) elapsed_us=0;
+        uint32_t duration=(uint32_t)(elapsed_us/1000);
+        atomic_store(&ui_clock_present_last_ms,duration);
+        uint32_t maximum=atomic_load(&ui_clock_present_max_ms);
+        if (duration > maximum) atomic_store(&ui_clock_present_max_ms,duration);
+    }
 }
 static void invalidate_full_screen(void)
 {
@@ -161,6 +190,7 @@ static void save_settings(void)
     prefs->face_show_date[5]=prefs->basic_show_date;
     esp_err_t r = lf_settings_save(prefs);
     if (r != ESP_OK) ESP_LOGE(TAG, "Could not save settings: %s", esp_err_to_name(r));
+    else clock_scene_stale = true; /* Only invalidate after a saved preference change. */
     activity();
 }
 
@@ -552,7 +582,13 @@ static void make_base(void)
        tree ONLY in a deferred navigation callback. Unlike swapping screen
        roots, this cannot leave old framebuffer roots layered after touches. */
     lf_weather_visual_clear();
-    lf_clock_clear();
+    /* All screen mutation happens after LVGL input dispatch via nav_drain.
+       A stale clock is deleted only after its last active event has finished. */
+    if (clock_scene && (clock_scene_stale || clock_scene_style != prefs->clock_face)) {
+        lf_clock_clear();
+        lv_obj_delete(clock_scene);
+        clock_scene=NULL;
+    }
     if (!screen) {
         lv_obj_t *old_screen=lv_screen_active();
         screen=lv_obj_create(NULL);
@@ -564,7 +600,14 @@ static void make_base(void)
         lv_obj_add_event_cb(screen,on_touch_cancel,LV_EVENT_PRESS_LOST,NULL);
         lv_obj_add_event_cb(screen,on_lvgl_gesture,LV_EVENT_GESTURE,NULL);
     } else {
-        lv_obj_clean(screen);
+        /* Preserve the clock scene as one hidden child while other pages
+           rebuild. This retains LVGL's safe single-root architecture. */
+        uint32_t children=lv_obj_get_child_count(screen);
+        while (children > 0) {
+            lv_obj_t *child=lv_obj_get_child(screen,--children);
+            if (child != clock_scene) lv_obj_delete(child);
+        }
+        if (clock_scene) lv_obj_add_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
     }
     sleep_overlay=NULL;
     lv_obj_set_style_bg_color(screen,lv_color_hex(prefs->background_color),0);
@@ -623,7 +666,6 @@ static void render_home(void)
 {
     page = 0;
     make_base();
-    lf_clock_clear();
     label(screen, "LYRICFLASH", 36, &lv_font_montserrat_24, prefs->text_color);
     label(screen, LF_VERSION_LABEL, 82, &lv_font_montserrat_20, 0xB7C7D7);
     battery_status = label(screen, "BATTERY", 129, &lv_font_montserrat_20, 0xDCE8F0);
@@ -994,12 +1036,36 @@ static void render_clock(void)
 {
     page = 6;
     make_base();
-    lf_clock_build(screen, prefs->clock_face, prefs);
-    clock_children_input_transparent(screen);
-    /* A deliberate 2-second hold produces a confirmation popup.
-       The global LVGL short-long-press event no longer opens settings. */
-    lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
-    clock_last_refresh = 0;
+    if (!clock_scene) {
+        uint64_t build_start=now_ms();
+        clock_scene=lv_obj_create(screen);
+        lv_obj_set_size(clock_scene,466,466);
+        lv_obj_center(clock_scene);
+        lv_obj_set_style_pad_all(clock_scene,0,0);
+        lv_obj_set_style_radius(clock_scene,0,0);
+        lv_obj_set_style_border_width(clock_scene,0,0);
+        lv_obj_set_style_bg_opa(clock_scene,LV_OPA_COVER,0);
+        lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_CLICKABLE);
+        lf_clock_build(clock_scene,prefs->clock_face,prefs);
+        clock_children_input_transparent(clock_scene);
+        clock_scene_style=prefs->clock_face;
+        clock_scene_stale=false;
+        atomic_fetch_add(&ui_clock_scene_builds,1);
+        uint32_t elapsed=(uint32_t)(now_ms()-build_start);
+        atomic_store(&ui_clock_build_last_ms,elapsed);
+        uint32_t maximum=atomic_load(&ui_clock_build_max_ms);
+        if(elapsed>maximum)atomic_store(&ui_clock_build_max_ms,elapsed);
+    } else {
+        lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
+        atomic_fetch_add(&ui_clock_cache_hits,1);
+        lf_clock_update(); /* Refresh time/battery only; no ring rebuild. */
+    }
+    /* Children are input-transparent; root remains the sole touch target.
+       Long-hold settings and left/up swipe retain the existing callbacks. */
+    lv_obj_add_flag(screen,LV_OBJ_FLAG_CLICKABLE);
+    clock_present_start_us=esp_timer_get_time();
+    clock_last_refresh=0;
     activity();
 }
 static void build_clock_now(void)
@@ -1297,7 +1363,6 @@ static void build_weather_details_now(void)
 {
     page = 11;
     make_base();
-    lf_clock_clear();
     label(screen, "WEATHER", 25, &lv_font_montserrat_24, 0xE8F5FF);
     lf_weather_visual_build(screen);
     lf_weather_view_t weather;
@@ -1658,6 +1723,7 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
     memcpy(prefs->face_24h,basic->face_24h,sizeof(prefs->face_24h));
     err = lf_settings_save(prefs);
     if (err == ESP_OK) {
+        clock_scene_stale=true;
         if (page == 6) build_clock(); /* Rebuild only the current clock. */
     } else {
         *prefs = previous;

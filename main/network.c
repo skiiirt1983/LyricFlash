@@ -526,6 +526,12 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "display_flush_starts", display_stats.flush_starts);
     cJSON_AddNumberToObject(root, "display_flush_finishes", display_stats.flush_finishes);
     cJSON_AddNumberToObject(root, "display_refresh_ready", display_stats.refresh_ready);
+    cJSON_AddNumberToObject(root, "clock_scene_builds", display_stats.clock_scene_builds);
+    cJSON_AddNumberToObject(root, "clock_cache_hits", display_stats.clock_cache_hits);
+    cJSON_AddNumberToObject(root, "clock_build_last_ms", display_stats.clock_build_last_ms);
+    cJSON_AddNumberToObject(root, "clock_build_max_ms", display_stats.clock_build_max_ms);
+    cJSON_AddNumberToObject(root, "clock_present_last_ms", display_stats.clock_present_last_ms);
+    cJSON_AddNumberToObject(root, "clock_present_max_ms", display_stats.clock_present_max_ms);
     lf_weather_config_t weather;
     lf_weather_get_config(&weather);
     cJSON_AddStringToObject(root, "weather_city", weather.city);

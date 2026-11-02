@@ -22,5 +22,11 @@ typedef struct {
     uint32_t flush_starts;
     uint32_t flush_finishes;
     uint32_t refresh_ready;
+    uint32_t clock_scene_builds;
+    uint32_t clock_cache_hits;
+    uint32_t clock_build_last_ms;
+    uint32_t clock_build_max_ms;
+    uint32_t clock_present_last_ms;
+    uint32_t clock_present_max_ms;
 } lf_ui_display_stats_t;
 void lf_ui_display_stats(lf_ui_display_stats_t *out);
