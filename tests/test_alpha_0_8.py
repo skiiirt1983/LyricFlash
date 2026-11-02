@@ -11,8 +11,10 @@ workflow=(p/'.github/workflows/pages-and-firmware.yml').read_text()
 assert 'lv_screen_load_anim(' not in ui
 assert 'lv_screen_load(screen);' in ui
 assert 'lv_obj_delete_async(old_screen);' in ui
-assert 'button(screen, "ARM OTA", 170, 46, 0, 83' in ui
-assert 'ota_status = label(screen, "CLOCK' in ui
+assert 'button(screen, "CONNECT / OTA"' in ui
+assert 'static void build_connection_help(void)' in ui
+assert 'lv_async_call(commit_swipe,NULL)' in ui
+assert 'network_status = label(screen, "Wi-Fi starting..."' in ui
 assert 'lv_obj_delete(old_screen);' not in ui
 assert 'build_debug();' in ui and 'page == 14' in ui
 assert 'lf_diag_snapshot(&d);' in ui and 'lf_ui_max_tick_gap_ms' in ui
@@ -27,8 +29,8 @@ for key in ['font_style','font_size','ring_mode','show_date','weather','backgrou
     assert key in web and key in net, key
 assert 'microphone' in net and 'recent_errors' in net
 assert 'uxTaskGetNumberOfTasks' in diag
-assert '0.8.1-alpha' in (p/'main/version.h').read_text()
-assert 'set(PROJECT_VER "0.8.1-alpha")' in (p/'CMakeLists.txt').read_text()
+assert '0.8.2-alpha' in (p/'main/version.h').read_text()
+assert 'set(PROJECT_VER "0.8.2-alpha")' in (p/'CMakeLists.txt').read_text()
 assert 'ESP-IDF image descriptor version' in (p/'tools/check_build.py').read_text()
-assert 'LyricFlash-Alpha-0.8.1-FULL-USB-and-OTA-UNTESTED' in workflow
+assert 'LyricFlash-Alpha-0.8.2-FULL-USB-and-OTA-UNTESTED' in workflow
 print('PASS: Alpha 0.8 diagnostics, local settings auth and navigation gates')
