@@ -441,3 +441,13 @@ require('lv_event_get_scroll_anim(e)' in ui and
         'lv_obj_invalidate(clock_scene);' in ui and
         'current-primary_pager_snap_started_ms>700' in watchdog,
         "Fast pager snap and retained Clock recovery contract")
+
+# 0.8.28: grow only PSRAM LVGL raster strips while keeping known-good
+# DMA/transport settings. Never let SPI max-transfer SRAM scale to 96 rows.
+require('LVGL_BUFFER_HEIGHT_PSRAM (96)' in bsp and
+        'BSP_LCD_SPI_TRANSFER_ROWS (24)' in bsp and
+        'BSP_LCD_H_RES * BSP_LCD_SPI_TRANSFER_ROWS * BSP_LCD_BITS_PER_PIXEL / 8' in bsp and
+        'BSP_LCD_DMA_STAGING_ROWS (4)' in bsp and
+        'CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1' in sdk and
+        'lv_obj_invalidate(clock_scene);' in ui,
+        "0.8.28 PSRAM raster buffer performance experiment preserves DMA/Clock safety")
