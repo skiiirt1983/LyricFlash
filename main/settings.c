@@ -1,6 +1,7 @@
 #include "settings.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include <stdio.h>
 
 static uint8_t in_range(uint8_t n, uint8_t lo, uint8_t hi, uint8_t def)
 {
@@ -33,6 +34,14 @@ void lf_settings_defaults(lf_settings_t *s)
         .basic_ring_c = 0x20C9D4,
         .show_progress = 1
     };
+    static const uint32_t b[6]={0x070F14,0x030815,0x080C13,0xA7C7A0,0xC8BB94,0x030810};
+    static const uint32_t f[6]={0xD8ECE9,0xEDF7FF,0xE5EDF8,0x162C1F,0x332719,0xF0F8FF};
+    static const uint32_t a[6]={0x40C0E6,0x7DCEFF,0x6DBFFF,0x364641,0xA88E55,0x268BFF};
+    for (unsigned i=0;i<6;i++){
+        s->face_background[i]=b[i];s->face_foreground[i]=f[i];
+        s->face_accent[i]=a[i];s->face_show_date[i]=1;
+        s->face_show_seconds[i]=1;s->face_show_battery[i]=1;s->face_24h[i]=0;
+    }
 }
 
 esp_err_t lf_settings_load(lf_settings_t *s)
@@ -84,6 +93,16 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     (void)nvs_get_u32(h, "ring0", &s->basic_ring_a);
     (void)nvs_get_u32(h, "ring1", &s->basic_ring_b);
     (void)nvs_get_u32(h, "ring2", &s->basic_ring_c);
+    if(schema >= 7) for(unsigned i=0;i<6;i++) {
+        char key[13];
+        snprintf(key,sizeof key,"f%ubg",i);(void)nvs_get_u32(h,key,&s->face_background[i]);
+        snprintf(key,sizeof key,"f%ufg",i);(void)nvs_get_u32(h,key,&s->face_foreground[i]);
+        snprintf(key,sizeof key,"f%uac",i);(void)nvs_get_u32(h,key,&s->face_accent[i]);
+        snprintf(key,sizeof key,"f%udt",i);(void)nvs_get_u8(h,key,&s->face_show_date[i]);
+        snprintf(key,sizeof key,"f%usc",i);(void)nvs_get_u8(h,key,&s->face_show_seconds[i]);
+        snprintf(key,sizeof key,"f%ubt",i);(void)nvs_get_u8(h,key,&s->face_show_battery[i]);
+        snprintf(key,sizeof key,"f%u24",i);(void)nvs_get_u8(h,key,&s->face_24h[i]);
+    }
     nvs_close(h);
 
     s->brightness = in_range(s->brightness, 5, 100, 55);
@@ -109,6 +128,19 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     s->basic_ring_a &= 0xFFFFFF;
     s->basic_ring_b &= 0xFFFFFF;
     s->basic_ring_c &= 0xFFFFFF;
+    for(unsigned i=0;i<6;i++){
+        s->face_background[i]&=0xFFFFFF;
+        s->face_foreground[i]&=0xFFFFFF;
+        s->face_accent[i]&=0xFFFFFF;
+        s->face_show_date[i]=in_range(s->face_show_date[i],0,1,1);
+        s->face_show_seconds[i]=in_range(s->face_show_seconds[i],0,1,1);
+        s->face_show_battery[i]=in_range(s->face_show_battery[i],0,1,1);
+        s->face_24h[i]=in_range(s->face_24h[i],0,1,0);
+    }
+    /* For older settings, Basic face still uses its original saved palette. */
+    if(schema<7){s->face_background[5]=s->basic_background;
+                 s->face_foreground[5]=s->basic_foreground;
+                 s->face_show_date[5]=s->basic_show_date;}
     return ESP_OK;
 }
 
@@ -140,6 +172,16 @@ esp_err_t lf_settings_save(const lf_settings_t *s)
     TRY_NVS(nvs_set_u32(h, "ring0", s->basic_ring_a));
     TRY_NVS(nvs_set_u32(h, "ring1", s->basic_ring_b));
     TRY_NVS(nvs_set_u32(h, "ring2", s->basic_ring_c));
+    for(unsigned i=0;i<6;i++){
+        char key[13];
+        snprintf(key,sizeof key,"f%ubg",i);TRY_NVS(nvs_set_u32(h,key,s->face_background[i]));
+        snprintf(key,sizeof key,"f%ufg",i);TRY_NVS(nvs_set_u32(h,key,s->face_foreground[i]));
+        snprintf(key,sizeof key,"f%uac",i);TRY_NVS(nvs_set_u32(h,key,s->face_accent[i]));
+        snprintf(key,sizeof key,"f%udt",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_date[i]));
+        snprintf(key,sizeof key,"f%usc",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_seconds[i]));
+        snprintf(key,sizeof key,"f%ubt",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_battery[i]));
+        snprintf(key,sizeof key,"f%u24",i);TRY_NVS(nvs_set_u8(h,key,s->face_24h[i]));
+    }
     TRY_NVS(nvs_set_u32(h, "schema", LF_CONFIG_SCHEMA));
     err = nvs_commit(h);
 close_nvs:
