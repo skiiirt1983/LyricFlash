@@ -130,6 +130,11 @@ require(abs(old_top-new_top) < 0.00001,
         "New 100% lyric scroll cap does not equal old 35%")
 require("lv_label_set_long_mode(s_text,LV_LABEL_LONG_CLIP)" in ui,
         "Clock settings dialog long label not protected")
+require("nav_settle(direction)" in ui and
+        "lv_obj_set_style_translate_x(screen,amount,0);" in ui and
+        "lv_anim_set_duration(&a,175);" in ui and
+        "lv_anim_delete(old_screen,nav_translate_x);" in ui,
+        "Swipe must move with finger and settle without overlapping screens")
 require("page == 2" in ui and "case 7:" in ui,
         "Swipe back-navigation omits settings screens")
 settings_nav = ui.split("else if (page == 2)", 1)
