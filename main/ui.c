@@ -226,7 +226,10 @@ static void build_clock_settings(void);
 
 static bool is_swipe_page(void)
 {
-    return page == 0 || page == 6 || page == 11 || page == 14;
+    return page == 0 || page == 1 || page == 2 || page == 4 ||
+           page == 5 || page == 6 || page == 7 || page == 8 ||
+           page == 9 || page == 10 || page == 11 || page == 12 ||
+           page == 13 || page == 14 || page == 15;
 }
 
 static void commit_swipe(void *arg)
@@ -240,6 +243,16 @@ static void commit_swipe(void *arg)
     case 6: build_clock(); break;
     case 11: build_weather_details(); break;
     case 14: build_debug(); break;
+    case 1: build_preview(); break;
+    case 4: build_wifi(); break;
+    case 5: build_wifi_password(); break;
+    case 7: build_clock_settings(); break;
+    case 8: build_weather_location(); break;
+    case 9: build_lyrics_settings(); break;
+    case 10: build_device_settings(); break;
+    case 12: build_basic_settings(); break;
+    case 13: build_basic_colour(); break;
+    case 15: build_connection_help(); break;
     default: break;
     }
 }
@@ -276,12 +289,24 @@ static void swipe_intent(lv_dir_t direction)
             swipe_candidate_page = 11;
             swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_TOP;
         }
-    } else if (page == 14 && direction == LV_DIR_TOP) {
+    } else if (page == 14 && (direction == LV_DIR_TOP || direction == LV_DIR_RIGHT)) {
         swipe_candidate_page = 0;
-        swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_TOP;
-    } else if (page == 11 && direction == LV_DIR_BOTTOM) {
+        swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
+    } else if (page == 11 && (direction == LV_DIR_BOTTOM || direction == LV_DIR_RIGHT)) {
         swipe_candidate_page = 6;
-        swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_BOTTOM;
+        swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
+    } else if (direction == LV_DIR_RIGHT) {
+        /* Consistent Back from every settings submenu. */
+        switch(page) {
+        case 1: case 2: case 15: swipe_candidate_page=0; break;
+        case 4: case 9: case 10: swipe_candidate_page=2; break;
+        case 5: swipe_candidate_page=4; break;
+        case 7: swipe_candidate_page=6; break;
+        case 8: case 12: swipe_candidate_page=7; break;
+        case 13: swipe_candidate_page=12; break;
+        default: break;
+        }
+        swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
     }
     if (swipe_candidate_page >= 0)
         touch_pressed_at_ms = 0; /* Never treat a swipe as a settings hold. */
@@ -410,8 +435,19 @@ static void show_clock_settings_popup(void)
     lv_obj_set_style_text_font(sub,&lv_font_montserrat_16,0);
     lv_obj_set_style_text_color(sub,lv_color_hex(0xBDD4E8),0);
     lv_obj_align(sub,LV_ALIGN_TOP_MID,0,60);
-    button(panel,"CANCEL",125,50,-72,68,0xB4C7DB,on_popup_cancel,NULL);
-    button(panel,"SETTINGS",125,50,72,68,0x82C8FF,on_popup_settings,NULL);
+    lv_obj_t *cancel = button(panel,"CANCEL",125,50,-72,68,0xB4C7DB,on_popup_cancel,NULL);
+    lv_obj_t *settings = button(panel,"SETTINGS",125,50,72,68,0x82C8FF,on_popup_settings,NULL);
+    /* Fixed action font so the longer SETTINGS label never wraps at 24pt. */
+    lv_obj_t *c_text=lv_obj_get_child(cancel,0);
+    lv_obj_t *s_text=lv_obj_get_child(settings,0);
+    if(c_text) {
+        lv_obj_set_style_text_font(c_text,&lv_font_montserrat_16,0);
+        lv_label_set_long_mode(c_text,LV_LABEL_LONG_CLIP);
+    }
+    if(s_text) {
+        lv_obj_set_style_text_font(s_text,&lv_font_montserrat_16,0);
+        lv_label_set_long_mode(s_text,LV_LABEL_LONG_CLIP);
+    }
 }
 /* Heavy full-screen slide animations caused jitter with complex faces.
    Swap atomically to minimize extra redraw and memory pressure. */
