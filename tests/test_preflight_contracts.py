@@ -264,7 +264,7 @@ require('lv_obj_add_event_cb(ring,draw_basic_ring,LV_EVENT_DRAW_MAIN' in basic a
         'lv_draw_arc(layer,&arc);' in basic and
         'lv_arc_create(parent)' not in basic,
         "Basic Clock must not build a 30-widget ring")
-require('if(!pager_render_target) {\n        lf_weather_visual_clear();\n        lf_clock_clear();' in ui,
+require(re.search(r'if\(!pager_render_target\)\s*\{[^}]*lf_weather_visual_clear\(\);\s*lf_clock_clear\(\);', ui) is not None,
         "Cached Clock must not clear while building Home or Settings")
 
 # Delayed acceptance of a booted OTA image must follow sustained UI ticks,
