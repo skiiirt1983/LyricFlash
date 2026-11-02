@@ -114,6 +114,9 @@ require('"/firmware"' in network and '"/api/install"' in network
 require("/api/install" in pages["firmware"]
         and "skiiirt1983.github.io/LyricFlash/beta/catalog.json" in pages["firmware"],
         "GitHub build selector not linked to install endpoint")
+require("select.disabled=!entries.length;el('install').disabled=true;" in pages["firmware"]
+        and "selection===''?null" in pages["firmware"],
+        "OTA install button must require an explicit version selection")
 require("lf_weather_save_config" in network and "xTaskNotifyGive(weather_task)" in weather,
         "Weather refresh on save missing")
 require("weather_numeric_valid = false;" in weather and
@@ -142,7 +145,7 @@ require(len(settings_nav) == 2 and
         "LV_DIR_LEFT || direction == LV_DIR_RIGHT" in settings_nav[1].split("else if (page == 6)", 1)[0] and
         "swipe_candidate_page = 0;" in settings_nav[1].split("else if (page == 6)", 1)[0],
         "Settings page must swipe home in both horizontal directions")
-require("lf-mark" in pages["settings"] and "lf-mark" in pages["firmware"],
+require('class="lf-mark"' in pages["settings"] and 'class="lf-mark"' in pages["firmware"],
         "LyricFlash logo/header branding missing")
 require('class="subnav"' in pages["settings"], "Settings section menu missing")
 for key in ("network", "clocks", "lyrics", "device", "status-section"):
