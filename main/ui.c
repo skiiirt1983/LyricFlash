@@ -234,6 +234,9 @@ static lv_point_t gesture_origin;
 static lv_indev_t *gesture_indev;
 static bool gesture_origin_valid;
 static bool touch_held;
+/* An active slider drag owns the pointer until physical release. */
+static bool slider_touch_active;
+static lv_indev_t *slider_touch_indev;
 static uint64_t touch_pressed_at_ms;
 static int pending_swipe_page = -1;
 static lv_screen_load_anim_t pending_swipe_direction = LV_SCR_LOAD_ANIM_NONE;
@@ -367,7 +370,7 @@ static void swipe_intent(lv_dir_t direction)
 
 static void observe_touch_position(void)
 {
-    if (!touch_held || !gesture_origin_valid || !gesture_indev) return;
+    if (slider_touch_active || !touch_held || !gesture_origin_valid || !gesture_indev) return;
     lv_point_t current={0};
     lv_indev_get_point(gesture_indev, &current);
     int dx=current.x-gesture_origin.x;
@@ -388,7 +391,7 @@ static void observe_touch_position(void)
 
 static void finish_touch(void)
 {
-    if (!touch_held) return;
+    if (!touch_held || slider_touch_active) return;
     observe_touch_position();
     const int target=swipe_candidate_page;
     const lv_screen_load_anim_t animation=swipe_candidate_animation;
@@ -405,7 +408,7 @@ static void finish_touch(void)
 static void on_gesture_press(lv_event_t *e)
 {
     (void)e;
-    if (!is_swipe_page() || clock_settings_popup || touch_held) return;
+    if (!is_swipe_page() || slider_touch_active || clock_settings_popup || touch_held) return;
     lv_indev_t *indev=lv_indev_active();
     if (!indev || lv_indev_get_type(indev)!=LV_INDEV_TYPE_POINTER) return;
     gesture_indev=indev;
@@ -425,7 +428,7 @@ static void on_touch_pressing(lv_event_t *e)
 static void on_lvgl_gesture(lv_event_t *e)
 {
     (void)e;
-    if (!touch_held || !gesture_origin_valid || clock_settings_popup) return;
+    if (slider_touch_active || !touch_held || !gesture_origin_valid || clock_settings_popup) return;
     lv_indev_t *indev=lv_indev_active();
     if (!indev || indev!=gesture_indev) return;
     /* LVGL recognizes quick swipes even if the release arrives at a new
@@ -511,8 +514,10 @@ static void show_clock_settings_popup(void)
 static void make_base(void)
 {
     lv_obj_t *old_screen=pager_render_target ? NULL : lv_screen_active();
-    lf_weather_visual_clear();
-    lf_clock_clear();
+    if(!pager_render_target) {
+        lf_weather_visual_clear();
+        lf_clock_clear();
+    }
     if(pager_render_target) {
         /* Build a cached core page without ever loading another screen. */
         screen=pager_render_target;
@@ -856,11 +861,42 @@ static void on_color(lv_event_t *e)
     save_settings();
     build_lyrics_settings();
 }
+/* Protect value adjustment from the ancestor screen's swipe callbacks. */
+static void slider_touch_event(lv_event_t *e)
+{
+    lv_event_code_t code=lv_event_get_code(e);
+    if(code==LV_EVENT_PRESSED) {
+        slider_touch_active=true;
+        slider_touch_indev=lv_indev_active();
+        touch_held=false;
+        gesture_origin_valid=false;
+        gesture_indev=NULL;
+        swipe_candidate_page=-1;
+        touch_pressed_at_ms=0;
+        if(pager_scroll && lv_screen_active()==pager_root)
+            lv_obj_set_scroll_dir(pager_scroll,LV_DIR_NONE);
+    } else if(code==LV_EVENT_RELEASED) {
+        slider_touch_active=false;
+        slider_touch_indev=NULL;
+        if(pager_scroll && lv_screen_active()==pager_root)
+            lv_obj_set_scroll_dir(pager_scroll,LV_DIR_HOR);
+        activity();
+    }
+    /* Do not clear ownership at PRESS_LOST; the finger can leave the track. */
+}
+static void protect_slider(lv_obj_t *s)
+{
+    lv_obj_remove_flag(s,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_remove_flag(s,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(s,slider_touch_event,LV_EVENT_PRESSED,NULL);
+    lv_obj_add_event_cb(s,slider_touch_event,LV_EVENT_RELEASED,NULL);
+}
 static void add_slider(lv_obj_t *parent, int y, int value,
                        int min, int max, lv_event_cb_t cb)
 {
     lv_obj_t *s = lv_slider_create(parent);
-    lv_obj_set_size(s, 262, 11);
+    protect_slider(s);
+    lv_obj_set_size(s, 262, 21);
     lv_obj_align(s, LV_ALIGN_TOP_MID, 0, y);
     lv_slider_set_range(s, min, max);
     lv_slider_set_value(s, value, LV_ANIM_OFF);
@@ -1353,7 +1389,8 @@ static void build_basic_settings(void)
     lv_obj_set_style_text_font(basic_font_size_label, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(basic_font_size_label, lv_color_hex(0xD2E7FD), 0);
     lv_obj_t *slider=lv_slider_create(list);
-    lv_obj_set_size(slider, 249, 14);
+    protect_slider(slider);
+    lv_obj_set_size(slider, 249, 21);
     lv_slider_set_range(slider, 0, 100);
     lv_slider_set_value(slider, prefs->basic_font_size, LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_VALUE_CHANGED, NULL);
@@ -1549,9 +1586,17 @@ static void on_tick(lv_timer_t *timer)
             wake_ptr=lv_indev_get_next(wake_ptr);
         }
     }
-    /* Collect touch directly from the hardware input device, including
-       gestures beginning over Weather's scrolling forecast children. */
-    if (!asleep && !touch_held && is_swipe_page() && !clock_settings_popup) {
+    /* Release the gesture lock even if LVGL does not send RELEASED. */
+    if(slider_touch_active && slider_touch_indev &&
+       lv_indev_get_state(slider_touch_indev)==LV_INDEV_STATE_RELEASED) {
+        slider_touch_active=false;
+        slider_touch_indev=NULL;
+        if(pager_scroll && lv_screen_active()==pager_root)
+            lv_obj_set_scroll_dir(pager_scroll,LV_DIR_HOR);
+    }
+    /* Collect gestures starting over forecast panels without stealing
+       touches currently owned by a value slider. */
+    if (!asleep && !slider_touch_active && !touch_held && is_swipe_page() && !clock_settings_popup) {
         lv_indev_t *ptr=lv_indev_get_next(NULL);
         while(ptr) {
             if(lv_indev_get_type(ptr)==LV_INDEV_TYPE_POINTER &&

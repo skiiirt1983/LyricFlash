@@ -248,3 +248,20 @@ require(bool(re.search(r'id=["\']clock-preview["\']|<canvas\b',
                        pages["studio"], flags=re.I)),
         "Clock Studio still lacks the agreed live preview")
 print(f"PASS: {tests_passed} source-only LyricFlash preflight assertions")
+
+# Operational regressions: slider touch owns its pointer, Basic ring is a
+# single draw object, cached Clock survives Home/Settings initialization.
+ui=read("main/ui.c")
+basic=read("main/basic_clock.c")
+require('slider_touch_active' in ui and
+        'protect_slider(s);' in ui and
+        'protect_slider(slider);' in ui and
+        'lv_obj_set_scroll_dir(pager_scroll,LV_DIR_NONE);' in ui and
+        'if (!asleep && !slider_touch_active && !touch_held' in ui,
+        "Sliders must never trigger screen navigation")
+require('lv_obj_add_event_cb(ring,draw_basic_ring,LV_EVENT_DRAW_MAIN' in basic and
+        'lv_draw_arc(layer,&arc);' in basic and
+        'lv_arc_create(parent)' not in basic,
+        "Basic Clock must not build a 30-widget ring")
+require('if(!pager_render_target) {\n        lf_weather_visual_clear();\n        lf_clock_clear();' in ui,
+        "Cached Clock must not clear while building Home or Settings")
