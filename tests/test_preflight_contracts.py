@@ -112,7 +112,7 @@ require("allowed_github_ota_url" in network and "handle_github_install" in netwo
 require('"/firmware"' in network and '"/api/install"' in network
         and '"/settings"' in network, "Expected device Web UI routes missing")
 require("/api/install" in pages["firmware"]
-        and "skiiirt1983.github.io/LyricFlash/beta/catalog.json" in pages["firmware"],
+        and "skiiirt1983.github.io/LyricFlash/beta/" in pages["firmware"] and "catalog.json" in pages["firmware"],
         "GitHub build selector not linked to install endpoint")
 require("selector.disabled=!entries.length;el('install').disabled=true;" in pages["firmware"]
         and "selection===''?null" in pages["firmware"],
