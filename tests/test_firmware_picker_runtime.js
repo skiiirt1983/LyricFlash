@@ -40,7 +40,7 @@ async function fetchStub(url,opts={}){
  if(url.includes("api.github.com/repos/skiiirt1983/LyricFlash/releases")){
    if(phase!==2)return makeResponse([]);
    return makeResponse([{tag_name:"alpha-build-abc123456789",draft:false,prerelease:true,
-      published_at:"2026-11-02T22:00:00Z",body:"LyricFlash-OTA-Version: 0.8.8-alpha\\nLyricFlash-OTA-Direct: https://raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/alpha-build-abc123456789/lyricflash-ota.bin",
+      published_at:"2026-11-02T22:00:00Z",body:"LyricFlash-OTA-Version: 0.8.8-alpha\nLyricFlash-OTA-Direct: https://raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/alpha-build-abc123456789/lyricflash-ota.bin",
       assets:[{name:"lyricflash-ota.bin",size:2100000,
        browser_download_url:"https://github.com/skiiirt1983/LyricFlash/releases/download/alpha-build-abc123456789/lyricflash-ota.bin"}]}]);
  }
