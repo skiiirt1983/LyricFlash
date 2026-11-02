@@ -308,6 +308,22 @@ static bool touch_held;
 static uint64_t touch_pressed_at_ms;
 static int pending_swipe_page = -1;
 static lv_screen_load_anim_t pending_swipe_direction = LV_SCR_LOAD_ANIM_NONE;
+/* One LVGL root; pace partial QSPI refreshes during directional page reveal. */
+static lv_screen_load_anim_t nav_transition_hint = LV_SCR_LOAD_ANIM_NONE;
+static lv_timer_t *nav_transition_timer;
+static lv_obj_t *nav_transition_catcher;
+static lv_obj_t *nav_transition_edge;
+static bool nav_transition_active;
+static uint8_t nav_transition_step;
+static int32_t nav_transition_cursor;
+static lv_screen_load_anim_t nav_transition_dir;
+static uint64_t nav_transition_started_ms;
+static atomic_uint nav_transition_completed_count;
+static atomic_uint nav_transition_last_ms;
+#define LF_NAV_REVEAL_STEPS 16
+#define LF_NAV_REVEAL_PERIOD_MS 22
+#define LF_NAV_PANEL_SIZE 466
+
 /* No dual-screen animation: 0.8.3 left old/new UI trees overlapping
    during navigation and made the touch target inconsistent. */
 static uint64_t screen_animation_until_ms;
@@ -341,6 +357,7 @@ static void commit_swipe(void *arg)
 {
     (void)arg;
     const int target = pending_swipe_page;
+    nav_transition_hint = pending_swipe_direction;
     pending_swipe_page = -1;
     pending_swipe_direction = LV_SCR_LOAD_ANIM_NONE;
     switch(target) {
@@ -1459,6 +1476,7 @@ static void on_tick(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
+    if (nav_transition_active) return; /* No UI activity until reveal completes. */
     /* Polling fallback for wake when the cover misses a press. A wake touch
        must never trigger navigation or click the previously shown buttons. */
     if(asleep) {
@@ -1625,26 +1643,145 @@ static void on_tick(lv_timer_t *timer)
 static void on_clock_sweep(lv_timer_t *timer)
 {
     (void)timer;
-    if (page == 6 && !pager_scrolling && !asleep && !touch_held && !clock_settings_popup && now_ms() >= screen_animation_until_ms) lf_clock_animate();
+    if (page == 6 && !nav_transition_active && !pager_scrolling && !asleep && !touch_held && !clock_settings_popup && now_ms() >= screen_animation_until_ms) lf_clock_animate();
 }
 
-/* Navigation dispatcher: no page creation/deletion during a touch callback.
-   A subsequent request replaces the pending one so a single touch cannot
-   queue overlapping scene rebuilds. */
+/* Deliberately NOT PrintSphere's multi-page scroller. CO5300 keeps the
+   departing pixels in panel GRAM while we build the new scene with LVGL
+   invalidation disabled. Only the newly revealed strips are transferred.
+   This prevents N entire-frame flushes during an N-frame transition.
+   Exactly one LVGL screen stays active, preserving 0.8.19 touch safety. */
+static void nav_transition_end(bool interrupted)
+{
+    if (!nav_transition_active) return;
+    nav_transition_active=false;
+    if(nav_transition_timer) {
+        lv_timer_delete(nav_transition_timer);
+        nav_transition_timer=NULL;
+    }
+    lv_display_t *disp=lv_display_get_default();
+    bool enabled=disp && lv_display_is_invalidation_enabled(disp);
+    if(enabled) lv_display_enable_invalidation(disp,false);
+    if(nav_transition_edge){lv_obj_delete(nav_transition_edge);nav_transition_edge=NULL;}
+    if(nav_transition_catcher){lv_obj_delete(nav_transition_catcher);nav_transition_catcher=NULL;}
+    if(enabled) lv_display_enable_invalidation(disp,true);
+    if(screen) {
+        if(interrupted) lv_obj_invalidate(screen);
+        else {
+            /* Erase the final accent edge using a narrow, aligned redraw. */
+            lv_area_t edge={0,0,465,465};
+            switch(nav_transition_dir){
+                case LV_SCR_LOAD_ANIM_OVER_LEFT:edge.x2=7;break;
+                case LV_SCR_LOAD_ANIM_OVER_TOP:edge.y2=7;break;
+                case LV_SCR_LOAD_ANIM_OVER_BOTTOM:edge.y1=458;break;
+                default:edge.x1=458;break;
+            }
+            lv_obj_invalidate_area(screen,&edge);
+        }
+    }
+    atomic_fetch_add(&nav_transition_completed_count,1);
+    atomic_store(&nav_transition_last_ms,(uint32_t)(now_ms()-nav_transition_started_ms));
+}
+static void nav_transition_tick(lv_timer_t *timer)
+{
+    (void)timer;
+    if(!nav_transition_active||!screen)return;
+    if(nav_transition_step>=LF_NAV_REVEAL_STEPS){nav_transition_end(false);return;}
+    nav_transition_step++;
+    /* Integer smoothstep eased 0..1024, 64-bit arithmetic avoids overflow. */
+    int64_t t=(int64_t)nav_transition_step*1024/LF_NAV_REVEAL_STEPS;
+    int64_t eased=t*t*(3072-2*t)/(1024*1024);
+    int32_t next=(int32_t)(eased*LF_NAV_PANEL_SIZE/1024);
+    if(nav_transition_step==LF_NAV_REVEAL_STEPS)next=LF_NAV_PANEL_SIZE;
+    if(next<=nav_transition_cursor)next=nav_transition_cursor+1;
+    if(next>LF_NAV_PANEL_SIZE)next=LF_NAV_PANEL_SIZE;
+    const int32_t prev=nav_transition_cursor;
+    const bool vertical=nav_transition_dir==LV_SCR_LOAD_ANIM_OVER_TOP||
+                        nav_transition_dir==LV_SCR_LOAD_ANIM_OVER_BOTTOM;
+    const bool reverse=nav_transition_dir==LV_SCR_LOAD_ANIM_OVER_LEFT||
+                       nav_transition_dir==LV_SCR_LOAD_ANIM_OVER_TOP;
+    lv_area_t region={0,0,LF_NAV_PANEL_SIZE-1,LF_NAV_PANEL_SIZE-1};
+    if(vertical){
+        region.y1=reverse?LF_NAV_PANEL_SIZE-next:prev;
+        region.y2=reverse?LF_NAV_PANEL_SIZE-prev-1:next-1;
+    }else{
+        region.x1=reverse?LF_NAV_PANEL_SIZE-next:prev;
+        region.x2=reverse?LF_NAV_PANEL_SIZE-prev-1:next-1;
+    }
+    nav_transition_cursor=next;
+    lv_obj_invalidate_area(screen,&region);
+    if(nav_transition_edge){
+        int32_t pos=(reverse?LF_NAV_PANEL_SIZE-next:next)-3;
+        if(vertical)lv_obj_set_y(nav_transition_edge,pos);
+        else lv_obj_set_x(nav_transition_edge,pos);
+    }
+    if(next==LF_NAV_PANEL_SIZE)nav_transition_end(false);
+}
+static void nav_transition_begin(lv_screen_load_anim_t direction)
+{
+    if(!screen || !lv_display_get_default()){
+        if(screen)lv_obj_invalidate(screen);
+        return;
+    }
+    nav_transition_dir=direction;
+    if(direction!=LV_SCR_LOAD_ANIM_OVER_LEFT && direction!=LV_SCR_LOAD_ANIM_OVER_RIGHT &&
+       direction!=LV_SCR_LOAD_ANIM_OVER_TOP && direction!=LV_SCR_LOAD_ANIM_OVER_BOTTOM)
+        nav_transition_dir=LV_SCR_LOAD_ANIM_OVER_LEFT;
+    nav_transition_active=true;
+    nav_transition_step=0;
+    nav_transition_cursor=0;
+    nav_transition_started_ms=now_ms();
+    lv_display_t *disp=lv_display_get_default();
+    lv_display_enable_invalidation(disp,false);
+    nav_transition_catcher=lv_obj_create(screen);
+    lv_obj_set_size(nav_transition_catcher,466,466);
+    lv_obj_center(nav_transition_catcher);
+    lv_obj_set_style_bg_opa(nav_transition_catcher,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(nav_transition_catcher,0,0);
+    lv_obj_set_style_radius(nav_transition_catcher,0,0);
+    lv_obj_remove_flag(nav_transition_catcher,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(nav_transition_catcher,LV_OBJ_FLAG_CLICKABLE);
+    nav_transition_edge=lv_obj_create(screen);
+    bool vertical=nav_transition_dir==LV_SCR_LOAD_ANIM_OVER_TOP||
+                  nav_transition_dir==LV_SCR_LOAD_ANIM_OVER_BOTTOM;
+    lv_obj_set_size(nav_transition_edge,vertical?466:6,vertical?6:466);
+    lv_obj_set_style_bg_color(nav_transition_edge,lv_color_hex(prefs->accent_color),0);
+    lv_obj_set_style_bg_opa(nav_transition_edge,LV_OPA_60,0);
+    lv_obj_set_style_border_width(nav_transition_edge,0,0);
+    lv_obj_set_style_radius(nav_transition_edge,3,0);
+    lv_obj_remove_flag(nav_transition_edge,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(nav_transition_edge,LV_OBJ_FLAG_SCROLLABLE);
+    if(vertical)lv_obj_set_y(nav_transition_edge,0);
+    else lv_obj_set_x(nav_transition_edge,0);
+    lv_display_enable_invalidation(disp,true);
+    nav_transition_timer=lv_timer_create(nav_transition_tick,LF_NAV_REVEAL_PERIOD_MS,NULL);
+    if(!nav_transition_timer)nav_transition_end(true);
+}
+/* Deferred scene construction, with all LVGL modifications on its owning task. */
 static void nav_drain(void *arg)
 {
     (void)arg;
     nav_queued=false;
     void (*target)(void)=nav_pending;
     nav_pending=NULL;
-    if(target) {
-        target();
-        atomic_fetch_add(&ui_nav_count,1);
-        /* The scene rebuild already invalidates affected LVGL areas.
-           The 0.8.15 forced full-root invalidation was a failed workaround
-           for the old display driver: avoid transmitting it again after
-           every page switch. Keep explicit wake/startup repaints. */
+    if(!target)return;
+    if(nav_transition_active)nav_transition_end(true);
+    int previous_page=page;
+    lv_screen_load_anim_t direction=nav_transition_hint;
+    nav_transition_hint=LV_SCR_LOAD_ANIM_NONE;
+    if(direction==LV_SCR_LOAD_ANIM_NONE)
+        direction=(previous_page==6 || previous_page==11 || previous_page==7)
+                    ? LV_SCR_LOAD_ANIM_OVER_RIGHT : LV_SCR_LOAD_ANIM_OVER_LEFT;
+    lv_display_t *disp=lv_display_get_default();
+    if(disp&&screen)lv_display_enable_invalidation(disp,false);
+    target();
+    if(disp&&screen){
+        lv_obj_update_layout(screen);
+        lv_display_enable_invalidation(disp,true);
     }
+    atomic_fetch_add(&ui_nav_count,1);
+    if(disp&&screen&&previous_page!=page&&!asleep)nav_transition_begin(direction);
+    else if(screen)lv_obj_invalidate(screen);
 }
 static void nav_schedule(void (*target)(void))
 {

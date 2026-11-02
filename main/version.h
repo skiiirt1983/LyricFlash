@@ -1,9 +1,8 @@
 #pragma once
-/* 0.8.19 experimental warm-clock scene and single-object Basic ring.
-   Retains hardware-verified 0.8.17/0.8.18 CO5300 display transport:
-   TE disabled, PSRAM DMA staging, one QSPI transaction, LVGL core 1.
-   Wi-Fi, settings persistence, OTA and partition layout unchanged.
-   Hardware performance/stability still require testing. */
-#define LF_VERSION "0.8.19-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.19"
-/* 0.8.19 scene cache compile checkpoint: source preflight and diff audit passed. */
+/* 0.8.20 experimental panel-paced directional screen reveals on the safe
+   single LVGL root. Cached Basic Clock from hardware-proven 0.8.19 retained.
+   Hardware driver unchanged: CO5300, QSPI DMA staging, TE disabled, queue=1.
+   Wi-Fi, battery, OTA transport, NVS/settings and partitions unchanged.
+   Hardware rendering/gesture regression tests required. */
+#define LF_VERSION "0.8.20-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.20"

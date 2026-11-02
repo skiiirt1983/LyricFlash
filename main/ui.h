@@ -28,5 +28,7 @@ typedef struct {
     uint32_t clock_build_max_ms;
     uint32_t clock_present_last_ms;
     uint32_t clock_present_max_ms;
+    uint32_t nav_reveal_completions;
+    uint32_t nav_reveal_last_ms;
 } lf_ui_display_stats_t;
 void lf_ui_display_stats(lf_ui_display_stats_t *out);

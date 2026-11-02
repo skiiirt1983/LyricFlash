@@ -343,3 +343,23 @@ for key in ('clock_scene_builds','clock_cache_hits','clock_build_last_ms',
             'clock_build_max_ms','clock_present_last_ms','clock_present_max_ms'):
     require('"' + key + '"' in network and key in read('main/ui.h'),
             "Clock load timing/scene cache diagnostics missing: "+key)
+
+# Single-root QSPI transition contract: never restore the broken multi-screen
+# flex pager and never animate two full 466px framebuffers at the same time.
+require('static void nav_transition_begin(' in ui and
+        'static void nav_transition_tick(' in ui and
+        'static void nav_transition_end(' in ui and
+        'lv_display_enable_invalidation(disp,false);' in ui and
+        'lv_display_enable_invalidation(disp,true);' in ui and
+        'lv_obj_invalidate_area(screen,&region);' in ui and
+        'LF_NAV_REVEAL_STEPS 16' in ui and
+        'nav_transition_catcher=lv_obj_create(screen);' in ui and
+        'if (nav_transition_active) return;' in ui and
+        'nav_transition_hint = pending_swipe_direction;' in ui and
+        'if(nav_transition_active)nav_transition_end(true);' in ui and
+        'lv_obj_update_layout(screen);' in ui,
+        "Panel-paced transition cannot safely update one LVGL root")
+require('nav_reveal_completions' in network and
+        'nav_reveal_last_ms' in network and
+        'nav_reveal_completions' in read('main/ui.h'),
+        "Missing page reveal timing diagnostics")

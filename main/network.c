@@ -532,6 +532,8 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "clock_build_max_ms", display_stats.clock_build_max_ms);
     cJSON_AddNumberToObject(root, "clock_present_last_ms", display_stats.clock_present_last_ms);
     cJSON_AddNumberToObject(root, "clock_present_max_ms", display_stats.clock_present_max_ms);
+    cJSON_AddNumberToObject(root, "nav_reveal_completions", display_stats.nav_reveal_completions);
+    cJSON_AddNumberToObject(root, "nav_reveal_last_ms", display_stats.nav_reveal_last_ms);
     lf_weather_config_t weather;
     lf_weather_get_config(&weather);
     cJSON_AddStringToObject(root, "weather_city", weather.city);
