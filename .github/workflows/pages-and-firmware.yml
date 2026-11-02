@@ -5,7 +5,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, fix/alpha-0-8-1-swipe-reboot]
+    branches: [main, feature/alpha-0-8-3-touch-clock-web-controls]
     paths:
       - 'docs/**'
       - 'main/**'
@@ -45,6 +45,7 @@ jobs:
           cp build/lyricflash-full.bin _site/beta/firmware/lyricflash-full.bin
           cp build/lyricflash.bin _site/beta/firmware/lyricflash-ota.bin
           python3 tools/prepare_site.py _site
+          python3 tools/create_preserve_usb.py _site
       - name: Mandatory full USB, OTA, manifest and ZIP release gate
         run: |
           python3 tools/package_release.py _site
@@ -52,10 +53,12 @@ jobs:
       - name: Upload complete USB and OTA release
         uses: actions/upload-artifact@v4
         with:
-          name: LyricFlash-Alpha-0.8.1-FULL-USB-and-OTA-UNTESTED
+          name: LyricFlash-Alpha-0.8.3-FULL-USB-and-OTA-UNTESTED
           path: |
             _site/beta/firmware/lyricflash-full.bin
             _site/beta/firmware/lyricflash-ota.bin
+            _site/beta/firmware/lyricflash-otadata-reset.bin
+            _site/beta/manifest-preserve.json
             _site/beta/firmware/SHA256SUMS.txt
             _site/beta/firmware/USB-INSTALL.txt
             _site/beta/firmware/LyricFlash-*.zip

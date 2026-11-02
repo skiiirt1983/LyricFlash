@@ -326,6 +326,8 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
     lf_weather_get_config(&weather);
     cJSON *root = cJSON_CreateObject();
     if (!root) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
+    cJSON_AddNumberToObject(root, "clock_face", s.clock_face);
+    cJSON_AddBoolToObject(root, "weather_enabled", weather.enabled);
     cJSON_AddNumberToObject(root, "font_style", s.basic_font_style);
     cJSON_AddNumberToObject(root, "font_size", s.basic_font_size);
     cJSON_AddNumberToObject(root, "ring_mode", s.basic_ring_mode);
@@ -375,10 +377,12 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid settings JSON");
         return ESP_FAIL;
     }
-    int font_style, font_size, ring_mode, bg, fg, a, b, c, interval;
-    uint8_t show_date, basic_weather;
+    int face, font_style, font_size, ring_mode, bg, fg, a, b, c, interval;
+    uint8_t show_date, basic_weather, weather_enabled;
     const cJSON *city = cJSON_GetObjectItemCaseSensitive(root, "city");
     bool valid =
+        number_in_range(root, "clock_face", 0, 5, &face) &&
+        boolean_value(root, "weather_enabled", &weather_enabled) &&
         number_in_range(root, "font_style", 0, 4, &font_style) &&
         number_in_range(root, "font_size", 0, 100, &font_size) &&
         number_in_range(root, "ring_mode", 0, 2, &ring_mode) &&
@@ -399,9 +403,10 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     }
     if (!valid) {
         cJSON_Delete(root);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid Basic clock settings");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid clock settings");
         return ESP_FAIL;
     }
+    current.clock_face = (uint8_t)face;
     current.basic_font_style = (uint8_t)font_style;
     current.basic_font_size = (uint8_t)font_size;
     current.basic_ring_mode = (uint8_t)ring_mode;
@@ -414,7 +419,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     current.basic_ring_c = (uint32_t)c;
     strlcpy(weather.city, city->valuestring, sizeof weather.city);
     weather.interval_minutes = (uint16_t)interval;
-    if (basic_weather) weather.enabled = true;
+    weather.enabled = weather_enabled != 0;
     cJSON_Delete(root);
 
     if (!lf_weather_save_config(&weather)) {
@@ -425,7 +430,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     esp_err_t err = lf_ui_apply_basic_settings(&current);
     if (err != ESP_OK) {
         lf_diag_error("settings", "UI lock or NVS save failed");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot save Basic clock settings");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot save clock settings");
         return ESP_FAIL;
     }
     cJSON *reply = cJSON_CreateObject();
@@ -496,6 +501,9 @@ static esp_err_t handle_info(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "ota_total", ota_total);
     cJSON_AddStringToObject(root, "connected_ssid", ssid);
     cJSON_AddStringToObject(root, "saved_ssid", saved);
+    cJSON_AddBoolToObject(root, "wifi_saved", saved[0] != 0);
+    cJSON_AddStringToObject(root, "setup_ssid", in_ap ? ap_ssid : "");
+    /* Never expose setup-network passwords via an unauthenticated HTTP API. */
     char *body = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (!body) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
@@ -510,7 +518,7 @@ static esp_err_t handle_device(httpd_req_t *req)
     esp_wifi_get_mac(in_ap?WIFI_IF_AP:WIFI_IF_STA,mac);
     char response[220];
     snprintf(response,sizeof(response),
-        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.8.1-alpha\","
+        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.8.3-alpha\","
         "\"device_id\":\"LF-%02X%02X%02X\",\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\"}",
         mac[3],mac[4],mac[5],mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
     httpd_resp_set_type(req,"application/json");
@@ -693,6 +701,8 @@ bool lf_network_start(void)
                 return serve();
             }
         }
+        ESP_LOGW(TAG,"Saved home Wi-Fi did not connect; offering setup AP (credentials retained)");
+        lf_diag_error("wifi", "Home network connection timed out; setup AP enabled");
         in_ap=true;
         esp_wifi_stop();
     }
@@ -701,7 +711,26 @@ bool lf_network_start(void)
     uint8_t mac[6]={0};
     esp_wifi_get_mac(WIFI_IF_STA,mac);
     snprintf(ap_ssid,sizeof ap_ssid,"LyricFlash-%02X%02X",mac[4],mac[5]);
-    snprintf(ap_pass,sizeof ap_pass,"LF%06" PRIu32,(uint32_t)(esp_random()%1000000u));
+    /* Keep the setup AP credential stable across reboots and OTA updates.
+       Never print it to logs; it is available only on the device screen. */
+    nvs_handle_t ap_store;
+    bool ap_key_loaded=false;
+    if (nvs_open("lf_network", NVS_READWRITE, &ap_store) == ESP_OK) {
+        size_t key_len=sizeof ap_pass;
+        if (nvs_get_str(ap_store,"ap_key",ap_pass,&key_len)==ESP_OK &&
+            strlen(ap_pass)>=8 && strlen(ap_pass)<=15) ap_key_loaded=true;
+        if (!ap_key_loaded) {
+            snprintf(ap_pass,sizeof ap_pass,"LF%08" PRIu32,
+                     (uint32_t)(esp_random()%100000000u));
+            if (nvs_set_str(ap_store,"ap_key",ap_pass)==ESP_OK)
+                (void)nvs_commit(ap_store);
+        }
+        nvs_close(ap_store);
+    } else {
+        snprintf(ap_pass,sizeof ap_pass,"LF%08" PRIu32,
+                 (uint32_t)(esp_random()%100000000u));
+        lf_diag_error("wifi","Setup AP key could not be saved in NVS");
+    }
     wifi_config_t apcfg={0};
     strlcpy((char *)apcfg.ap.ssid,ap_ssid,sizeof(apcfg.ap.ssid));
     strlcpy((char *)apcfg.ap.password,ap_pass,sizeof(apcfg.ap.password));

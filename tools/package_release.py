@@ -16,6 +16,8 @@ APP_DESC_MAGIC = bytes.fromhex("3254cdab")
 ZIP_MEMBERS = [
     "firmware/lyricflash-full.bin",
     "firmware/lyricflash-ota.bin",
+    "firmware/lyricflash-otadata-reset.bin",
+    "manifest-preserve.json",
     "firmware/SHA256SUMS.txt",
     "firmware/USB-INSTALL.txt",
     "manifest.json",
@@ -57,6 +59,34 @@ def validate(site):
     ):
         raise ValueError("Release BLOCKED: no complete USB image mapped to offset 0x0")
 
+    preserve_path = root / "manifest-preserve.json"
+    reset_path = root / "firmware/lyricflash-otadata-reset.bin"
+    if not preserve_path.is_file() or not reset_path.is_file():
+        raise ValueError("Release BLOCKED: Wi-Fi-preserving USB installation assets missing")
+    reset_bytes = reset_path.read_bytes()
+    if len(reset_bytes) != 0x2000 or any(v != 0xff for v in reset_bytes):
+        raise ValueError("Release BLOCKED: OTA selection reset image malformed")
+    preserve = json.loads(preserve_path.read_text())
+    if preserve.get("new_install_prompt_erase") is not True:
+        raise ValueError("Release BLOCKED: USB updater must offer explicit erase-or-keep choice")
+    if preserve.get("version") != embedded_version:
+        raise ValueError("Release BLOCKED: preserve-NVS manifest version mismatch")
+    builds = preserve.get("builds", [])
+    required = {(0x110000, "firmware/lyricflash-ota.bin"),
+                (0x109000, "firmware/lyricflash-otadata-reset.bin")}
+    selected = []
+    for build in builds:
+        if build.get("chipFamily") == "ESP32-S3":
+            selected.extend((part.get("offset"), part.get("path"))
+                            for part in build.get("parts", []))
+    if set(selected) != required or len(selected) != len(required):
+        raise ValueError("Release BLOCKED: Wi-Fi-preserving installer must write only app + OTA selection")
+    for start, name in selected:
+        length = len(ota) if "ota.bin" in name else len(reset_bytes)
+        if start < 0x109000 or start + length > 0x610000:
+            raise ValueError("Release BLOCKED: preserve-NVS update writes outside OTA partitions")
+        if start < 0x109000 and start + length > 0x9000:
+            raise ValueError("Release BLOCKED: preserve-NVS update overlaps saved Wi-Fi")
     return embedded_version, full_path, ota_path
 
 
@@ -75,6 +105,11 @@ def package(site):
         "Waveshare ESP32-S3 16 MB device.\n"
         "OTA: use firmware/lyricflash-ota.bin only in an already authorized LyricFlash updater.\n"
         "Do NOT flash the OTA-only image at 0x0.\n"
+        "Use manifest-preserve.json for an existing LyricFlash installation.\n"
+        "IMPORTANT: Choose KEEP DATA if the browser offers an erase prompt.\n"
+        "If KEEP is unavailable, cancel USB installation; it may otherwise wipe NVS.\n"
+        "This writes the app at 0x110000 and OTA-data reset at 0x109000, not the NVS region.\n"
+        "Use the full recovery image only if the preserve installation fails.\n"
         "The complete USB image overwrites existing NVS and OTA slot metadata, "
         "resetting saved Wi-Fi/device settings. No extra full-chip erase is needed.\n"
     )
