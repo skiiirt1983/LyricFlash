@@ -148,7 +148,10 @@ static const lv_font_t *font_for_size(uint8_t size)
     return size == 0 ? &lv_font_montserrat_18 :
            size == 2 ? &lv_font_montserrat_26 : &lv_font_montserrat_24;
 }
-static void apply_brightness(void) { (void)bsp_display_brightness_set(asleep ? 0 : prefs->brightness); }
+/* A CO5300 panel at brightness=0 stops its TE pulse. The black AMOLED
+   sleep overlay displays no light, while 1% keeps TE synchronization alive.
+   Do not pause LVGL inside its own timer/gesture dispatch. */
+static void apply_brightness(void) { (void)bsp_display_brightness_set(asleep ? 1 : prefs->brightness); }
 
 static void save_settings(void)
 {

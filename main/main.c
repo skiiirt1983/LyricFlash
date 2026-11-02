@@ -29,13 +29,13 @@ void app_main(void)
         lf_ota_guard_failure("Settings read failed");
         return;
     }
-    /* Keep the LVGL renderer on CPU 1, away from Wi-Fi and TCP/IP tasks.
-       We have NOT yet enabled TE synchronization: that requires the
-       matched CO5300 adapter/PSRAM DMA staging implementation. */
+    /* On-device AMOLED reference: TE-synchronized CO5300 QSPI panel,
+       staged DMA writes and LVGL isolated from Wi-Fi on CPU 1.
+       Never enable TE sync without the matched display driver. */
     bsp_display_cfg_t display_cfg = {
         .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
         .rotation = ESP_LV_ADAPTER_ROTATE_0,
-        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE,
+        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC,
         .touch_flags = { .swap_xy = 0, .mirror_x = 1, .mirror_y = 1 },
     };
     display_cfg.lv_adapter_cfg.task_core_id = 1;

@@ -20,6 +20,7 @@ idf_component_register(
         "wifi_json.c"
     INCLUDE_DIRS "."
     REQUIRES
+        esp32_s3_touch_amoled_1_75
         nvs_flash
         esp_timer
         app_update
