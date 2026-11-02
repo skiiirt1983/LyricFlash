@@ -247,3 +247,13 @@ require('build_home();' not in on_wake and 'make_base();' not in sleep and
         'lv_obj_delete_async(cover);' in on_wake and
         'if(asleep) {' in ui,
         "Wake must preserve the current page, not destroy the touch target")
+
+# Button-tap safety: a short LVGL gesture cannot navigate until it passes
+# the same displacement threshold as the physical swipe tracker.
+gesture=ui.split('static void on_lvgl_gesture(lv_event_t *e)\n{',1)[1].split('static void on_touch_release',1)[0]
+threshold='if(dx*dx+dy*dy < LF_SWIPE_MIN_PX*LF_SWIPE_MIN_PX) return;'
+require('observe_touch_position();' in gesture and threshold in gesture and
+        gesture.index('observe_touch_position();') < gesture.index(threshold) <
+        gesture.index('swipe_intent(lv_indev_get_gesture_dir(indev));') and
+        'if(swipe_candidate_page<0)' in gesture,
+        "Short LVGL gestures could steal button taps or double-trigger navigation")
