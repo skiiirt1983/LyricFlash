@@ -115,7 +115,7 @@ static bool parse_catalog(const char *json, lf_ota_catalog_t *parsed)
         e->bytes=(uint32_t)bytes->valueint;
     }
     cJSON_Delete(root);
-    if (!valid || parsed->count < 1 || !parsed->entries[parsed->count-1].ota == false) {
+    if (!valid || parsed->count < 1 || parsed->entries[parsed->count-1].ota) {
         /* Keep malformed catalogs away from installation code. */
         return false;
     }
