@@ -58,6 +58,22 @@ const runtime=new Function("document","fetch","setInterval",
   assert(graphic.includes("#"+colours[i].toString(16).padStart(6,"0")),
     "Face "+i+" preview has no CSS-legal dial colour");
  }
+ el("clock_face").value="5";el("clock_face").dispatch("change");
+ const fontPreviews=[];
+ for(let i=0;i<5;i++){
+  el("font_style").value=String(i);
+  el("font_style").dispatch("input");
+  fontPreviews.push(el("clock-preview").innerHTML);
+ }
+ assert.equal(new Set(fontPreviews).size,5,"Font presets must produce five visibly different time previews");
+ el("ring_mode").value="0";el("ring_mode").dispatch("input");
+ assert.equal(el("ring-b-row").hidden,true,"Solid ring must hide colour 2");
+ assert.equal(el("ring-c-row").hidden,true,"Solid ring must hide colour 3");
+ el("ring_mode").value="1";el("ring_mode").dispatch("change");
+ assert.equal(el("ring-b-row").hidden,false,"Two-tone ring needs colour 2");
+ assert.equal(el("ring-c-row").hidden,true,"Two-tone ring must hide colour 3");
+ el("ring_mode").value="2";el("ring_mode").dispatch("change");
+ assert.equal(el("ring-c-row").hidden,false,"Three-tone ring needs colour 3");
  el("clock_face").value="2";el("clock_face").dispatch("change");
  el("face_background").value="#112233";el("face_background").dispatch("input");
  assert(el("clock-preview").innerHTML.includes('fill="#112233"'),
