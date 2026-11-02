@@ -139,6 +139,10 @@ require("lv_obj_set_flex_flow(p,LV_FLEX_FLOW_ROW);" in ui and
         "LF_PAGER_WIDTH/5" in ui and
         "pager_build_target=pager_clock;" in ui,
         "PrintSphere-style native pager for main screens is missing")
+require("pager_clock=lv_obj_create(p);\n    pager_home=lv_obj_create(p);\n    pager_settings=lv_obj_create(p);" in ui
+        and "return index==0 ? pager_clock : index==1 ? pager_home : pager_settings;" in ui
+        and "page=index==0 ? 6 : index==1 ? 0 : 2;" in ui,
+        "Native pager direction must preserve Home-left Settings/Home-right Clock")
 require("nav_settle(direction)" in ui and
         "lv_obj_set_style_translate_x(screen,amount,0);" in ui and
         "lv_anim_set_duration(&a,175);" in ui and

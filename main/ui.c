@@ -933,8 +933,8 @@ static void render_settings(void)
 }
 static void build_settings(void)
 {
-    if (pager_root && lv_screen_active()==pager_root) pager_show(0,LV_ANIM_ON);
-    else pager_build(0);
+    if (pager_root && lv_screen_active()==pager_root) pager_show(2,LV_ANIM_ON);
+    else pager_build(2);
 }
 static void on_lyric_font(lv_event_t *e)
 {
@@ -1021,8 +1021,8 @@ static void render_clock(void)
 }
 static void build_clock(void)
 {
-    if (pager_root && lv_screen_active()==pager_root) pager_show(2,LV_ANIM_ON);
-    else pager_build(2);
+    if (pager_root && lv_screen_active()==pager_root) pager_show(0,LV_ANIM_ON);
+    else pager_build(0);
 }
 
 /* Native LVGL pager, modelled on PrintSphere main/src/ui.cpp.
@@ -1030,7 +1030,8 @@ static void build_clock(void)
    dragging, unlike post-release single-screen translate animations. */
 static lv_obj_t *pager_page(int index)
 {
-    return index==0 ? pager_settings : index==1 ? pager_home : pager_clock;
+    /* Screen order follows touch direction: Clock <- Home -> Settings. */
+    return index==0 ? pager_clock : index==1 ? pager_home : pager_settings;
 }
 static void pager_select(int index)
 {
@@ -1038,7 +1039,7 @@ static void pager_select(int index)
     if(index>2)index=2;
     pager_index=index;
     screen=pager_page(index);
-    page=index==0 ? 2 : index==1 ? 0 : 6;
+    page=index==0 ? 6 : index==1 ? 0 : 2;
     battery_status=index==1 ? pager_home_battery : NULL;
     network_status=index==1 ? pager_home_network : NULL;
     pager_scrolling=false;
@@ -1057,6 +1058,8 @@ static void pager_show(int target_index, lv_anim_enable_t animated)
 }
 static void pager_scroll_event(lv_event_t *e)
 {
+    /* Child controls may bubble unrelated scroll events; ignore them. */
+    if(lv_event_get_target(e)!=pager_scroll)return;
     const lv_event_code_t code=lv_event_get_code(e);
     if(code==LV_EVENT_SCROLL_BEGIN){
         pager_scrolling=true;
@@ -1108,10 +1111,10 @@ static void pager_build(int target_index)
     lv_obj_add_event_cb(p,pager_scroll_event,LV_EVENT_ALL,NULL);
     pager_root=root;
     pager_scroll=p;
-    pager_settings=lv_obj_create(p);
-    pager_home=lv_obj_create(p);
     pager_clock=lv_obj_create(p);
-    lv_obj_t *pages[3]={pager_settings,pager_home,pager_clock};
+    pager_home=lv_obj_create(p);
+    pager_settings=lv_obj_create(p);
+    lv_obj_t *pages[3]={pager_clock,pager_home,pager_settings};
     for(int i=0;i<3;i++){
         lv_obj_set_size(pages[i],LF_PAGER_WIDTH,LF_PAGER_WIDTH);
         lv_obj_remove_flag(pages[i],LV_OBJ_FLAG_SCROLLABLE);
@@ -1628,7 +1631,7 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
     memcpy(prefs->face_24h,basic->face_24h,sizeof(prefs->face_24h));
     err = lf_settings_save(prefs);
     if (err == ESP_OK) {
-        if (page == 6) pager_build(2); /* Recreate cached clock after face changes. */
+        if (page == 6) pager_build(0); /* Recreate cached clock after face changes. */
     } else {
         *prefs = previous;
         lf_diag_error("settings", "Basic settings NVS save failed");
@@ -1661,8 +1664,8 @@ esp_err_t lf_ui_apply_device_settings(const lf_settings_t *requested)
         apply_brightness();
         if(page==0)pager_build(1);
         else if(page==1)build_preview();
-        else if(page==2)pager_build(0);
-        else if(page==6)pager_build(2);
+        else if(page==2)pager_build(2);
+        else if(page==6)pager_build(0);
     }else *prefs=old;
     esp_lv_adapter_unlock();
     return err;
