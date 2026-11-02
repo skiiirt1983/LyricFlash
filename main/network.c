@@ -267,6 +267,19 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
     cJSON *root = cJSON_CreateObject();
     if (!root) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
     cJSON_AddNumberToObject(root, "clock_face", s.clock_face);
+    cJSON *faces=cJSON_AddArrayToObject(root,"face_profiles");
+    if(faces) for(unsigned i=0;i<6;i++){
+        cJSON *p=cJSON_CreateObject();
+        if(!p) break;
+        cJSON_AddNumberToObject(p,"background",s.face_background[i]);
+        cJSON_AddNumberToObject(p,"foreground",s.face_foreground[i]);
+        cJSON_AddNumberToObject(p,"accent",s.face_accent[i]);
+        cJSON_AddBoolToObject(p,"show_date",s.face_show_date[i]!=0);
+        cJSON_AddBoolToObject(p,"show_seconds",s.face_show_seconds[i]!=0);
+        cJSON_AddBoolToObject(p,"show_battery",s.face_show_battery[i]!=0);
+        cJSON_AddBoolToObject(p,"time_24h",s.face_24h[i]!=0);
+        cJSON_AddItemToArray(faces,p);
+    }
     cJSON_AddBoolToObject(root, "weather_enabled", weather.enabled);
     cJSON_AddNumberToObject(root, "font_style", s.basic_font_style);
     cJSON_AddNumberToObject(root, "font_size", s.basic_font_size);
@@ -285,11 +298,11 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
 
 static esp_err_t handle_basic_post(httpd_req_t *req)
 {
-    if (req->content_len < 2 || req->content_len > 1250) {
+    if (req->content_len < 2 || req->content_len > 2500) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid request length");
         return ESP_FAIL;
     }
-    char json[1251];
+    char json[2501];
     int received = 0, retries = 0;
     while (received < req->content_len) {
         int n = httpd_req_recv(req, json + received, req->content_len - received);
@@ -332,6 +345,23 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         (interval == 15 || interval == 30 || interval == 60 || interval == 120) &&
         cJSON_IsString(city) && city->valuestring &&
         strlen(city->valuestring) <= LF_WEATHER_CITY_MAX;
+    const cJSON *profiles=cJSON_GetObjectItemCaseSensitive(root,"face_profiles");
+    uint32_t bg_face[6],fg_face[6],ac_face[6];
+    uint8_t dt_face[6],sc_face[6],bt_face[6],hr_face[6];
+    if(!cJSON_IsArray(profiles)||cJSON_GetArraySize(profiles)!=6) valid=false;
+    if(valid) for(int i=0;i<6;i++){
+        const cJSON *p=cJSON_GetArrayItem(profiles,i);
+        int bgv,fgv,acv;uint8_t dv,sv,bv,hv;
+        if(!p || !number_in_range(p,"background",0,0xFFFFFF,&bgv)
+           || !number_in_range(p,"foreground",0,0xFFFFFF,&fgv)
+           || !number_in_range(p,"accent",0,0xFFFFFF,&acv)
+           || !boolean_value(p,"show_date",&dv)
+           || !boolean_value(p,"show_seconds",&sv)
+           || !boolean_value(p,"show_battery",&bv)
+           || !boolean_value(p,"time_24h",&hv)){valid=false;break;}
+        bg_face[i]=(uint32_t)bgv;fg_face[i]=(uint32_t)fgv;ac_face[i]=(uint32_t)acv;
+        dt_face[i]=dv;sc_face[i]=sv;bt_face[i]=bv;hr_face[i]=hv;
+    }
     if (valid) {
         const char *p = city->valuestring;
         for (; *p; p++) if ((unsigned char)*p < 32) { valid = false; break; }
@@ -352,6 +382,16 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     current.basic_ring_a = (uint32_t)a;
     current.basic_ring_b = (uint32_t)b;
     current.basic_ring_c = (uint32_t)c;
+    for(int i=0;i<6;i++){
+        current.face_background[i]=bg_face[i];current.face_foreground[i]=fg_face[i];
+        current.face_accent[i]=ac_face[i];current.face_show_date[i]=dt_face[i];
+        current.face_show_seconds[i]=sc_face[i];current.face_show_battery[i]=bt_face[i];
+        current.face_24h[i]=hr_face[i];
+    }
+    /* Basic face keeps existing ring/font controls as well. */
+    current.basic_background=current.face_background[5];
+    current.basic_foreground=current.face_foreground[5];
+    current.basic_show_date=current.face_show_date[5];
     strlcpy(weather.city, city->valuestring, sizeof weather.city);
     weather.interval_minutes = (uint16_t)interval;
     weather.enabled = weather_enabled != 0;
