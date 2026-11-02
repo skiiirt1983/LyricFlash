@@ -111,7 +111,7 @@ require("allowed_github_ota_url" in network and "handle_github_install" in netwo
         "GitHub OTA URL authorization missing")
 require('"/firmware"' in network and '"/api/install"' in network
         and '"/settings"' in network, "Expected device Web UI routes missing")
-require('"/api/install"' in pages["firmware"]
+require("/api/install" in pages["firmware"]
         and "skiiirt1983.github.io/LyricFlash/beta/catalog.json" in pages["firmware"],
         "GitHub build selector not linked to install endpoint")
 require("lf_weather_save_config" in network and "xTaskNotifyGive(weather_task)" in weather,
