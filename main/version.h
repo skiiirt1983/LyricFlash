@@ -13,3 +13,5 @@
 /* Build 0.8.10 direct HTTPS alpha OTA and safe Weather -> pager handoff after passing source tests. */
 
 /* Recovery candidate: single-screen navigation, hardware pointer fallback and direct Clock/Settings buttons. */
+
+/* 0.8.10 operational hardware candidate — independent PrintSphere swipe, slider guards, fast Basic ring, deferred OTA verification. */
