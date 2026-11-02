@@ -442,7 +442,7 @@ require('lv_event_get_scroll_anim(e)' in ui and
         'current-primary_pager_snap_started_ms>700' in watchdog,
         "Fast pager snap and retained Clock recovery contract")
 
-# 0.8.28: grow only PSRAM LVGL raster strips while keeping known-good
+# 0.8.29: grow only PSRAM LVGL raster strips while keeping known-good
 # DMA/transport settings. Never let SPI max-transfer SRAM scale to 96 rows.
 require('LVGL_BUFFER_HEIGHT_PSRAM (96)' in bsp and
         'BSP_LCD_SPI_TRANSFER_ROWS (24)' in bsp and
@@ -450,4 +450,25 @@ require('LVGL_BUFFER_HEIGHT_PSRAM (96)' in bsp and
         'BSP_LCD_DMA_STAGING_ROWS (4)' in bsp and
         'CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1' in sdk and
         'lv_obj_invalidate(clock_scene);' in ui,
-        "0.8.28 PSRAM raster buffer performance experiment preserves DMA/Clock safety")
+        "0.8.29 PSRAM raster buffer performance experiment preserves DMA/Clock safety")
+
+# 0.8.29: one bounded microphone-controller probe must never start I2S
+# or do audio capture. Probe POST only, initiated by explicit Web UI click.
+mic_probe=read("main/mic_probe.c")
+mic_header=read("main/mic_probe.h")
+require('i2c_master_probe(bus, LF_ES7210_I2C_ADDR' in mic_probe and
+        '#define LF_ES7210_I2C_ADDR (0x40)' in mic_probe and
+        'LF_MIC_PROBE_TIMEOUT_MS (100)' in mic_probe and
+        'bsp_i2c_get_handle()' in mic_probe and
+        'mic_probe.c' in cmake and
+        'LF_MIC_PRESENT' in mic_header and
+        'i2s_channel_read' not in mic_probe and
+        'i2s_channel_enable' not in mic_probe,
+        "0.8.29 ES7210 shared-I2C electrical presence test only")
+require('"/api/hardware/mic-check"' in network and
+        'HTTP_POST,.handler=handle_mic_check' in network and
+        'microphone_adc_status' in network and
+        'mic-check-btn' in web and
+        '/api/hardware/mic-check' in web and
+        'audio_capture_active' in network,
+        "0.8.29 explicit local mic check route, button and no-audio status")

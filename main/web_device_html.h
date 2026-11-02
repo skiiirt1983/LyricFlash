@@ -90,6 +90,7 @@ static const char lf_device_settings_html[] =
 "</div><button id=\"pref-save\" type=\"button\">Save device settings</button><div id=\"pref-status\" role=\"status\" class=\"status\"></div>\n"
 "</section>\n"
 "<section id=\"status-section\"><h2><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 12h4l3-6 4 12 3-6h4\"/></svg>Diagnostics</h2><button id=\"diagnostics-btn\" class=\"outline\" type=\"button\">Refresh status</button>\n"
+"<p class=\"muted\">Audio hardware check: verifies that the onboard ES7210 ADC responds. It does not turn on the microphones or record audio.</p><button id=\"mic-check-btn\" type=\"button\" class=\"outline\">Test microphone controller</button><div id=\"mic-check-result\" class=\"status\" role=\"status\">Not tested.</div>\n"
 "<pre id=\"diagnostics\">Not yet loaded.</pre></section>\n"
 "<section><h2><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"5\" y=\"5\" width=\"14\" height=\"14\" rx=\"2\"/><path d=\"M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3M2 15h3M19 9h3M19 15h3\"/></svg>Maintenance</h2><p class=\"muted\">Updating or restoring firmware is a separate task.</p><a href=\"/firmware\">Open Firmware page</a></section>\n"
 "</main><script>\n"
@@ -105,6 +106,8 @@ static const char lf_device_settings_html[] =
 "el('wifi-save').onclick=async()=>{let ssid=el('ssid').value.trim(),password=el('pass').value;if(!ssid)return message('Choose a Wi-Fi network');\n"
 "try{message('Saving…');let r=await fetch('/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password})});message(await r.text());if(r.ok)el('pass').value=''}catch(e){message('Failed to save: '+e.message)}};\n"
 "el('diagnostics-btn').onclick=async()=>{try{el('diagnostics').textContent=JSON.stringify(await get('/api/diagnostics'),null,2)}catch(e){el('diagnostics').textContent='Unavailable: '+e.message}};\n"
+"el('mic-check-btn').onclick=async()=>{const b=el('mic-check-btn');b.disabled=true;el('mic-check-result').textContent='Checking ES7210 I2C connection…';try{const r=await fetch('/api/hardware/mic-check',{method:'POST'});if(!r.ok)throw Error('HTTP '+r.status);const d=await r.json();el('mic-check-result').textContent=d.status==='adc_detected'?'ES7210 detected. Microphones remain OFF; audio input is the next test.':'ES7210 not confirmed: '+d.status+' (error '+d.error_code+').';el('diagnostics-btn').click()}catch(e){el('mic-check-result').textContent='Test failed: '+e.message}finally{b.disabled=false}};\n"
+
 "\n"
 "const prefIds=['brightness','scroll_speed','sleep_seconds','deep_sleep_minutes','font_size','system_font_size','charging_color'];\n"
 "async function loadPrefs(){try{let d=await get('/api/preferences');for(let name of prefIds){const x=el('pref-'+name);if(!x)continue;x.value=name==='charging_color'?'#'+Number(d[name]).toString(16).padStart(6,'0'):d[name]}\n"

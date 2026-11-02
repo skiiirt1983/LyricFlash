@@ -3,6 +3,7 @@
 #include "settings.h"
 #include "weather.h"
 #include "diagnostics.h"
+#include "mic_probe.h"
 #include "version.h"
 #include "web_basic_html.h"
 #include "web_device_html.h"
@@ -482,6 +483,25 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     return send_json(req, reply);
 }
 
+/* Explicit on-demand I2C presence test: never starts audio sampling. */
+static esp_err_t handle_mic_check(httpd_req_t *req)
+{
+    lf_mic_probe_result_t result=lf_mic_probe_run();
+    lf_mic_probe_snapshot_t sample={0};
+    lf_mic_probe_snapshot(&sample);
+    cJSON *reply=cJSON_CreateObject();
+    if(!reply) return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddBoolToObject(reply,"adc_detected",result==LF_MIC_PRESENT);
+    cJSON_AddStringToObject(reply,"status",lf_mic_probe_result_text(result));
+    cJSON_AddNumberToObject(reply,"error_code",sample.error_code);
+    cJSON_AddNumberToObject(reply,"test_count",sample.attempts);
+    cJSON_AddBoolToObject(reply,"audio_capture_active",false);
+    cJSON_AddStringToObject(reply,"detail",result==LF_MIC_PRESENT
+        ? "ES7210 detected at I2C 0x40. Audio capture NOT tested or activated."
+        : "ES7210 not confirmed. Check board and retry. No audio captured.");
+    return send_json(req,reply);
+}
+
 static esp_err_t handle_diagnostics(httpd_req_t *req)
 {
     lf_diag_snapshot_t d;
@@ -506,7 +526,13 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
         cJSON_AddBoolToObject(root, "usb_connected", d.battery.usb_connected);
         cJSON_AddBoolToObject(root, "charging", d.battery.charging);
     }
-    cJSON_AddStringToObject(root, "microphone", "disabled (not initialized)");
+    /* Electrical presence test only; no audio capture is enabled. */
+    lf_mic_probe_snapshot_t mic={0};
+    lf_mic_probe_snapshot(&mic);
+    cJSON_AddStringToObject(root, "microphone", "inactive (manual ADC probe only)");
+    cJSON_AddStringToObject(root, "microphone_adc_status", lf_mic_probe_result_text(mic.result));
+    cJSON_AddNumberToObject(root, "microphone_adc_test_count", mic.attempts);
+    cJSON_AddNumberToObject(root, "microphone_adc_error_code", mic.error_code);
     cJSON_AddStringToObject(root, "ota_result", ota_result);
     cJSON_AddStringToObject(root, "ota_detail", ota_detail);
     cJSON_AddNumberToObject(root, "ota_error_code", atomic_load(&ota_error_code));
@@ -946,6 +972,7 @@ static bool serve(void)
         {.uri="/api/basic",.method=HTTP_GET,.handler=handle_basic_get},
         {.uri="/api/basic",.method=HTTP_POST,.handler=handle_basic_post},
         {.uri="/api/diagnostics",.method=HTTP_GET,.handler=handle_diagnostics},
+        {.uri="/api/hardware/mic-check",.method=HTTP_POST,.handler=handle_mic_check},
         {.uri="/api/device",.method=HTTP_GET,.handler=handle_device},
         {.uri="/wifi",.method=HTTP_POST,.handler=handle_wifi},
         {.uri="/api/wifi-scan",.method=HTTP_GET,.handler=handle_scan},
