@@ -42,6 +42,7 @@ static int primary_pager_current=1;
 static int primary_pager_origin=1;
 static int primary_pager_snap_to=1;
 static bool primary_pager_snapping;
+static bool primary_pager_initializing;
 /* Keep the clock as a hidden child on the one safe LVGL root instead of
    reconstructing 30+ decorative widgets on every visit. Never create a
    second active LVGL screen or swap roots during touch dispatch. */
@@ -1081,6 +1082,164 @@ static void render_clock(void)
 {
     primary_pager_enter(0);
 }
+/* One active LVGL screen; an ordinary scrollable CHILD contains Clock,
+   Home and Settings side by side. No secondary screen roots, no invalidation
+   suppression, no synthetic divider. LVGL's own scroll inertia and snap
+   handle the physical finger's movement, as the original user requested. */
+static void primary_pager_commit(int index)
+{
+    if(index<0)index=0;
+    if(index>2)index=2;
+    primary_pager_current=index;
+    primary_pager_origin=index;
+    primary_pager_snap_to=index;
+    primary_pager_snapping=false;
+    pager_scrolling=false;
+    page=(index==0)?6:(index==1)?0:2;
+    last_power_refresh_ms=0;
+    clock_last_refresh=0;
+    activity();
+    if(index==0)lf_clock_update();
+}
+static void primary_pager_scroll_event(lv_event_t *e)
+{
+    if(!primary_pager || primary_pager_initializing) return;
+    const lv_event_code_t code=lv_event_get_code(e);
+    if(code==LV_EVENT_SCROLL_BEGIN) {
+        pager_scrolling=true;
+        lv_indev_t *indev=lv_indev_active();
+        if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)
+            primary_pager_origin=primary_pager_current;
+        return;
+    }
+    if(code!=LV_EVENT_SCROLL_END)return;
+    lv_indev_t *indev=lv_indev_active();
+    if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)
+        return; /* Finger still owns the page; never fight its motion. */
+    const int32_t x=lv_obj_get_scroll_x(primary_pager);
+    if(primary_pager_snapping) {
+        const int32_t expected=primary_pager_snap_to*466;
+        if(abs(x-expected)<=2)primary_pager_commit(primary_pager_snap_to);
+        return;
+    }
+    int target=(x+233)/466;
+    if(target<0)target=0;
+    if(target>2)target=2;
+    /* 20% deliberate drag changes page even if it covered less than half. */
+    const int32_t displacement=x-primary_pager_origin*466;
+    if(target==primary_pager_origin && abs(displacement)>=93)
+        target=primary_pager_origin+(displacement>0?1:-1);
+    if(target<0)target=0;
+    if(target>2)target=2;
+    primary_pager_snap_to=target;
+    if(abs(x-target*466)>2) {
+        primary_pager_snapping=true;
+        lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);
+    } else primary_pager_commit(target);
+}
+static lv_obj_t *primary_page_create(lv_obj_t *pager,int index)
+{
+    lv_obj_t *p=lv_obj_create(pager);
+    lv_obj_set_size(p,466,466);
+    lv_obj_set_pos(p,index*466,0);
+    lv_obj_set_style_bg_color(p,lv_color_hex(prefs->background_color),0);
+    lv_obj_set_style_bg_opa(p,LV_OPA_COVER,0);
+    lv_obj_set_style_radius(p,0,0);
+    lv_obj_set_style_border_width(p,0,0);
+    lv_obj_set_style_pad_all(p,0,0);
+    lv_obj_remove_flag(p,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(p,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(p,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(p,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    return p;
+}
+static void primary_pager_build_clock(void)
+{
+    if(!primary_pager_pages[0])return;
+    if(clock_scene && (clock_scene_stale||clock_scene_style!=prefs->clock_face)){
+        lf_clock_clear();
+        lv_obj_delete(clock_scene);
+        clock_scene=NULL;
+    }
+    if(clock_scene) {
+        lv_obj_set_parent(clock_scene,primary_pager_pages[0]);
+        lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_center(clock_scene);
+        atomic_fetch_add(&ui_clock_cache_hits,1);
+        return;
+    }
+    uint64_t start=now_ms();
+    clock_scene=lv_obj_create(primary_pager_pages[0]);
+    lv_obj_set_size(clock_scene,466,466);
+    lv_obj_center(clock_scene);
+    lv_obj_set_style_pad_all(clock_scene,0,0);
+    lv_obj_set_style_radius(clock_scene,0,0);
+    lv_obj_set_style_border_width(clock_scene,0,0);
+    lv_obj_set_style_bg_opa(clock_scene,LV_OPA_COVER,0);
+    lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_CLICKABLE);
+    lf_clock_build(clock_scene,prefs->clock_face,prefs);
+    clock_children_input_transparent(clock_scene);
+    clock_scene_style=prefs->clock_face;
+    clock_scene_stale=false;
+    atomic_fetch_add(&ui_clock_scene_builds,1);
+    uint32_t elapsed=(uint32_t)(now_ms()-start);
+    atomic_store(&ui_clock_build_last_ms,elapsed);
+    uint32_t maximum=atomic_load(&ui_clock_build_max_ms);
+    if(elapsed>maximum)atomic_store(&ui_clock_build_max_ms,elapsed);
+}
+static void primary_pager_create(int target_index)
+{
+    if(!screen)return;
+    primary_pager_initializing=true;
+    primary_pager=lv_obj_create(screen);
+    lv_obj_set_size(primary_pager,466,466);
+    lv_obj_align(primary_pager,LV_ALIGN_CENTER,0,0);
+    lv_obj_set_style_pad_all(primary_pager,0,0);
+    lv_obj_set_style_pad_row(primary_pager,0,0);
+    lv_obj_set_style_pad_column(primary_pager,0,0);
+    lv_obj_set_style_border_width(primary_pager,0,0);
+    lv_obj_set_style_radius(primary_pager,0,0);
+    lv_obj_set_style_bg_opa(primary_pager,LV_OPA_COVER,0);
+    lv_obj_set_scroll_dir(primary_pager,LV_DIR_HOR);
+    lv_obj_set_scroll_snap_x(primary_pager,LV_SCROLL_SNAP_NONE);
+    lv_obj_set_scrollbar_mode(primary_pager,LV_SCROLLBAR_MODE_OFF);
+    lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(primary_pager,primary_pager_scroll_event,LV_EVENT_ALL,NULL);
+    for(int i=0;i<3;i++) primary_pager_pages[i]=primary_page_create(primary_pager,i);
+    /* Construct static panels just once, rather than destroying/rebuilding
+       each face whenever the user's finger crosses the 466px boundary. */
+    primary_render_home_content(primary_pager_pages[1]);
+    primary_render_settings_content(primary_pager_pages[2]);
+    primary_pager_build_clock();
+    lv_obj_update_layout(primary_pager);
+    lv_obj_scroll_to_x(primary_pager,target_index*466,LV_ANIM_OFF);
+    primary_pager_initializing=false;
+    primary_pager_commit(target_index);
+    clock_present_start_us=esp_timer_get_time();
+}
+static void primary_pager_enter(int index)
+{
+    if(index<0||index>2)index=1;
+    if(!primary_pager){
+        make_base(); /* Original permanent root, gesture dispatch preserved. */
+        primary_pager_create(index);
+        return;
+    }
+    if(index==0)primary_pager_build_clock();
+    if(index==primary_pager_current && !primary_pager_snapping){
+        primary_pager_commit(index);
+        return;
+    }
+    primary_pager_snap_to=index;
+    primary_pager_snapping=true;
+    pager_scrolling=true;
+    lv_obj_scroll_to_x(primary_pager,index*466,LV_ANIM_ON);
+    activity();
+}
 static void build_clock_now(void)
 {
     render_clock();
@@ -1512,7 +1671,7 @@ static void on_tick(lv_timer_t *timer)
         else
             observe_touch_position();
     }
-    if (page == 6 && touch_held && touch_pressed_at_ms &&
+    if (page == 6 && touch_held && !pager_scrolling && touch_pressed_at_ms &&
         current - touch_pressed_at_ms >= LF_CLOCK_SETTINGS_HOLD_MS)
         show_clock_settings_popup();
     if (page == 14 && current - last_debug_refresh >= 2500) {
@@ -1735,6 +1894,7 @@ static void nav_drain(void *arg)
     nav_pending=NULL;
     if(!target)return;
     if(nav_transition_active)nav_transition_end(true);
+    bool was_pager=(primary_pager!=NULL);
     int previous_page=page;
     lv_screen_load_anim_t direction=nav_transition_hint;
     nav_transition_hint=LV_SCR_LOAD_ANIM_NONE;
@@ -1749,6 +1909,9 @@ static void nav_drain(void *arg)
         lv_display_enable_invalidation(disp,true);
     }
     atomic_fetch_add(&ui_nav_count,1);
+    /* Native pager already moves the real sibling pages with the finger;
+       never overlay the old post-release panel-wipe transition on top. */
+    if(was_pager && primary_pager)return;
     if(disp&&screen&&previous_page!=page&&!asleep)nav_transition_begin(direction);
     else if(screen)lv_obj_invalidate(screen);
 }
@@ -1797,6 +1960,16 @@ bool lf_ui_start(lf_settings_t *s)
         lv_display_add_event_cb(disp,display_refresh_ready_event,LV_EVENT_REFR_READY,NULL);
     }
     invalidate_full_screen();
+    /* Short scroll throw: LVGL decelerates and performs one ease-out snap,
+       rather than competing with the clock's own 16ms animation timer. */
+    lv_indev_t *touch=lv_indev_get_next(NULL);
+    while(touch) {
+        if(lv_indev_get_type(touch)==LV_INDEV_TYPE_POINTER){
+            lv_indev_set_scroll_throw(touch,90);
+            break;
+        }
+        touch=lv_indev_get_next(touch);
+    }
     lv_timer_create(on_tick, 50, NULL);
     lv_timer_create(on_clock_sweep, 16, NULL);
     esp_lv_adapter_unlock();
