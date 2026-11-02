@@ -4,3 +4,4 @@
    Hardware verification required before advancing further. */
 #define LF_VERSION "0.8.14-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.14"
+/* 0.8.14 button-tap build checkpoint: source preflight passed. */
