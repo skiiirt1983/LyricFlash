@@ -1108,18 +1108,22 @@ static void primary_pager_scroll_event(lv_event_t *e)
     if(code==LV_EVENT_SCROLL_BEGIN) {
         pager_scrolling=true;
         lv_indev_t *indev=lv_indev_active();
-        if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)
+        if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED) {
+            /* An interrupted snap belongs to the finger again. */
+            primary_pager_snapping=false;
             primary_pager_origin=primary_pager_current;
+        }
         return;
     }
     if(code!=LV_EVENT_SCROLL_END)return;
     lv_indev_t *indev=lv_indev_active();
     if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)
         return; /* Finger still owns the page; never fight its motion. */
-    const int32_t x=lv_obj_get_scroll_x(primary_pager);
+    const int32_t x=abs(lv_obj_get_scroll_x(primary_pager));
     if(primary_pager_snapping) {
-        const int32_t expected=primary_pager_snap_to*466;
-        if(abs(x-expected)<=2)primary_pager_commit(primary_pager_snap_to);
+        /* Always settle on the final scroll event. A missed exact-pixel
+           alignment must not strand the gesture in 'scrolling' forever. */
+        primary_pager_commit(primary_pager_snap_to);
         return;
     }
     int target=(x+233)/466;
