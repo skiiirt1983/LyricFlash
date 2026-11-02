@@ -3,6 +3,9 @@
 #include "bsp/esp-bsp.h"
 #include "driver/i2c_master.h"
 #include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/portmacro.h"
 
 extern lf_power_state_t lf_power_decode(uint8_t status1, uint8_t status2, uint8_t soc);
 
@@ -29,4 +32,43 @@ bool lf_power_read(lf_power_state_t *state)
     if (a != ESP_OK || b != ESP_OK || c != ESP_OK) return false;
     *state = lf_power_decode(status1, status2, soc);
     return true;
+}
+
+/* The display should never wait for the shared I2C bus.
+   A separate low-priority task samples once every four seconds. */
+static portMUX_TYPE power_mux = portMUX_INITIALIZER_UNLOCKED;
+static lf_power_state_t latest_power;
+static bool has_power;
+static TaskHandle_t power_worker;
+
+static void power_background_task(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        lf_power_state_t sample;
+        if (lf_power_read(&sample)) {
+            portENTER_CRITICAL(&power_mux);
+            latest_power = sample;
+            has_power = true;
+            portEXIT_CRITICAL(&power_mux);
+        }
+        vTaskDelay(pdMS_TO_TICKS(4000));
+    }
+}
+
+bool lf_power_background_start(void)
+{
+    if (power_worker) return true;
+    return xTaskCreate(power_background_task, "lf_power", 3072, NULL,
+                       tskIDLE_PRIORITY + 1, &power_worker) == pdPASS;
+}
+
+bool lf_power_cached(lf_power_state_t *state)
+{
+    if (!state) return false;
+    portENTER_CRITICAL(&power_mux);
+    bool ok = has_power;
+    if (ok) *state = latest_power;
+    portEXIT_CRITICAL(&power_mux);
+    return ok;
 }

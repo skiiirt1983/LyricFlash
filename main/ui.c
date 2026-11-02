@@ -5,9 +5,14 @@
 #include "esp_timer.h"
 #include "power.h"
 #include "network.h"
+#include "clock_face.h"
+#include "weather.h"
+#include "weather_visual.h"
+#include "char_wheel.h"
 #include "lvgl.h"
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 static const char *TAG = "LyricFlashUI";
 static lf_settings_t *prefs;
@@ -20,15 +25,37 @@ static lv_obj_t *scroll_panel;
 static lv_obj_t *lyrics_label;
 static lv_obj_t *speed_text;
 static lv_obj_t *brightness_text;
-static lv_obj_t *font_text;
 static lv_obj_t *timeout_text;
 static lv_obj_t *screen;
 static lv_obj_t *battery_status;
 static lv_obj_t *network_status;
 static lv_obj_t *network_password;
+static lv_obj_t *network_url;
 static lv_obj_t *ota_status;
 static uint64_t last_power_refresh_ms;
-static int page; // 0=home, 1=preview, 2=settings
+static uint64_t last_wifi_poll_ms;
+static bool user_dragging;
+static bool finger_was_scrolling;
+static uint64_t scroll_at_end_ms;
+/* Finger releases resume auto-scrolling after this time; explicit PAUSE stays paused. */
+static uint64_t touch_resume_at_ms;
+#define LF_TOUCH_RESUME_DELAY_MS 1500ULL
+static lv_obj_t *pause_button;
+static lv_obj_t *wifi_list;
+static lv_obj_t *wifi_status;
+static lv_obj_t *wifi_password_status;
+static lf_wifi_ap_t wifi_aps[LF_WIFI_MAX_RESULTS];
+static size_t wifi_ap_count;
+static char selected_wifi[33];
+static bool selected_wifi_secured;
+static int wifi_state_previous;
+static uint64_t clock_last_refresh;
+static uint64_t weather_detail_refresh;
+static lv_obj_t *basic_font_size_label;
+static lv_obj_t *basic_colour_swatch;
+static lv_obj_t *basic_hue_label;
+static uint8_t selected_colour_target;
+static int page; // 0 home, 1 lyrics, 2 settings, 3 sleep, 4 wifi, 5 password, 6 clock, 7 clock settings, 8 city, 9 lyrics settings, 10 device, 11 detail, 12 Basic settings, 13 hue picker
 
 static const uint32_t PALETTE[] = {0xFFFFFF, 0x86E3AE, 0x76C6FF, 0xFFD18B, 0xF6A1D2};
 static const char *DEMO_TEXT =
@@ -46,6 +73,11 @@ static const char *DEMO_TEXT =
 
 static uint64_t now_ms(void) { return (uint64_t)esp_timer_get_time() / 1000ULL; }
 static void activity(void) { last_activity_ms = now_ms(); }
+static const lv_font_t *system_font(void)
+{
+    return prefs->system_font_size == 0 ? &lv_font_montserrat_18 :
+           prefs->system_font_size == 1 ? &lv_font_montserrat_20 : &lv_font_montserrat_24;
+}
 static const lv_font_t *font_for_size(uint8_t size)
 {
     return size == 0 ? &lv_font_montserrat_18 :
@@ -66,35 +98,86 @@ static lv_obj_t *label(lv_obj_t *parent, const char *text, int y,
     lv_obj_t *o = lv_label_create(parent);
     lv_label_set_text(o, text);
     lv_obj_set_style_text_color(o, lv_color_hex(rgb), 0);
-    lv_obj_set_style_text_font(o, font, 0);
+    lv_obj_set_style_text_font(o, (font == &lv_font_montserrat_12 || font == &lv_font_montserrat_16 || font == &lv_font_montserrat_18) ? system_font() : font, 0);
     lv_obj_set_width(o, 360);
     lv_obj_set_style_text_align(o, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(o, LV_ALIGN_TOP_MID, 0, y);
     return o;
 }
 
+/* Shared touchscreen button treatment, including a 110 ms tactile press
+   animation. Big hit areas and labels clamped to usable circle geometry. */
+static lv_style_transition_dsc_t button_transition;
+static bool button_transition_ready;
+static const lv_style_prop_t button_props[] = {
+    LV_STYLE_TRANSFORM_WIDTH, LV_STYLE_TRANSFORM_HEIGHT,
+    LV_STYLE_BG_COLOR, LV_STYLE_SHADOW_WIDTH, 0
+};
+static void style_button(lv_obj_t *b, uint32_t color)
+{
+    if (!button_transition_ready) {
+        lv_style_transition_dsc_init(&button_transition, button_props,
+                                     lv_anim_path_ease_out, 110, 0, NULL);
+        button_transition_ready = true;
+    }
+    lv_obj_set_style_radius(b, 19, 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_grad_color(b, lv_color_hex(0x699FCD), 0);
+    lv_obj_set_style_bg_grad_dir(b, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_border_width(b, 2, 0);
+    lv_obj_set_style_border_color(b, lv_color_hex(0xAACBE6), 0);
+    lv_obj_set_style_shadow_width(b, 11, 0);
+    lv_obj_set_style_shadow_color(b, lv_color_hex(0x183D69), 0);
+    lv_obj_set_style_shadow_opa(b, LV_OPA_40, 0);
+    lv_obj_set_style_transition(b, &button_transition, 0);
+    lv_obj_set_style_transform_width(b, -4, LV_STATE_PRESSED);
+    lv_obj_set_style_transform_height(b, -4, LV_STATE_PRESSED);
+    lv_obj_set_style_shadow_width(b, 2, LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(b, lv_color_hex(0x9BCFFF), LV_STATE_PRESSED);
+    lv_obj_set_style_pad_hor(b, 8, 0);
+}
 static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int height,
                         int x, int y, uint32_t bg, lv_event_cb_t cb, void *arg)
 {
     lv_obj_t *b = lv_button_create(parent);
+    /* Keep buttons fully inside the usable 466px circle. */
+    if (width > 284) width = 284;
+    if (height < 48) height = 48;
+    if (height > 94) height = 94;
     lv_obj_set_size(b, width, height);
     lv_obj_align(b, LV_ALIGN_CENTER, x, y);
-    lv_obj_set_style_bg_color(b, lv_color_hex(bg), 0);
-    lv_obj_set_style_radius(b, height / 2, 0);
-    lv_obj_set_style_border_width(b, 0, 0);
+    style_button(b, bg);
     lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, arg);
     lv_obj_t *l = lv_label_create(b);
     lv_label_set_text(l, text);
-    lv_obj_set_style_text_font(l, &lv_font_montserrat_18, 0);
-    lv_obj_set_style_text_color(l, lv_color_hex(0x07100B), 0);
+    lv_obj_set_width(l, width - 16);
+    lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+    const lv_font_t *f = system_font();
+    /* Long captions still fit comfortably without clipping. */
+    if (strlen(text) > 19 && prefs->system_font_size == 2) f = &lv_font_montserrat_20;
+    lv_obj_set_style_text_font(l, f, 0);
+    lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(0x0B1C2A), 0);
     lv_obj_center(l);
     return b;
 }
 
-static void on_sleep(lv_event_t *e);
 static void build_home(void);
 static void build_preview(void);
 static void build_settings(void);
+static void build_wifi(void);
+static void build_wifi_password(void);
+static void build_clock(void);
+static void build_clock_settings(void);
+static void build_basic_settings(void);
+static void build_basic_colour(void);
+static void build_weather_location(void);
+static void build_lyrics_settings(void);
+static void build_device_settings(void);
+static void build_weather_details(void);
+static void on_arm_ota(lv_event_t *e);
+static void on_clock_options(lv_event_t *e);
+static void on_clock_back(lv_event_t *e);
 static void on_home(lv_event_t *e)
 {
     (void)e; activity(); build_home();
@@ -107,20 +190,97 @@ static void on_settings(lv_event_t *e)
 {
     (void)e; activity(); build_settings();
 }
+static lv_point_t gesture_origin;
+static bool gesture_origin_valid;
+static void on_gesture_press(lv_event_t *e)
+{
+    (void)e;
+    lv_indev_t *indev=lv_indev_active();
+    gesture_origin_valid = indev != NULL;
+    if(indev) lv_indev_get_point(indev,&gesture_origin);
+}
+static void on_swipe(lv_event_t *e)
+{
+    (void)e;
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev) return;
+    lv_point_t p = {0};
+    lv_indev_get_point(indev, &p);
+    int dx = p.x - 233, dy = p.y - 233;
+    /* Physical travel threshold: small/edge drags do not navigate. */
+    if (!gesture_origin_valid) return;
+    int travel_x = p.x - gesture_origin.x;
+    int travel_y = p.y - gesture_origin.y;
+    if (travel_x*travel_x + travel_y*travel_y < 78*78) return;
+    /* Ignore edge gestures that previously bounced users to the home page. */
+    if (dx * dx + dy * dy > 188 * 188) return;
+    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+    activity();
+    if (page == 0) {
+        if (dir == LV_DIR_LEFT) build_settings();
+        else if (dir == LV_DIR_RIGHT) build_clock();
+    } else if (page == 6) {
+        if (dir == LV_DIR_LEFT) build_home();
+        else if (dir == LV_DIR_TOP) build_weather_details();
+    } else if (page == 11 && dir == LV_DIR_BOTTOM) {
+        build_clock();
+    }
+}
+static void on_clock_long_press(lv_event_t *e)
+{
+    (void)e;
+    if (page != 6) return;
+    activity();
+    build_clock_settings();
+}
 
+/* Every navigation action creates a real LVGL screen and animates both
+   screens sideways, instead of clearing/repainting the active one. */
+static bool screen_initialized;
+static int previous_page = -1;
 static void make_base(void)
 {
-    screen = lv_screen_active();
-    lv_obj_clean(screen);
+    lv_obj_t *old_screen = lv_screen_active();
+    lf_weather_visual_clear();
+    screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(screen, lv_color_hex(prefs->background_color), 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(screen, on_gesture_press, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(screen, on_swipe, LV_EVENT_GESTURE, NULL);
+    if (!screen_initialized) {
+        screen_initialized = true;
+        lv_screen_load(screen);
+        if (old_screen != screen) lv_obj_delete(old_screen);
+    } else {
+        lv_screen_load_anim_t direction = LV_SCREEN_LOAD_ANIM_MOVE_LEFT;
+        if ((previous_page == 0 && page == 6) ||
+            (previous_page == 2 && page == 0) ||
+            (previous_page == 6 && page == 11) ||
+            (page == 2 && previous_page != 0) ||
+            (page == 6 && previous_page == 11) ||
+            (page == 0 && previous_page == 11)) {
+            direction = LV_SCREEN_LOAD_ANIM_MOVE_RIGHT;
+        }
+        if (previous_page == 6 && page == 11)
+            direction = LV_SCREEN_LOAD_ANIM_MOVE_TOP;
+        if (previous_page == 11 && page == 6)
+            direction = LV_SCREEN_LOAD_ANIM_MOVE_BOTTOM;
+        lv_screen_load_anim(screen, direction, 240, 0, true);
+    }
+    previous_page = page;
     scroll_panel = NULL;
     lyrics_label = NULL;
     battery_status = NULL;
     network_status = NULL;
     network_password = NULL;
+    network_url = NULL;
     ota_status = NULL;
+    wifi_list = NULL;
+    wifi_status = NULL;
+    wifi_password_status = NULL;
+    pause_button = NULL;
 }
 
 static void on_arm_ota(lv_event_t *e)
@@ -134,30 +294,59 @@ static void on_arm_ota(lv_event_t *e)
         lv_label_set_text(ota_status,text);
     }
 }
+static void on_wifi(lv_event_t *e)
+{
+    (void)e; activity(); build_wifi();
+}
+
 static void build_home(void)
 {
     page = 0;
     make_base();
-    label(screen, "LYRICFLASH", 34, &lv_font_montserrat_20, prefs->text_color);
-    label(screen, "ALPHA 0.3  |  HARDWARE TEST", 65, &lv_font_montserrat_12, 0x919CA6);
-    battery_status = label(screen, "Battery reading...", 96, &lv_font_montserrat_16, 0xDCE8F0);
-    network_status = label(screen, "Wi-Fi starting...", 126, &lv_font_montserrat_12, 0x8F9BA6);
-    network_password = label(screen, "", 147, &lv_font_montserrat_12, 0x8F9BA6);
-    button(screen, "LYRIC PREVIEW", 224, 91, 0, -5, prefs->text_color, on_preview, NULL);
-    label(screen, "Mic OFF  |  No audio recorded", 285, &lv_font_montserrat_12, 0x8F9BA6);
-    ota_status = label(screen, "", 310, &lv_font_montserrat_12, prefs->accent_color);
-    button(screen, "ARM OTA", 144, 42, 0, 117, 0xB2C6D3, on_arm_ota, NULL);
-    button(screen, "SETTINGS", 143, 42, -74, 171, 0xAAC1D2, on_settings, NULL);
-    button(screen, "SLEEP", 108, 42, 92, 171, 0xAAC1D2, on_sleep, NULL);
+    lf_clock_clear();
+    label(screen, "LYRICFLASH", 56, &lv_font_montserrat_24, prefs->text_color);
+    label(screen, "ALPHA 0.7", 103, &lv_font_montserrat_20, 0xB7C7D7);
+    battery_status = label(screen, "BATTERY", 151, &lv_font_montserrat_20, 0xDCE8F0);
+    button(screen, "LYRICS", 242, 82, 0, 0, 0xA8D6FF, on_preview, NULL);
+    label(screen, "Mic off", 302, system_font(), 0xB9CADB);
+    label(screen, "CLOCK  <          >  SETTINGS", 344, &lv_font_montserrat_18, 0xB9CADB);
 }
 
 static void on_toggle_pause(lv_event_t *e)
 {
     (void)e; activity(); paused = !paused;
+    if (!paused && scroll_panel) scroll_y = (float)lv_obj_get_scroll_y(scroll_panel);
     lv_obj_t *b = lv_event_get_target(e);
     lv_obj_t *l = lv_obj_get_child(b, 0);
     if (l) lv_label_set_text(l, paused ? "RESUME" : "PAUSE");
     last_scroll_ms = now_ms();
+}
+
+static void on_touch_scroll(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    /* Auto-scroll also generates scroll events. Only physical finger
+       events may interrupt it; programmatic scrolling must never pause itself. */
+    if (code == LV_EVENT_PRESSED) {
+        user_dragging = true;
+        finger_was_scrolling = false;
+        touch_resume_at_ms = UINT64_MAX;
+        activity();
+    } else if (code == LV_EVENT_SCROLL_BEGIN) {
+        if (user_dragging) finger_was_scrolling = true;
+    } else if (code == LV_EVENT_RELEASED) {
+        user_dragging = false;
+        touch_resume_at_ms = now_ms() + LF_TOUCH_RESUME_DELAY_MS;
+        if (!finger_was_scrolling && scroll_panel)
+            scroll_y = (float)lv_obj_get_scroll_y(scroll_panel);
+        last_scroll_ms = now_ms();
+        activity();
+    } else if (code == LV_EVENT_SCROLL_END && finger_was_scrolling) {
+        finger_was_scrolling = false;
+        if (scroll_panel) scroll_y = (float)lv_obj_get_scroll_y(scroll_panel);
+        last_scroll_ms = now_ms();
+        activity();
+    }
 }
 
 static void build_preview(void)
@@ -166,9 +355,13 @@ static void build_preview(void)
     make_base();
     scroll_y = 0;
     paused = false;
+    user_dragging = false;
+    finger_was_scrolling = false;
+    scroll_at_end_ms = 0;
+    touch_resume_at_ms = 0;
     last_scroll_ms = now_ms();
     label(screen, "LYRIC PREVIEW", 54, &lv_font_montserrat_20, prefs->text_color);
-    label(screen, "Original sample text  |  No recording", 85, &lv_font_montserrat_12, 0x8797A4);
+    label(screen, "SAMPLE LYRICS - MIC OFF", 85, &lv_font_montserrat_16, 0xB7C7D7);
     scroll_panel = lv_obj_create(screen);
     lv_obj_set_size(scroll_panel, 338, 215);
     lv_obj_align(scroll_panel, LV_ALIGN_CENTER, 0, 10);
@@ -178,9 +371,22 @@ static void build_preview(void)
     lv_obj_set_style_pad_all(scroll_panel, 14, 0);
     lv_obj_set_scroll_dir(scroll_panel, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(scroll_panel, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_add_flag(scroll_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(scroll_panel, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_add_flag(scroll_panel, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_remove_flag(scroll_panel, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_remove_flag(scroll_panel, LV_OBJ_FLAG_SCROLL_CHAIN);
+    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_SCROLL_BEGIN, NULL);
+    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_SCROLL_END, NULL);
+    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_RELEASED, NULL);
+
 
     lyrics_label = lv_label_create(scroll_panel);
     lv_obj_set_width(lyrics_label, 292);
+    lv_obj_set_height(lyrics_label, LV_SIZE_CONTENT);
+    lv_obj_remove_flag(lyrics_label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(lyrics_label, LV_OBJ_FLAG_SCROLLABLE);
     lv_label_set_long_mode(lyrics_label, LV_LABEL_LONG_WRAP);
     lv_label_set_text(lyrics_label, DEMO_TEXT);
     lv_obj_set_style_text_align(lyrics_label, LV_TEXT_ALIGN_CENTER, 0);
@@ -188,15 +394,131 @@ static void build_preview(void)
     lv_obj_set_style_text_font(lyrics_label, font_for_size(prefs->font_size), 0);
     lv_obj_set_style_text_line_space(lyrics_label, prefs->line_spacing_px, 0);
     lv_obj_align(lyrics_label, LV_ALIGN_TOP_MID, 0, 0);
+    /* Expand the computed content height and leave room to read the last
+       verse. A 1px invisible child guarantees an actual LVGL scroll range. */
+    lv_obj_update_layout(lyrics_label);
+    lv_obj_t *tail = lv_obj_create(scroll_panel);
+    lv_obj_set_size(tail, 1, 1);
+    lv_obj_set_style_bg_opa(tail, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(tail, 0, 0);
+    lv_obj_set_style_pad_all(tail, 0, 0);
+    lv_obj_remove_flag(tail, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(tail, LV_ALIGN_TOP_MID, 0,
+                 lv_obj_get_height(lyrics_label) + 80);
+    lv_obj_update_layout(scroll_panel);
+    ESP_LOGI(TAG, "Lyrics scroll: label=%ld px, viewport=%ld px, bottom=%ld px",
+             (long)lv_obj_get_height(lyrics_label), (long)lv_obj_get_height(scroll_panel),
+             (long)lv_obj_get_scroll_bottom(scroll_panel));
+    lv_obj_remove_flag(lyrics_label, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
     button(screen, "BACK", 130, 47, -76, 172, 0x9CB7CB, on_home, NULL);
-    button(screen, "PAUSE", 130, 47, 76, 172, prefs->text_color, on_toggle_pause, NULL);
+    pause_button = button(screen, "PAUSE", 130, 47, 76, 172, prefs->text_color, on_toggle_pause, NULL);
 }
 
+/* List rows are clickable; selecting a network opens the on-device keyboard. */
+static void on_wifi_selected(lv_event_t *e)
+{
+    size_t idx = (size_t)(uintptr_t)lv_event_get_user_data(e);
+    if (idx >= wifi_ap_count) return;
+    strlcpy(selected_wifi, wifi_aps[idx].ssid, sizeof(selected_wifi));
+    selected_wifi_secured = wifi_aps[idx].secured;
+    activity();
+    if (selected_wifi_secured) build_wifi_password();
+    else {
+        if (lf_network_save_wifi(selected_wifi, "")) {
+            lf_network_restart();
+            if (wifi_status) lv_label_set_text(wifi_status, "Saved. Restarting...");
+        } else if (wifi_status) lv_label_set_text(wifi_status, "Could not save Wi-Fi.");
+    }
+}
+static void draw_wifi_list(void)
+{
+    if (!wifi_list || !wifi_status) return;
+    lv_obj_clean(wifi_list);
+    if (!wifi_ap_count) {
+        lv_label_set_text(wifi_status, "No networks found. Tap SCAN.");
+        return;
+    }
+    lv_label_set_text(wifi_status, "Tap your Wi-Fi network");
+    for (size_t i = 0; i < wifi_ap_count; i++) {
+        lv_obj_t *b = lv_button_create(wifi_list);
+        lv_obj_set_width(b, lv_pct(100));
+        lv_obj_set_height(b, 49);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x263944), 0);
+        lv_obj_set_style_radius(b, 12, 0);
+        lv_obj_add_event_cb(b, on_wifi_selected, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
+        lv_obj_t *name = lv_label_create(b);
+        char row[60];
+        snprintf(row, sizeof(row), "%s %s", wifi_aps[i].secured ? LV_SYMBOL_EYE_CLOSE : " ", wifi_aps[i].ssid);
+        lv_label_set_text(name, row);
+        lv_obj_set_style_text_font(name, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_color(name, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_width(name, lv_pct(100));
+        lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+        lv_obj_center(name);
+    }
+}
+static void on_wifi_scan(lv_event_t *e)
+{
+    (void)e;
+    activity();
+    if (lf_network_scan_start()) {
+        if (wifi_status) lv_label_set_text(wifi_status, "Scanning nearby Wi-Fi...");
+        wifi_state_previous = 1;
+    } else if (wifi_status) lv_label_set_text(wifi_status, "Scan unavailable. Retry.");
+}
+static void build_wifi(void)
+{
+    page = 4;
+    make_base();
+    label(screen, "WI-FI NETWORKS", 42, &lv_font_montserrat_20, prefs->text_color);
+    wifi_status = label(screen, "Select a nearby network", 77, &lv_font_montserrat_16, 0xC4D9E8);
+    wifi_list = lv_obj_create(screen);
+    lv_obj_set_size(wifi_list, 346, 239);
+    lv_obj_align(wifi_list, LV_ALIGN_CENTER, 0, -4);
+    lv_obj_set_flex_flow(wifi_list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_bg_color(wifi_list, lv_color_hex(0x101C29), 0);
+    lv_obj_set_style_border_width(wifi_list, 0, 0);
+    lv_obj_set_style_radius(wifi_list, 16, 0);
+    lv_obj_set_style_pad_all(wifi_list, 7, 0);
+    lv_obj_set_scroll_dir(wifi_list, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(wifi_list, LV_SCROLLBAR_MODE_AUTO);
+    draw_wifi_list();
+    button(screen, "BACK", 140, 46, -81, 174, 0xAAC1D2, on_home, NULL);
+    button(screen, "SCAN", 140, 46, 81, 174, 0xAAC1D2, on_wifi_scan, NULL);
+    if (!wifi_ap_count) (void)lf_network_scan_start();
+    wifi_state_previous = 1;
+}
+static void wheel_wifi_save(const char *password)
+{
+    if (lf_network_save_wifi(selected_wifi, password)) {
+        lf_network_restart();
+        build_wifi();
+    } else if (screen) {
+        label(screen, "Password must be 8-63 characters", 95,
+              system_font(), 0xFFB7B7);
+    }
+}
+static void wheel_wifi_cancel(void) { build_wifi(); }
+static void wheel_weather_save(const char *city)
+{
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    snprintf(cfg.city, sizeof cfg.city, "%s", city);
+    if (lf_weather_save_config(&cfg)) build_clock_settings();
+}
+static void wheel_weather_cancel(void) { build_clock_settings(); }
+static void build_wifi_password(void)
+{
+    page = 5;
+    make_base();
+    lf_charwheel_show(screen, "Wi-Fi password", "", true, 63,
+                      wheel_wifi_save, wheel_wifi_cancel);
+}
 static void on_brightness(lv_event_t *e)
 {
     prefs->brightness = (uint8_t)lv_slider_get_value(lv_event_get_target(e));
-    char s[30]; snprintf(s, sizeof s, "Brightness  %u%%", prefs->brightness);
+    char s[40]; snprintf(s, sizeof s, "Brightness  %u%%", prefs->brightness);
     lv_label_set_text(brightness_text, s);
     apply_brightness();
     if (lv_event_get_code(e) == LV_EVENT_RELEASED) save_settings();
@@ -207,13 +529,6 @@ static void on_speed(lv_event_t *e)
     char s[30]; snprintf(s, sizeof s, "Scroll speed  %u%%", prefs->scroll_speed);
     lv_label_set_text(speed_text, s);
     if (lv_event_get_code(e) == LV_EVENT_RELEASED) save_settings();
-}
-static void on_font(lv_event_t *e)
-{
-    (void)e; prefs->font_size = (prefs->font_size + 1) % 3;
-    lv_label_set_text(font_text, prefs->font_size == 0 ? "Font  Small  >" :
-                      prefs->font_size == 2 ? "Font  Large  >" : "Font  Medium  >");
-    save_settings();
 }
 static void on_timeout(lv_event_t *e)
 {
@@ -226,8 +541,8 @@ static void on_timeout(lv_event_t *e)
         }
     }
     char s[32];
-    if (prefs->sleep_seconds) snprintf(s, sizeof s, "Screen timeout  %us  >", prefs->sleep_seconds);
-    else snprintf(s, sizeof s, "Screen timeout  Never  >");
+    if (prefs->sleep_seconds) snprintf(s, sizeof s, "Screen timeout  %us", prefs->sleep_seconds);
+    else snprintf(s, sizeof s, "Screen timeout  Never");
     lv_label_set_text(timeout_text, s);
     save_settings();
 }
@@ -237,7 +552,7 @@ static void on_color(lv_event_t *e)
     if (idx >= sizeof(PALETTE) / sizeof(PALETTE[0])) return;
     prefs->text_color = PALETTE[idx];
     save_settings();
-    build_settings();
+    build_lyrics_settings();
 }
 static void add_slider(lv_obj_t *parent, int y, int value,
                        int min, int max, lv_event_cb_t cb)
@@ -250,40 +565,333 @@ static void add_slider(lv_obj_t *parent, int y, int value,
     lv_obj_add_event_cb(s, cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(s, cb, LV_EVENT_RELEASED, NULL);
 }
+static void on_lyrics_settings(lv_event_t *e)
+{
+    (void)e; activity(); build_lyrics_settings();
+}
+static void on_device_settings(lv_event_t *e)
+{
+    (void)e; activity(); build_device_settings();
+}
 static void build_settings(void)
 {
     page = 2;
     make_base();
-    label(screen, "SETTINGS", 46, &lv_font_montserrat_20, prefs->text_color);
-    char s[36];
-    snprintf(s, sizeof s, "Brightness  %u%%", prefs->brightness);
-    brightness_text = label(screen, s, 103, &lv_font_montserrat_16, 0xE4EDF3);
-    add_slider(screen, 131, prefs->brightness, 5, 100, on_brightness);
-    snprintf(s, sizeof s, "Scroll speed  %u%%", prefs->scroll_speed);
-    speed_text = label(screen, s, 170, &lv_font_montserrat_16, 0xE4EDF3);
-    add_slider(screen, 198, prefs->scroll_speed, 10, 100, on_speed);
-    label(screen, "Lyric colour", 228, &lv_font_montserrat_16, 0xE4EDF3);
+    label(screen, "SETTINGS", 41, &lv_font_montserrat_24, prefs->text_color);
+    button(screen, "LYRICS", 250, 54, 0, -99, 0xB2C6D3, on_lyrics_settings, NULL);
+    button(screen, "CLOCK & WEATHER", 250, 54, 0, -33, 0xB2C6D3, on_clock_options, NULL);
+    button(screen, "DEVICE", 250, 54, 0, 33, 0xB2C6D3, on_device_settings, NULL);
+    button(screen, "WI-FI", 250, 54, 0, 99, 0xB2C6D3, on_wifi, NULL);
+    button(screen, "HOME", 153, 44, 0, 175, prefs->text_color, on_home, NULL);
+}
+static void on_lyric_font(lv_event_t *e)
+{
+    (void)e;
+    prefs->font_size = (prefs->font_size + 1) % 3;
+    save_settings();
+    build_lyrics_settings();
+}
+static void build_lyrics_settings(void)
+{
+    page = 9;
+    make_base();
+    label(screen, "LYRIC SETTINGS", 40, &lv_font_montserrat_24, prefs->text_color);
+    char text[60];
+    snprintf(text, sizeof text, "Text size: %s",
+             prefs->font_size == 0 ? "Small" : prefs->font_size == 1 ? "Medium" : "Large");
+    button(screen, text, 270, 50, 0, -103, 0xB2C6D3, on_lyric_font, NULL);
+    snprintf(text, sizeof text, "Scroll speed: %u%%", prefs->scroll_speed);
+    speed_text = label(screen, text, 168, system_font(), 0xE4EDF3);
+    add_slider(screen, 205, prefs->scroll_speed, 10, 100, on_speed);
+    label(screen, "Lyric colour", 249, system_font(), 0xE4EDF3);
     for (unsigned i = 0; i < sizeof(PALETTE) / sizeof(PALETTE[0]); i++) {
         lv_obj_t *dot = lv_button_create(screen);
-        lv_obj_set_size(dot, 36, 36);
+        lv_obj_set_size(dot, 43, 43);
         lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(dot, lv_color_hex(PALETTE[i]), 0);
         lv_obj_set_style_border_width(dot, prefs->text_color == PALETTE[i] ? 3 : 0, 0);
         lv_obj_set_style_border_color(dot, lv_color_hex(0x7F8B9C), 0);
-        lv_obj_align(dot, LV_ALIGN_TOP_MID, (int)i * 50 - 100, 253);
+        lv_obj_align(dot, LV_ALIGN_TOP_MID, (int)i * 53 - 106, 294);
         lv_obj_add_event_cb(dot, on_color, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
     }
-    font_text = label(screen, prefs->font_size == 0 ? "Font  Small  >" :
-                      prefs->font_size == 2 ? "Font  Large  >" : "Font  Medium  >",
-                      306, &lv_font_montserrat_16, 0xD0E4EF);
-    lv_obj_add_flag(font_text, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(font_text, on_font, LV_EVENT_CLICKED, NULL);
-    if (prefs->sleep_seconds) snprintf(s, sizeof s, "Screen timeout  %us  >", prefs->sleep_seconds);
-    else snprintf(s, sizeof s, "Screen timeout  Never  >");
-    timeout_text = label(screen, s, 339, &lv_font_montserrat_16, 0xD0E4EF);
+    button(screen, "BACK", 155, 45, 0, 175, prefs->text_color, on_settings, NULL);
+}
+static void on_system_font(lv_event_t *e)
+{
+    (void)e;
+    prefs->system_font_size = (prefs->system_font_size + 1) % 3;
+    save_settings();
+    build_device_settings();
+}
+static void build_device_settings(void)
+{
+    page = 10;
+    make_base();
+    label(screen, "DEVICE SETTINGS", 39, &lv_font_montserrat_24, prefs->text_color);
+    char text[64];
+    snprintf(text, sizeof text, "System font: %s",
+             prefs->system_font_size == 0 ? "18" : prefs->system_font_size == 1 ? "20" : "24");
+    button(screen, text, 260, 54, 0, -111, 0xB2C6D3, on_system_font, NULL);
+    snprintf(text, sizeof text, "Brightness: %u%%", prefs->brightness);
+    brightness_text = label(screen, text, 156, system_font(), 0xE4EDF3);
+    add_slider(screen, 195, prefs->brightness, 5, 100, on_brightness);
+    snprintf(text, sizeof text, "Screen timeout: %us", prefs->sleep_seconds);
+    timeout_text = label(screen, text, 259, system_font(), 0xE4EDF3);
     lv_obj_add_flag(timeout_text, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(timeout_text, on_timeout, LV_EVENT_CLICKED, NULL);
-    button(screen, "BACK", 155, 44, 0, 171, prefs->text_color, on_home, NULL);
+    button(screen, "ARM OTA", 163, 46, 0, 91, 0xB2C6D3, on_arm_ota, NULL);
+    ota_status = label(screen, "", 342, system_font(), 0x8BCCFF);
+    button(screen, "BACK", 152, 45, 0, 178, prefs->text_color, on_settings, NULL);
+}
+
+static void build_clock(void)
+{
+    page = 6;
+    make_base();
+    lf_clock_build(screen, prefs->clock_face, prefs);
+    /* Clock settings are a long press, not an accidental edge tap. */
+    lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(screen, on_clock_long_press, LV_EVENT_LONG_PRESSED, NULL);
+    clock_last_refresh = 0;
+    activity();
+}
+static void on_clock_back(lv_event_t *e)
+{
+    (void)e; activity(); build_clock();
+}
+static void on_clock_options(lv_event_t *e)
+{
+    (void)e; activity(); build_clock_settings();
+}
+static void on_cycle_face(lv_event_t *e)
+{
+    (void)e;
+    prefs->clock_face = (uint8_t)((prefs->clock_face + 1) % 6);
+    save_settings();
+    build_clock_settings();
+}
+static void on_weather_interval(lv_event_t *e)
+{
+    (void)e;
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    cfg.interval_minutes = cfg.interval_minutes == 15 ? 30 :
+                           cfg.interval_minutes == 30 ? 60 :
+                           cfg.interval_minutes == 60 ? 120 : 15;
+    if (lf_weather_save_config(&cfg)) {
+        activity();
+        build_clock_settings();
+    }
+}
+static void on_weather_location(lv_event_t *e)
+{
+    (void)e; activity(); build_weather_location();
+}
+static void on_basic_settings(lv_event_t *e)
+{
+    (void)e; activity(); build_basic_settings();
+}
+static void build_clock_settings(void)
+{
+    page = 7;
+    make_base();
+    label(screen, "CLOCK SETTINGS", 38, &lv_font_montserrat_24, prefs->text_color);
+    char value[65];
+    snprintf(value, sizeof value, "Face: %s", lf_clock_style_name(prefs->clock_face));
+    button(screen, value, 270, 55, 0, -99,
+           0xB2C6D3, on_cycle_face, NULL);
+    button(screen, "CUSTOMIZE BASIC", 270, 52, 0, -29,
+           0xB2C6D3, on_basic_settings, NULL);
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    button(screen, "WEATHER LOCATION", 254, 51, 0, 40,
+           0xB2C6D3, on_weather_location, NULL);
+    snprintf(value, sizeof value, "Update: %u min", cfg.interval_minutes);
+    button(screen, value, 239, 50, 0, 106,
+           0xB2C6D3, on_weather_interval, NULL);
+    button(screen, "BACK", 144, 50, 0, 176,
+           prefs->text_color, on_settings, NULL);
+}
+static void on_basic_font(lv_event_t *e)
+{
+    (void)e;
+    prefs->basic_font_style = (prefs->basic_font_style + 1) % 5;
+    save_settings();
+    build_basic_settings();
+}
+static void on_basic_ring_mode(lv_event_t *e)
+{
+    (void)e;
+    prefs->basic_ring_mode = (prefs->basic_ring_mode + 1) % 3;
+    save_settings();
+    build_basic_settings();
+}
+static void on_basic_date(lv_event_t *e)
+{
+    (void)e;
+    prefs->basic_show_date = !prefs->basic_show_date;
+    save_settings();
+    build_basic_settings();
+}
+static void on_basic_weather(lv_event_t *e)
+{
+    (void)e;
+    prefs->basic_weather = !prefs->basic_weather;
+    if (prefs->basic_weather) {
+        lf_weather_config_t cfg;
+        lf_weather_get_config(&cfg);
+        cfg.enabled = true;
+        (void)lf_weather_save_config(&cfg);
+    }
+    save_settings();
+    build_basic_settings();
+}
+static void on_basic_size(lv_event_t *e)
+{
+    prefs->basic_font_size = (uint8_t)lv_slider_get_value(lv_event_get_target(e));
+    if (basic_font_size_label) {
+        char text[40];
+        snprintf(text, sizeof text, "Time size: %u%%", prefs->basic_font_size);
+        lv_label_set_text(basic_font_size_label, text);
+    }
+    if (lv_event_get_code(e) == LV_EVENT_RELEASED) save_settings();
+}
+static void on_basic_colour(lv_event_t *e)
+{
+    selected_colour_target = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
+    activity();
+    build_basic_colour();
+}
+static void on_basic_back(lv_event_t *e)
+{
+    (void)e; activity(); build_basic_settings();
+}
+static uint32_t *selected_basic_rgb(void)
+{
+    switch (selected_colour_target) {
+        case 0: return &prefs->basic_background;
+        case 1: return &prefs->basic_foreground;
+        case 2: return &prefs->basic_ring_a;
+        case 3: return &prefs->basic_ring_b;
+        default: return &prefs->basic_ring_c;
+    }
+}
+static uint32_t hue_rgb(int hue)
+{
+    int sector=(hue / 60) % 6;
+    int d=(hue % 60)*255/60;
+    int r=0, g=0, b=0;
+    switch (sector) {
+        case 0: r=255;g=d;break;
+        case 1: r=255-d;g=255;break;
+        case 2: g=255;b=d;break;
+        case 3: g=255-d;b=255;break;
+        case 4: r=d;b=255;break;
+        default: r=255;b=255-d;break;
+    }
+    return (uint32_t)((r<<16)|(g<<8)|b);
+}
+static void on_basic_hue(lv_event_t *e)
+{
+    int hue=lv_slider_get_value(lv_event_get_target(e));
+    uint32_t rgb=hue_rgb(hue);
+    *selected_basic_rgb() = rgb;
+    if (basic_colour_swatch)
+        lv_obj_set_style_bg_color(basic_colour_swatch, lv_color_hex(rgb), 0);
+    if (basic_hue_label) {
+        char text[35];
+        snprintf(text, sizeof text, "Spectrum: %d / 359", hue);
+        lv_label_set_text(basic_hue_label,text);
+    }
+    if (lv_event_get_code(e)==LV_EVENT_RELEASED) save_settings();
+}
+static void build_basic_colour(void)
+{
+    page = 13;
+    make_base();
+    const char *titles[] = {"BACKGROUND","TIME TEXT","RING COLOR 1",
+                            "RING COLOR 2","RING COLOR 3"};
+    label(screen, titles[selected_colour_target], 48,
+          &lv_font_montserrat_24, prefs->text_color);
+    basic_colour_swatch = lv_obj_create(screen);
+    lv_obj_set_size(basic_colour_swatch, 138, 94);
+    lv_obj_align(basic_colour_swatch, LV_ALIGN_CENTER, 0, -64);
+    lv_obj_set_style_bg_color(basic_colour_swatch, lv_color_hex(*selected_basic_rgb()), 0);
+    lv_obj_set_style_radius(basic_colour_swatch, 28, 0);
+    lv_obj_set_style_border_color(basic_colour_swatch, lv_color_hex(0xC6E2FF),0);
+    lv_obj_set_style_border_width(basic_colour_swatch, 3, 0);
+    basic_hue_label = label(screen, "Drag hue across the spectrum", 225,
+                            &lv_font_montserrat_20, 0xCEDCEB);
+    add_slider(screen, 283, 210, 0, 359, on_basic_hue);
+    button(screen, "BACK", 161, 51, 0, 169, 0xB2C6D3, on_basic_back, NULL);
+}
+static void build_basic_settings(void)
+{
+    page = 12;
+    make_base();
+    label(screen, "BASIC CLOCK", 39, &lv_font_montserrat_24, prefs->text_color);
+    lv_obj_t *list = lv_obj_create(screen);
+    lv_obj_set_size(list, 322, 265);
+    lv_obj_align(list, LV_ALIGN_CENTER, 0, -2);
+    lv_obj_set_style_bg_color(list, lv_color_hex(0x0C1B2B), 0);
+    lv_obj_set_style_border_width(list, 0, 0);
+    lv_obj_set_style_radius(list, 18, 0);
+    lv_obj_set_style_pad_all(list, 7, 0);
+    lv_obj_set_style_pad_row(list, 8, 0);
+    lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_remove_flag(list, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    char text[65];
+    snprintf(text, sizeof text, "Font preset %u / 5", prefs->basic_font_style + 1);
+    button(list, text, 256, 50, 0, 0, 0xB2C6D3, on_basic_font, NULL);
+    basic_font_size_label = lv_label_create(list);
+    snprintf(text, sizeof text, "Time size: %u%%", prefs->basic_font_size);
+    lv_label_set_text(basic_font_size_label, text);
+    lv_obj_set_style_text_font(basic_font_size_label, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(basic_font_size_label, lv_color_hex(0xD2E7FD), 0);
+    lv_obj_t *slider=lv_slider_create(list);
+    lv_obj_set_size(slider, 249, 14);
+    lv_slider_set_range(slider, 0, 100);
+    lv_slider_set_value(slider, prefs->basic_font_size, LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_RELEASED, NULL);
+    snprintf(text, sizeof text, "Ring: %s", prefs->basic_ring_mode==0?"Solid":
+             prefs->basic_ring_mode==1?"2-color gradient":"3-color gradient");
+    button(list, text, 256, 50, 0, 0, 0xB2C6D3, on_basic_ring_mode, NULL);
+    const char *names[]={"Background color","Time text color","Ring color 1",
+                         "Ring color 2","Ring color 3"};
+    for(uintptr_t i=0;i<5;i++)
+        button(list,names[i],256,50,0,0,0xB2C6D3,on_basic_colour,(void*)i);
+    button(list, prefs->basic_show_date?"Date: ON":"Date: OFF",256,50,0,0,
+           0xB2C6D3,on_basic_date,NULL);
+    button(list, prefs->basic_weather?"Weather: ON":"Weather: OFF",256,50,0,0,
+           0xB2C6D3,on_basic_weather,NULL);
+    button(screen, "BACK", 150, 50, 0, 175, 0xB2C6D3, on_clock_options, NULL);
+}
+static void build_weather_details(void)
+{
+    page = 11;
+    make_base();
+    lf_clock_clear();
+    label(screen, "WEATHER", 25, &lv_font_montserrat_24, 0xE8F5FF);
+    lf_weather_visual_build(screen);
+    lf_weather_view_t weather;
+    lf_weather_get_view(&weather);
+    lf_weather_visual_update(&weather);
+    weather_detail_refresh = now_ms();
+    button(screen, "BACK TO CLOCK", 188, 50, 0, 173,
+           0x9ACBF1, on_clock_back, NULL);
+}
+static void build_weather_location(void)
+{
+    page = 8;
+    make_base();
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    lf_charwheel_show(screen, "Weather city", cfg.city, false,
+                      LF_WEATHER_CITY_MAX,
+                      wheel_weather_save, wheel_weather_cancel);
 }
 
 static void on_wake(lv_event_t *e)
@@ -305,19 +913,25 @@ static void sleep_display(void)
     lv_obj_add_event_cb(screen, on_wake, LV_EVENT_PRESSED, NULL);
     apply_brightness();
 }
-static void on_sleep(lv_event_t *e)
-{
-    (void)e; activity(); sleep_display();
-}
-
 static void on_tick(lv_timer_t *timer)
 {
     (void)timer;
     uint64_t current = now_ms();
-    if (page == 0 && !asleep && current - last_power_refresh_ms >= 4000) {
+    if (page == 4 && !asleep && current - last_wifi_poll_ms >= 350) {
+        last_wifi_poll_ms = current;
+        size_t n = 0;
+        int scan_state = lf_network_scan_results(wifi_aps, LF_WIFI_MAX_RESULTS, &n);
+        if (scan_state != wifi_state_previous && scan_state != 1) {
+            wifi_state_previous = scan_state;
+            wifi_ap_count = n;
+            draw_wifi_list();
+            if (scan_state < 0 && wifi_status) lv_label_set_text(wifi_status, "Scan failed. Tap SCAN.");
+        }
+    }
+    if ((page == 0 || page == 10) && !asleep && current - last_power_refresh_ms >= 4000) {
         last_power_refresh_ms = current;
         lf_power_state_t st;
-        bool success=lf_power_read(&st);
+        bool success=lf_power_cached(&st);
         if (battery_status) {
             char value[68];
             const char *icon = !success ? LV_SYMBOL_WARNING :
@@ -329,38 +943,85 @@ static void on_tick(lv_timer_t *timer)
             if (success && st.percentage >= 0)
                 snprintf(value,sizeof value,"%s  %s  %d%%",icon,lf_power_symbol(&st),st.percentage);
             else if (success) snprintf(value,sizeof value,"%s  %s",icon,lf_power_symbol(&st));
-            else snprintf(value,sizeof value,"%s  Battery unavailable",icon);
-            lv_label_set_text(battery_status,value);
-            lv_obj_set_style_text_color(battery_status,lv_color_hex(lf_power_color(&st)),0);
+            else snprintf(value,sizeof value,"%s  BATTERY",LV_SYMBOL_BATTERY_FULL);
+            if (success) {
+                lv_label_set_text(battery_status,value);
+                lv_obj_set_style_text_color(battery_status,lv_color_hex(lf_power_color(&st)),0);
+            }
         }
         if (network_status) {
             char text[128];
-            if (*lf_network_ap_ssid()) snprintf(text,sizeof text,"Wi-Fi setup: %s",lf_network_ap_ssid());
-            else snprintf(text,sizeof text,"Open http://%s/",lf_network_address());
-            lv_label_set_text(network_status,text);
+            char ssid[33] = {0};
+            if (lf_network_connected_ssid(ssid, sizeof ssid))
+                snprintf(text, sizeof text, "Wi-Fi: %.32s", ssid);
+            else if (*lf_network_ap_ssid())
+                snprintf(text, sizeof text, "Setup: %.32s", lf_network_ap_ssid());
+            else snprintf(text, sizeof text, "Wi-Fi connecting...");
+            lv_label_set_text(network_status, text);
         }
         if (network_password) {
             char text[72];
-            if (*lf_network_ap_ssid()) snprintf(text,sizeof text,"Wi-Fi password: %s",lf_network_ap_password());
-            else text[0]=0;
-            lv_label_set_text(network_password,text);
+            if (*lf_network_ap_ssid())
+                snprintf(text, sizeof text, "Password: %s", lf_network_ap_password());
+            else snprintf(text, sizeof text, "Connected to home Wi-Fi");
+            lv_label_set_text(network_password, text);
+        }
+        if (network_url) {
+            char url_text[85];
+            snprintf(url_text, sizeof url_text, "Open browser to http://%s/", lf_network_address());
+            lv_label_set_text(network_url, url_text);
         }
         if(ota_status && !lf_network_ota_armed()) lv_label_set_text(ota_status,"");
     }
     if (asleep) return;
-    if (prefs->sleep_seconds && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
+    if (page == 11 && current - weather_detail_refresh >= 4000) {
+        weather_detail_refresh = current;
+        lf_weather_view_t weather;
+        lf_weather_get_view(&weather);
+        lf_weather_visual_update(&weather);
+    }
+    if (page == 6 && current - clock_last_refresh >= 950) {
+        clock_last_refresh = current;
+        lf_clock_update();
+    }
+    if (prefs->sleep_seconds && !(page == 1 && !paused) && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
         sleep_display();
         return;
     }
-    if (page != 1 || paused || !scroll_panel) {
+    if (page != 1 || paused || user_dragging || finger_was_scrolling ||
+        !scroll_panel || (touch_resume_at_ms && current < touch_resume_at_ms)) {
         last_scroll_ms = current;
         return;
     }
     uint64_t dt = current - last_scroll_ms;
     if (dt > 200) dt = 200;
     last_scroll_ms = current;
-    scroll_y += (float)dt * (0.004f + prefs->scroll_speed * 0.0004f);
+    if (lv_obj_get_scroll_bottom(scroll_panel) <= 0) {
+        /* The demo loops after a short reading pause; real songs will use
+           playback/lyric timestamps instead of a perpetual preview loop. */
+        if (!scroll_at_end_ms) scroll_at_end_ms = current;
+        if (current - scroll_at_end_ms >= 3500) {
+            lv_obj_scroll_to_y(scroll_panel, 0, LV_ANIM_OFF);
+            scroll_y = 0;
+            scroll_at_end_ms = 0;
+        }
+        return;
+    }
+    scroll_at_end_ms = 0;
+    /* Accumulate subpixel motion. Reading back integer Y every tick would
+       truncate the fractional step to zero and stop automatic scrolling. */
+    /* 10-100% maps to ~31-148 px/s; default 45% is ~77 px/s.
+       Old formula only moved ~22 px/s at 45%. */
+    scroll_y += (float)dt * (0.018f + prefs->scroll_speed * 0.0013f);
     lv_obj_scroll_to_y(scroll_panel, (int32_t)scroll_y, LV_ANIM_OFF);
+}
+
+/* Only the active Rolex-style clock needs a high-rate redraw.
+   The rest of the UI retains its lower-cost 50 ms timer. */
+static void on_clock_sweep(lv_timer_t *timer)
+{
+    (void)timer;
+    if (page == 6 && !asleep) lf_clock_animate();
 }
 
 bool lf_ui_start(lf_settings_t *s)
@@ -373,8 +1034,10 @@ bool lf_ui_start(lf_settings_t *s)
         return false;
     }
     apply_brightness();
+    (void)lf_power_background_start();
     build_home();
     lv_timer_create(on_tick, 50, NULL);
+    lv_timer_create(on_clock_sweep, 16, NULL);
     esp_lv_adapter_unlock();
     return true;
 }

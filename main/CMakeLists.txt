@@ -3,6 +3,11 @@ idf_component_register(
     SRCS
         "main.c"
         "ui.c"
+        "char_wheel.c"
+        "clock_face.c"
+        "basic_clock.c"
+        "weather.c"
+        "weather_visual.c"
         "ota_guard.c"
         "settings.c"
         "lyrics.c"
@@ -21,6 +26,8 @@ idf_component_register(
         esp_netif
         esp_event
         esp_http_server
+        esp_http_client
+        mbedtls
         esp_partition
         esp_driver_i2c
         json

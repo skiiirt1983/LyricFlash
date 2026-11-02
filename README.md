@@ -1,18 +1,23 @@
-# LyricFlash Alpha 0.3 — firmware source (not yet flash-ready)
+# LyricFlash Alpha 0.7 — full USB recovery and OTA update repair
 
-Target: Waveshare ESP32-S3-Touch-AMOLED-1.75 (SKU 31261), 466×466, 16 MB flash, 8 MB PSRAM. Dedicated lyrics display: **no PrintSphere features**.
+Hardware: Waveshare ESP32-S3 Touch AMOLED 1.75 (466 × 466, 16 MB flash).
+Private alpha/beta development only. Stable v1.0 is not yet released.
 
-This revision extends Alpha 0.2 with:
+## What's in this revision
 
-- Read-only AXP2101 power telemetry using the **existing Waveshare BSP I2C bus**; green charging icon when USB/VBUS good, white on battery, amber <20%, red <10%. The charge bolt is used only for active charging.
-- Self-contained Wi-Fi initial setup using a per-boot password-protected AP, and stored home Wi-Fi credentials in a stable NVS namespace.
-- Local device page at port 80: Wi-Fi onboarding and manual, PIN-protected OTA upload, explicitly armed from the display for two minutes.
-- Protection against 16 MB factory firmware being mistaken for a 5 MB OTA application.
-- Existing animated demo lyric scroll, touch settings, color palette, size, brightness, NVS persistence and screen blanking.
-- No codec, speaker, microphone, or remote recognition service is activated by this alpha.
+- Carries forward the screen transition, lyric preview scroll, clock, and weather improvements from unreleased 0.6.
+- Local OTA form now reports actual file transfer progress, HTTP status, network errors and timeouts; it does not confuse upload completion with verified installation.
+- OTA handler validates the image header and inactive partition, uses known-size erase rather than erasing the entire 5 MB slot, logs failures, and reports last OTA result and byte counts from /api/info.
+- GitHub Actions packs both full USB image (lyricflash-full.bin) and application-only OTA image (lyricflash-ota.bin), plus SHA256SUMS.txt and beta manifest.
 
-## Files
+## Installing Alpha 0.7 by USB
 
-`main/`: ESP-IDF firmware application. `partitions.csv`: matches PrintSphere 1.6.2, preserves 1 MB NVS and two 5 MB OTA app slots. `tests/`: host C/Python logic checks. `.github/workflows/firmware.yml`: reproducible cloud cross-build workflow. `BUILD.md`: how to build and safety gates.
+Run the GitHub Actions workflow 'LyricFlash USB Build and Pages' from this Alpha 0.7 branch, or use its successful PR build. Download the artifact 'LyricFlash-Alpha-0.7-FULL-USB-and-OTA-UNTESTED' and extract it.
 
-**Important:** We cannot compile this ESP32-S3 target in the current authoring container, which lacks Espressif tools and network access to download managed components. A successful host test does not mean it boots. **Do not flash this source or an unvalidated binary.** A future alpha will implement audio recording and authorized song recognition after we verify hardware basics.
+Use lyricflash-full.bin at address 0x0 with a compatible ESP32-S3 browser/serial flasher for a 16 MB flash device. Never flash lyricflash-ota.bin at 0x0. The full merged image contains FF padding over NVS and otadata, so flashing it will erase saved Wi-Fi/settings. Record anything needed before proceeding; no additional full-chip erase is required.
+
+The project beta browser installer uses the verified full merged image after the branch is merged to main and GitHub Pages deploys; do not assume the live installer has Alpha 0.7 until it says so.
+
+After USB boot, verify the touch interface, transitions, lyric scrolling, Wi-Fi, and API version. Then test an OTA to a later image using the on-device PIN. A passing build does not prove OTA works on hardware.
+
+This is not an official/public stable firmware release and does not include PrintSphere functionality.
