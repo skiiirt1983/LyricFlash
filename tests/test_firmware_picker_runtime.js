@@ -60,7 +60,7 @@ const runtime=new Function("document","fetch","Option","confirm","setTimeout",
  assert.match(el("builds").options[1].label,/0\.8\.4-alpha.*INSTALLED/);
  assert.match(el("builds").options[2].label,/0\.8\.3-alpha.*OLDER THAN INSTALLED/);
  assert(!el("builds").options.some(x=>/ — NEW/.test(x.label)),"Oldest build falsely labelled NEW");
- el("builds").value="2";el("builds").onchange();
+ el("builds").value="1";el("builds").onchange();
  assert.equal(el("install").disabled,true,"Older build downgrade was not blocked");
  const fetched=requests.filter(x=>x.includes("catalog.json"));
  assert.equal(fetched.length,1);
@@ -71,7 +71,7 @@ const runtime=new Function("document","fetch","Option","confirm","setTimeout",
  assert.match(el("builds").options[1].label,/0\.8\.5-alpha.*LATEST PUBLISHED/);
  assert.match(el("catalog-status").textContent,/checked again/i);
  assert.equal(el("refresh-builds").disabled,false);
- el("builds").value="1";el("builds").onchange();
+ el("builds").value="0";el("builds").onchange();
  assert.equal(el("install").disabled,false,"Valid newer build should be selectable");
  console.log("PASS: matching Settings/Firmware headers, sorted OTA builds, safe old-build handling, live GitHub refresh");
 })().catch(e=>{console.error(e);process.exitCode=1});
