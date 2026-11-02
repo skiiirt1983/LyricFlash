@@ -285,6 +285,15 @@ static void swipe_intent(lv_dir_t direction)
             swipe_candidate_page = 14;
             swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_BOTTOM;
         }
+    } else if (page == 2) {
+        /* Settings is a navigation destination, never a dead end.
+           Return Home with either horizontal swipe; a short accidental
+           gesture still cannot activate because the threshold is 38 px. */
+        if (direction == LV_DIR_LEFT || direction == LV_DIR_RIGHT) {
+            swipe_candidate_page = 0;
+            swipe_candidate_animation = direction == LV_DIR_LEFT
+                ? LV_SCR_LOAD_ANIM_OVER_LEFT : LV_SCR_LOAD_ANIM_OVER_RIGHT;
+        }
     } else if (page == 6) {
         if (direction == LV_DIR_LEFT) {
             swipe_candidate_page = 0;
@@ -299,8 +308,9 @@ static void swipe_intent(lv_dir_t direction)
     } else if (page == 11 && (direction == LV_DIR_BOTTOM || direction == LV_DIR_RIGHT)) {
         swipe_candidate_page = 6;
         swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
-    } else if (direction == LV_DIR_RIGHT) {
-        /* Consistent Back from every settings submenu. */
+    } else if (direction == LV_DIR_RIGHT || direction == LV_DIR_LEFT) {
+        /* Consistent exit for all settings submenus, either horizontal
+           direction. Clock and weather paths keep their parent structure. */
         switch(page) {
         case 1: case 2: case 15: swipe_candidate_page=0; break;
         case 4: case 9: case 10: swipe_candidate_page=2; break;
