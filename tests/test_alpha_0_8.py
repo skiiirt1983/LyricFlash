@@ -11,6 +11,8 @@ workflow=(p/'.github/workflows/pages-and-firmware.yml').read_text()
 assert 'lv_screen_load_anim(' not in ui
 assert 'lv_screen_load(screen);' in ui
 assert 'lv_obj_delete_async(old_screen);' in ui
+assert 'button(screen, "ARM OTA", 170, 46, 0, 83' in ui
+assert 'ota_status = label(screen, "CLOCK' in ui
 assert 'lv_obj_delete(old_screen);' not in ui
 assert 'build_debug();' in ui and 'page == 14' in ui
 assert 'lf_diag_snapshot(&d);' in ui and 'lf_ui_max_tick_gap_ms' in ui
