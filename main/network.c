@@ -326,6 +326,8 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
     lf_weather_get_config(&weather);
     cJSON *root = cJSON_CreateObject();
     if (!root) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
+    cJSON_AddNumberToObject(root, "clock_face", s.clock_face);
+    cJSON_AddBoolToObject(root, "weather_enabled", weather.enabled);
     cJSON_AddNumberToObject(root, "font_style", s.basic_font_style);
     cJSON_AddNumberToObject(root, "font_size", s.basic_font_size);
     cJSON_AddNumberToObject(root, "ring_mode", s.basic_ring_mode);
@@ -375,10 +377,12 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid settings JSON");
         return ESP_FAIL;
     }
-    int font_style, font_size, ring_mode, bg, fg, a, b, c, interval;
-    uint8_t show_date, basic_weather;
+    int face, font_style, font_size, ring_mode, bg, fg, a, b, c, interval;
+    uint8_t show_date, basic_weather, weather_enabled;
     const cJSON *city = cJSON_GetObjectItemCaseSensitive(root, "city");
     bool valid =
+        number_in_range(root, "clock_face", 0, 5, &face) &&
+        boolean_value(root, "weather_enabled", &weather_enabled) &&
         number_in_range(root, "font_style", 0, 4, &font_style) &&
         number_in_range(root, "font_size", 0, 100, &font_size) &&
         number_in_range(root, "ring_mode", 0, 2, &ring_mode) &&
@@ -399,9 +403,10 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     }
     if (!valid) {
         cJSON_Delete(root);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid Basic clock settings");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid clock settings");
         return ESP_FAIL;
     }
+    current.clock_face = (uint8_t)face;
     current.basic_font_style = (uint8_t)font_style;
     current.basic_font_size = (uint8_t)font_size;
     current.basic_ring_mode = (uint8_t)ring_mode;
@@ -414,7 +419,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     current.basic_ring_c = (uint32_t)c;
     strlcpy(weather.city, city->valuestring, sizeof weather.city);
     weather.interval_minutes = (uint16_t)interval;
-    if (basic_weather) weather.enabled = true;
+    weather.enabled = weather_enabled != 0;
     cJSON_Delete(root);
 
     if (!lf_weather_save_config(&weather)) {
@@ -425,7 +430,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     esp_err_t err = lf_ui_apply_basic_settings(&current);
     if (err != ESP_OK) {
         lf_diag_error("settings", "UI lock or NVS save failed");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot save Basic clock settings");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot save clock settings");
         return ESP_FAIL;
     }
     cJSON *reply = cJSON_CreateObject();
