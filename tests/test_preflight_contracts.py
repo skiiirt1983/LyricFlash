@@ -129,6 +129,26 @@ require("page == 2" in ui and "case 7:" in ui,
         "Swipe back-navigation omits settings screens")
 require("lf-mark" in pages["settings"] and "lf-mark" in pages["firmware"],
         "LyricFlash logo/header branding missing")
+require('class="subnav"' in pages["settings"], "Settings section menu missing")
+for key in ("network", "clocks", "lyrics", "device", "status-section"):
+    require('id="'+key+'"' in pages["settings"],
+            "Settings menu target missing: "+key)
+require('"/api/preferences"' in network and "lf_ui_apply_device_settings" in network,
+        "Browser global preferences cannot be saved")
+require("face_profiles" in network and "face_profiles" not in pages["settings"],
+        "Clock profiles must be saved by Clock Studio, not global preferences")
+for required in ("face_background", "face_foreground", "face_accent",
+                 "face_show_date", "face_show_seconds", "face_show_battery", "face_24h"):
+    require(required in pages["studio"], "Live Clock Studio missing "+required)
+require("strlcpy(ap_pass, \"lyricflash\", sizeof ap_pass);" in network,
+        "Simple fixed setup AP credential not configured")
+require("lv_draw_line_dsc_init" in read("main/clock_face.c"),
+        "Analog ticks still create 60 separate LVGL objects")
+require("segment_count" in read("main/basic_clock.c"),
+        "Basic ring still creates 60 individual LVGL objects")
+require("charging_color" in read("main/settings.h") and
+        "charging_color" in pages["settings"],
+        "Configurable charging indicator absent")
 # This requirement is intentionally a release blocker until implemented.
 require(bool(re.search(r'id=["\']clock-preview["\']|<canvas\b',
                        pages["studio"], flags=re.I)),
