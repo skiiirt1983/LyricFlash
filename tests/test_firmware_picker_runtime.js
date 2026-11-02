@@ -47,7 +47,8 @@ async function fetchStub(url,opts={}){
   version:phase===0?"0.8.4-alpha":"0.8.5-alpha",builds:[{chipFamily:"ESP32-S3"}]});
  throw Error("Unexpected request "+url);
 }
-const safe=script.replace("loadInstalled().then(()=>loadBuilds());","");
+const safe=script.replace("loadInstalled().then(()=>loadBuilds());","")
+                 .replace("loadInstalled().then(loadBuilds);","");
 const runtime=new Function("document","fetch","Option","confirm","setTimeout",
  safe+"\nreturn {loadInstalled,loadBuilds,versionCompare};")(
  {getElementById:el},fetchStub,Option,()=>false,()=>{});
