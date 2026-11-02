@@ -11,7 +11,7 @@ typedef struct {
     uint8_t font_size;        // lyric size: 0 small, 1 medium, 2 large
     uint8_t system_font_size; // device UI size: 0 18pt, 1 20pt, 2 24pt
     uint8_t sleep_seconds;    // Screen-off timeout: 0/15/30/60 s
-    uint16_t deep_sleep_minutes; // 0=disabled; optional 5/15/30/60 minute deep sleep
+    uint8_t deep_sleep_minutes; // 0=disabled; optional 5/15/30/60 minute deep sleep
     uint32_t text_color;      // 24-bit RRGGBB
     uint32_t background_color; // 24-bit RRGGBB
     uint32_t accent_color;     // 24-bit RRGGBB

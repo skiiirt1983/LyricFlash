@@ -78,7 +78,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     (void)nvs_get_u8(h, "font", &s->font_size);
     (void)nvs_get_u8(h, "uifont", &s->system_font_size);
     (void)nvs_get_u8(h, "timeout", &s->sleep_seconds);
-    (void)nvs_get_u16(h, "deepmins", &s->deep_sleep_minutes);
+    (void)nvs_get_u8(h, "deepmins", &s->deep_sleep_minutes);
     (void)nvs_get_u32(h, "textcolor", &s->text_color);
     (void)nvs_get_u32(h, "bgcolor", &s->background_color);
     (void)nvs_get_u32(h, "accent", &s->accent_color);
@@ -163,7 +163,7 @@ esp_err_t lf_settings_save(const lf_settings_t *s)
     TRY_NVS(nvs_set_u8(h, "font", s->font_size));
     TRY_NVS(nvs_set_u8(h, "uifont", s->system_font_size));
     TRY_NVS(nvs_set_u8(h, "timeout", s->sleep_seconds));
-    TRY_NVS(nvs_set_u16(h, "deepmins", s->deep_sleep_minutes));
+    TRY_NVS(nvs_set_u8(h, "deepmins", s->deep_sleep_minutes));
     TRY_NVS(nvs_set_u32(h, "textcolor", s->text_color));
     TRY_NVS(nvs_set_u32(h, "bgcolor", s->background_color));
     TRY_NVS(nvs_set_u32(h, "accent", s->accent_color));
