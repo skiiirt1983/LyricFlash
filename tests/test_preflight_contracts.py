@@ -241,7 +241,7 @@ for name in ('build_home','build_preview','build_settings','build_clock',
     require(f'static void {name}(void) {{ nav_schedule({name}_now); }}' in ui,
             f'Input callback can still rebuild {name} synchronously')
 on_wake=ui.split('static void on_wake(lv_event_t *e)\n{',1)[1].split('static void sleep_deep',1)[0]
-sleep=ui.split('static void sleep_display(void)\\n{',1)[1].split('static void on_tick',1)[0]
+sleep=ui.split('static void sleep_display(void)\n{',1)[1].split('static void on_tick',1)[0]
 require('build_home();' not in on_wake and 'make_base();' not in sleep and
         'sleep_overlay=lv_obj_create(screen);' in sleep and
         'lv_obj_delete_async(cover);' in on_wake and
