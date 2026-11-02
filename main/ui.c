@@ -15,6 +15,8 @@
 #include "char_wheel.h"
 #include "lvgl.h"
 #include <stdbool.h>
+#include <stdatomic.h>
+#include "ota_guard.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -26,6 +28,9 @@ static uint64_t last_scroll_ms;
 static float scroll_y;
 static bool paused;
 static bool asleep;
+static atomic_bool ota_services_ready;
+static uint64_t ota_services_ready_at_ms;
+static bool ota_verification_done;
 static lv_obj_t *sleep_overlay; /* Touch-capture cover, leaves current page intact. */
 static lv_obj_t *scroll_panel;
 static lv_obj_t *lyrics_label;
@@ -1573,6 +1578,15 @@ static void on_tick(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
+    /* A new OTA app must actually run its LVGL timer for 15 seconds AFTER
+       Wi-Fi/OTA services start before it can mark itself valid. If the UI
+       stalls or reboots first, the bootloader may roll the pending app back. */
+    if(!ota_verification_done && atomic_load(&ota_services_ready) &&
+       current>=ota_services_ready_at_ms+15000ULL &&
+       max_ui_tick_gap_ms<2000) {
+        ota_verification_done=true;
+        lf_ota_guard_confirm_startup();
+    }
     /* Touch polling is a wake fallback even if the off-screen overlay
        misses LVGL's PRESSED event; it does not navigate while asleep. */
     if(asleep) {
@@ -1747,6 +1761,12 @@ static void on_clock_sweep(lv_timer_t *timer)
 {
     (void)timer;
     if (page == 6 && !pager_scrolling && !asleep && !touch_held && !clock_settings_popup && now_ms() >= screen_animation_until_ms) lf_clock_animate();
+}
+
+void lf_ui_mark_services_ready(void)
+{
+    ota_services_ready_at_ms=now_ms();
+    atomic_store(&ota_services_ready,true);
 }
 
 bool lf_ui_start(lf_settings_t *s)

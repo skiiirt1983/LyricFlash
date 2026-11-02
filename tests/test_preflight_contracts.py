@@ -266,3 +266,11 @@ require('lv_obj_add_event_cb(ring,draw_basic_ring,LV_EVENT_DRAW_MAIN' in basic a
         "Basic Clock must not build a 30-widget ring")
 require('if(!pager_render_target) {\n        lf_weather_visual_clear();\n        lf_clock_clear();' in ui,
         "Cached Clock must not clear while building Home or Settings")
+
+# Delayed acceptance of a booted OTA image must follow sustained UI ticks,
+# never simply booting into an untested touch/display implementation.
+require('lf_ui_mark_services_ready();' in read("main/main.c") and
+        'current>=ota_services_ready_at_ms+15000ULL' in ui and
+        'max_ui_tick_gap_ms<2000' in ui and
+        'lf_ota_guard_confirm_startup();' in ui,
+        "OTA must not confirm an app before the UI remains responsive")
