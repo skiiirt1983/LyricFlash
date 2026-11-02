@@ -11,6 +11,10 @@ int main(void)
     assert(lf_settings_load(&initial)==ESP_OK);
     assert(initial.brightness==55 && initial.scroll_speed==70);
     assert(initial.line_spacing_px==5 && initial.show_progress==1);
+    /* Virgin NVS must use the NEW default (70), not migrate a nonexistent
+       legacy preference as if it came from alpha 0.8.4. */
+    assert(initial.face_background[0]==0x070F14);
+    assert(initial.charging_color==0x42DC89);
     initial.brightness=77;
     initial.scroll_speed=24;
     initial.font_size=2;
