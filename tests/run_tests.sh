@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 python3 tests/test_partitions.py
 python3 tests/test_static_safety.py
 python3 tests/test_ota_release_contract.py
+python3 tests/test_release_package.py
 python3 tests/test_alpha_0_8.py
 python3 tests/test_beta_local_installer.py
 node --check docs/beta/local-flash.js

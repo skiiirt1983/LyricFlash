@@ -242,8 +242,12 @@ static void make_base(void)
     lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(screen, on_gesture_press, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(screen, on_swipe, LV_EVENT_GESTURE, NULL);
+    /* A gesture/click callback may still be dispatching against old_screen.
+       Deleting it synchronously invalidates the event target / input-device
+       references and can reboot ESP32-S3. Keep the instant screen swap, but
+       free the old LVGL tree on the next timer-handler pass. */
     lv_screen_load(screen);
-    if (old_screen != screen) lv_obj_delete(old_screen);
+    if (old_screen != screen) lv_obj_delete_async(old_screen);
     debug_text = NULL;
     scroll_panel = NULL;
     lyrics_label = NULL;
@@ -283,8 +287,10 @@ static void build_home(void)
     label(screen, LF_VERSION_LABEL, 103, &lv_font_montserrat_20, 0xB7C7D7);
     battery_status = label(screen, "BATTERY", 151, &lv_font_montserrat_20, 0xDCE8F0);
     button(screen, "LYRICS", 242, 82, 0, 0, 0xA8D6FF, on_preview, NULL);
-    label(screen, "Mic off", 302, system_font(), 0xB9CADB);
-    label(screen, "CLOCK  <          >  SETTINGS", 344, &lv_font_montserrat_18, 0xB9CADB);
+    /* Physical OTA arming must remain reachable even if navigation breaks.
+       No browser/remote endpoint can arm updates without touching the device. */
+    button(screen, "ARM OTA", 170, 46, 0, 83, 0xA8D6FF, on_arm_ota, NULL);
+    ota_status = label(screen, "CLOCK  <          >  SETTINGS", 344, &lv_font_montserrat_18, 0xB9CADB);
     label(screen, "SWIPE DOWN FOR DEBUG", 398, &lv_font_montserrat_16, 0x6E8CAC);
 }
 
@@ -1018,7 +1024,9 @@ static void on_tick(lv_timer_t *timer)
             snprintf(url_text, sizeof url_text, "Open browser to http://%s/", lf_network_address());
             lv_label_set_text(network_url, url_text);
         }
-        if(ota_status && !lf_network_ota_armed()) lv_label_set_text(ota_status,"");
+        if (ota_status && !lf_network_ota_armed())
+            lv_label_set_text(ota_status, page == 0
+                ? "CLOCK  <          >  SETTINGS" : "");
     }
     if (asleep) return;
     if (page == 11 && current - weather_detail_refresh >= 4000) {

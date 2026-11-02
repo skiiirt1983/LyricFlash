@@ -5,7 +5,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, feature/alpha-0-8-diagnostics-web-settings]
+    branches: [main, fix/alpha-0-8-1-swipe-reboot]
     paths:
       - 'docs/**'
       - 'main/**'
@@ -45,19 +45,24 @@ jobs:
           cp build/lyricflash-full.bin _site/beta/firmware/lyricflash-full.bin
           cp build/lyricflash.bin _site/beta/firmware/lyricflash-ota.bin
           python3 tools/prepare_site.py _site
-      - name: Package USB, OTA and checksums
+      - name: Mandatory full USB, OTA, manifest and ZIP release gate
         run: |
-          cd _site/beta/firmware
-          sha256sum lyricflash-full.bin lyricflash-ota.bin > SHA256SUMS.txt
-          printf 'LyricFlash Alpha 0.8 (untested)\nUSB: flash lyricflash-full.bin at offset 0x0 to the Waveshare ESP32-S3 16MB device.\nOTA: use lyricflash-ota.bin only in the local PIN-protected OTA updater; never flash it at 0x0.\nThe merged full image also overwrites NVS and otadata. Re-enter saved Wi-Fi/settings after flashing. No additional full-chip erase needed.\n' > USB-INSTALL.txt
+          python3 tools/package_release.py _site
+          python3 tools/package_release.py --verify _site
       - name: Upload complete USB and OTA release
         uses: actions/upload-artifact@v4
         with:
-          name: LyricFlash-Alpha-0.8-FULL-USB-and-OTA-UNTESTED
+          name: LyricFlash-Alpha-0.8.1-FULL-USB-and-OTA-UNTESTED
           path: |
-            _site/beta/firmware/
+            _site/beta/firmware/lyricflash-full.bin
+            _site/beta/firmware/lyricflash-ota.bin
+            _site/beta/firmware/SHA256SUMS.txt
+            _site/beta/firmware/USB-INSTALL.txt
+            _site/beta/firmware/LyricFlash-*.zip
             _site/beta/manifest.json
           if-no-files-found: error
+      - name: Verify complete USB+OTA release again before deployment
+        run: python3 tools/package_release.py --verify _site
       - uses: actions/configure-pages@v5
         if: github.ref == 'refs/heads/main'
       - uses: actions/upload-pages-artifact@v4
