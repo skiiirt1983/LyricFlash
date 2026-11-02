@@ -33,8 +33,23 @@ static lv_obj_t *speed_text;
 static lv_obj_t *brightness_text;
 static lv_obj_t *timeout_text;
 static lv_obj_t *screen;
-/* Recovery mode: exactly one LVGL screen, no pager. */
-static bool pager_scrolling; /* Always false for clock refresh guard. */
+/* PrintSphere-style touch-synchronous pager, isolated to the three core pages.
+   All submenus (including Weather) remain standalone and release the pager. */
+#define LF_PAGER_WIDTH 466
+static lv_obj_t *pager_root;
+static lv_obj_t *pager_scroll;
+static lv_obj_t *pager_clock;
+static lv_obj_t *pager_home;
+static lv_obj_t *pager_settings;
+static lv_obj_t *pager_render_target;
+static lv_obj_t *pager_home_battery;
+static lv_obj_t *pager_home_network;
+static bool pager_scrolling;
+static int pager_index;
+static int pager_origin_index;
+static int pager_requested_index=-1;
+static bool pager_rebuild_requested;
+static bool pager_request_queued;
 static lv_obj_t *battery_status;
 static lv_obj_t *network_status;
 static lv_obj_t *network_password;
@@ -241,6 +256,10 @@ static void build_clock_settings(void);
 static void render_home(void);
 static void render_settings(void);
 static void render_clock(void);
+static void pager_build(int index);
+static void pager_select(int index);
+static void pager_show(int index, lv_anim_enable_t animation);
+static void pager_request(int index, bool rebuild);
 
 static bool is_swipe_page(void)
 {
@@ -290,6 +309,10 @@ static void queue_swipe(int target, lv_screen_load_anim_t animation)
 static void swipe_intent(lv_dir_t direction)
 {
     if (clock_settings_popup || swipe_candidate_page >= 0) return;
+    /* The LVGL pager itself owns horizontal main-page gestures.
+       Never enqueue a competing screen replacement while it scrolls. */
+    if(pager_root && lv_screen_active()==pager_root &&
+       (direction==LV_DIR_LEFT || direction==LV_DIR_RIGHT)) return;
     if (page == 0) {
         if (direction == LV_DIR_LEFT) {
             swipe_candidate_page = 2;
@@ -353,8 +376,13 @@ static void observe_touch_position(void)
     if (page == 6 && distance_sq > LF_HOLD_MOVE_CANCEL_PX*LF_HOLD_MOVE_CANCEL_PX)
         touch_pressed_at_ms=0;
     if (distance_sq < LF_SWIPE_MIN_PX*LF_SWIPE_MIN_PX) return;
-    if(abs(dx)>abs(dy))swipe_intent(dx<0?LV_DIR_LEFT:LV_DIR_RIGHT);
-    else swipe_intent(dy<0?LV_DIR_TOP:LV_DIR_BOTTOM);
+    if(abs(dx)>abs(dy)) {
+        if(pager_root && lv_screen_active()==pager_root){
+            touch_pressed_at_ms=0; /* A horizontal page drag is not a long hold. */
+            return; /* Native LVGL pager follows the finger. */
+        }
+        swipe_intent(dx<0?LV_DIR_LEFT:LV_DIR_RIGHT);
+    } else swipe_intent(dy<0?LV_DIR_TOP:LV_DIR_BOTTOM);
 
 }
 
@@ -482,10 +510,24 @@ static void show_clock_settings_popup(void)
    until LVGL finishes processing the callback that initiated navigation. */
 static void make_base(void)
 {
-    lv_obj_t *old_screen=lv_screen_active();
+    lv_obj_t *old_screen=pager_render_target ? NULL : lv_screen_active();
     lf_weather_visual_clear();
     lf_clock_clear();
-    screen=lv_obj_create(NULL);
+    if(pager_render_target) {
+        /* Build a cached core page without ever loading another screen. */
+        screen=pager_render_target;
+    } else {
+        /* All standalone pages own a unique root; drop cached pager refs. */
+        pager_root=NULL;
+        pager_scroll=NULL;
+        pager_clock=NULL;
+        pager_home=NULL;
+        pager_settings=NULL;
+        pager_home_battery=NULL;
+        pager_home_network=NULL;
+        pager_scrolling=false;
+        screen=lv_obj_create(NULL);
+    }
     lv_obj_set_style_bg_color(screen,lv_color_hex(prefs->background_color),0);
     lv_obj_set_style_bg_opa(screen,LV_OPA_COVER,0);
     lv_obj_set_style_border_width(screen,0,0);
@@ -498,8 +540,10 @@ static void make_base(void)
     lv_obj_add_event_cb(screen,on_touch_release,LV_EVENT_RELEASED,NULL);
     lv_obj_add_event_cb(screen,on_touch_cancel,LV_EVENT_PRESS_LOST,NULL);
     lv_obj_add_event_cb(screen,on_lvgl_gesture,LV_EVENT_GESTURE,NULL);
-    lv_screen_load(screen);
-    if(old_screen && old_screen!=screen)lv_obj_delete_async(old_screen);
+    if(!pager_render_target) {
+        lv_screen_load(screen);
+        if(old_screen && old_screen!=screen)lv_obj_delete_async(old_screen);
+    }
     screen_animation_until_ms=0;
     touch_held=false;
     gesture_origin_valid=false;
@@ -567,7 +611,7 @@ static void render_home(void)
 }
 static void build_home(void)
 {
-    render_home();
+    pager_request(1,false);
 }
 
 static void on_toggle_pause(lv_event_t *e)
@@ -844,7 +888,7 @@ static void render_settings(void)
 }
 static void build_settings(void)
 {
-    render_settings();
+    pager_request(2,false);
 }
 static void on_lyric_font(lv_event_t *e)
 {
@@ -931,22 +975,176 @@ static void render_clock(void)
 }
 static void build_clock(void)
 {
-    if(page==11) {
-        /* Only enter here after LVGL finishes the physical touch event:
-           Weather BACK queues weather_back_deferred; Weather swipe queues
-           commit_swipe. Free the entire forecast before allocating the
-           heavy Clock face to avoid transient double-scene heap pressure.
-           No three-page pager or sliding animation is constructed. */
-        lv_obj_t *forecast=lv_screen_active();
-        lv_obj_t *handoff=lv_obj_create(NULL);
-        lv_obj_set_style_bg_color(handoff,lv_color_hex(prefs->background_color),0);
-        lv_obj_set_style_bg_opa(handoff,LV_OPA_COVER,0);
-        lv_screen_load(handoff);
-        lf_weather_visual_clear();
-        if(forecast && forecast!=handoff) lv_obj_delete(forecast);
-        ESP_LOGI(TAG,"Weather view released before Clock construction");
+    pager_request(0,false);
+}
+
+/* The three main pages remain mounted together, so LVGL scrolls the
+   departing and arriving pages simultaneously under the finger. This is
+   NOT a screen-load animation and never runs alongside a swipe callback. */
+static lv_obj_t *pager_page(int index)
+{
+    return index==0 ? pager_clock : index==1 ? pager_home : pager_settings;
+}
+static void pager_select(int index)
+{
+    if(index<0)index=0;
+    if(index>2)index=2;
+    pager_index=index;
+    screen=pager_page(index);
+    page=index==0 ? 6 : index==1 ? 0 : 2;
+    battery_status=index==1 ? pager_home_battery : NULL;
+    network_status=index==1 ? pager_home_network : NULL;
+    pager_scrolling=false;
+    clock_last_refresh=0;
+    last_power_refresh_ms=0;
+    activity();
+}
+static void pager_show(int index, lv_anim_enable_t animation)
+{
+    if(!pager_scroll || index<0 || index>2)return;
+    lv_obj_update_layout(pager_scroll);
+    lv_obj_scroll_to_x(pager_scroll,lv_obj_get_x(pager_page(index)),animation);
+    if(animation==LV_ANIM_OFF)pager_select(index);
+}
+static void pager_scroll_event(lv_event_t *e)
+{
+    if(lv_event_get_target(e)!=pager_scroll)return;
+    lv_event_code_t event=lv_event_get_code(e);
+    if(event==LV_EVENT_SCROLL_BEGIN) {
+        pager_scrolling=true;
+        lv_indev_t *indev=lv_indev_active();
+        if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED) {
+            pager_origin_index=pager_index;
+            touch_pressed_at_ms=0;
+        }
+        return;
     }
-    render_clock();
+    if(event!=LV_EVENT_SCROLL_END || !pager_scroll)return;
+    lv_indev_t *indev=lv_indev_active();
+    if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)
+        return; /* Let the physical drag finish before snapping. */
+    lv_obj_update_layout(pager_scroll);
+    int pos=lv_obj_get_scroll_x(pager_scroll);
+    if(pos<0)pos=-pos;
+    int nearest=0;
+    int min_delta=INT32_MAX;
+    for(int i=0;i<3;i++) {
+        int d=abs(pos-lv_obj_get_x(pager_page(i)));
+        if(d<min_delta){min_delta=d;nearest=i;}
+    }
+    /* 20% drag advances one page, even when the nearest page is the origin. */
+    if(nearest==pager_origin_index) {
+        int movement=pos-lv_obj_get_x(pager_page(pager_origin_index));
+        if(abs(movement)>=LF_PAGER_WIDTH/5) {
+            nearest=pager_origin_index+(movement>0?1:-1);
+            if(nearest<0)nearest=0;
+            if(nearest>2)nearest=2;
+        }
+    }
+    int target_x=lv_obj_get_x(pager_page(nearest));
+    if(abs(pos-target_x)>1) {
+        lv_obj_scroll_to_x(pager_scroll,target_x,LV_ANIM_ON);
+        return;
+    }
+    pager_select(nearest);
+}
+static void pager_build(int index)
+{
+    /* Must execute outside an LVGL input callback. Drop the outgoing
+       Weather/menu view before constructing THREE new page trees, avoiding
+       the overlapping lifetime that blacked the screen in 0.8.8. */
+    lv_obj_t *old=lv_screen_active();
+    lv_obj_t *handoff=lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(handoff,lv_color_hex(prefs->background_color),0);
+    lv_obj_set_style_bg_opa(handoff,LV_OPA_COVER,0);
+    lv_screen_load(handoff);
+    lf_weather_visual_clear();
+    lf_clock_clear();
+    if(old && old!=handoff)lv_obj_delete(old);
+    pager_root=NULL;
+    pager_scroll=NULL;
+    pager_home=NULL;
+    pager_settings=NULL;
+    pager_clock=NULL;
+    pager_scrolling=false;
+    lv_obj_t *root=lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(root,lv_color_hex(prefs->background_color),0);
+    lv_obj_set_style_bg_opa(root,LV_OPA_COVER,0);
+    lv_obj_remove_flag(root,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *container=lv_obj_create(root);
+    lv_obj_set_size(container,LF_PAGER_WIDTH,LF_PAGER_WIDTH);
+    lv_obj_center(container);
+    lv_obj_set_style_bg_opa(container,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(container,0,0);
+    lv_obj_set_style_radius(container,0,0);
+    lv_obj_set_style_pad_all(container,0,0);
+    lv_obj_set_style_pad_row(container,0,0);
+    lv_obj_set_style_pad_column(container,0,0);
+    lv_obj_set_flex_flow(container,LV_FLEX_FLOW_ROW);
+    lv_obj_set_scroll_dir(container,LV_DIR_HOR);
+    lv_obj_set_scroll_snap_x(container,LV_SCROLL_SNAP_NONE);
+    lv_obj_set_scrollbar_mode(container,LV_SCROLLBAR_MODE_OFF);
+    lv_obj_add_flag(container,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(container,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(container,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(container,pager_scroll_event,LV_EVENT_ALL,NULL);
+    pager_scroll=container;
+    pager_clock=lv_obj_create(container);
+    pager_home=lv_obj_create(container);
+    pager_settings=lv_obj_create(container);
+    lv_obj_t *pages[3]={pager_clock,pager_home,pager_settings};
+    for(int i=0;i<3;i++) {
+        lv_obj_set_size(pages[i],LF_PAGER_WIDTH,LF_PAGER_WIDTH);
+        lv_obj_set_style_bg_color(pages[i],lv_color_hex(prefs->background_color),0);
+        lv_obj_set_style_bg_opa(pages[i],LV_OPA_COVER,0);
+        lv_obj_set_style_border_width(pages[i],0,0);
+        lv_obj_set_style_radius(pages[i],0,0);
+        lv_obj_set_style_pad_all(pages[i],0,0);
+        lv_obj_remove_flag(pages[i],LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(pages[i],LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_add_flag(pages[i],LV_OBJ_FLAG_GESTURE_BUBBLE);
+    }
+    pager_render_target=pager_settings;render_settings();
+    pager_render_target=pager_home;render_home();
+    pager_home_battery=battery_status;
+    pager_home_network=network_status;
+    pager_render_target=pager_clock;render_clock();
+    pager_render_target=NULL;
+    pager_root=root;
+    pager_index=1;
+    pager_origin_index=1;
+    lv_screen_load(root);
+    lv_obj_delete_async(handoff);
+    /* PrintSphere's 90% momentum reduction yields one short ease-out snap. */
+    lv_obj_update_layout(container);
+    pager_show(index,LV_ANIM_OFF);
+}
+static void pager_request_async(void *arg)
+{
+    (void)arg;
+    pager_request_queued=false;
+    int index=pager_requested_index;
+    bool rebuild=pager_rebuild_requested;
+    pager_requested_index=-1;
+    pager_rebuild_requested=false;
+    if(index<0 || index>2)return;
+    if(!rebuild && pager_root && lv_screen_active()==pager_root)
+        pager_show(index,LV_ANIM_ON);
+    else pager_build(index);
+}
+static void pager_request(int index, bool rebuild)
+{
+    if(index<0 || index>2)return;
+    if(!rebuild && pager_root && lv_screen_active()==pager_root) {
+        pager_show(index,LV_ANIM_ON);
+        return;
+    }
+    pager_requested_index=index;
+    pager_rebuild_requested|=rebuild;
+    if(!pager_request_queued) {
+        pager_request_queued=true;
+        lv_async_call(pager_request_async,NULL);
+    }
 }
 
 /* Weather's BACK button fires from within its own LVGL input callback.
@@ -1501,7 +1699,15 @@ bool lf_ui_start(lf_settings_t *s)
     }
     apply_brightness();
     (void)lf_power_background_start();
-    build_home();
+    pager_build(1);
+    lv_indev_t *input=lv_indev_get_next(NULL);
+    while(input) {
+        if(lv_indev_get_type(input)==LV_INDEV_TYPE_POINTER){
+            lv_indev_set_scroll_throw(input,90);
+            break;
+        }
+        input=lv_indev_get_next(input);
+    }
     lv_timer_create(on_tick, 50, NULL);
     lv_timer_create(on_clock_sweep, 16, NULL);
     esp_lv_adapter_unlock();
@@ -1534,7 +1740,7 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
     memcpy(prefs->face_24h,basic->face_24h,sizeof(prefs->face_24h));
     err = lf_settings_save(prefs);
     if (err == ESP_OK) {
-        if (page == 6) build_clock(); /* Rebuild only the current clock. */
+        if (page == 6) pager_request(0,true); /* Refresh the cached Clock face. */
     } else {
         *prefs = previous;
         lf_diag_error("settings", "Basic settings NVS save failed");
@@ -1566,10 +1772,10 @@ esp_err_t lf_ui_apply_device_settings(const lf_settings_t *requested)
     err=lf_settings_save(prefs);
     if(err==ESP_OK){
         apply_brightness();
-        if(page==0)build_home();
+        if(page==0)pager_request(1,true);
         else if(page==1)build_preview();
-        else if(page==2)build_settings();
-        else if(page==6)build_clock();
+        else if(page==2)pager_request(2,true);
+        else if(page==6)pager_request(0,true);
     }else *prefs=old;
     esp_lv_adapter_unlock();
     return err;
