@@ -6,3 +6,4 @@
    Hardware performance/stability still require testing. */
 #define LF_VERSION "0.8.19-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.19"
+/* 0.8.19 scene cache compile checkpoint: source preflight and diff audit passed. */
