@@ -86,5 +86,8 @@ const runtime=new Function("document","fetch","Option","confirm","setTimeout",
  el("builds").value="0";el("builds").onchange();
  assert.equal(el("install").disabled,false,"Alpha prerelease build must be selectable");
  assert(el("build-info").textContent.includes("alpha development builds"));
- console.log("PASS: matching Settings/Firmware headers, sorted OTA builds, safe old-build handling, live GitHub refresh");
+ assert(script.includes("d.ota_detail")&&script.includes("d.ota_http_status")&&
+        script.includes("'no_internet','time_unsynced'"),
+        "OTA progress diagnostics must surface errors and stop polling");
+ console.log("PASS: matching Settings/Firmware headers, sorted OTA builds, safe old-build handling, live GitHub refresh and OTA diagnostics");
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -302,7 +302,18 @@ static void commit_swipe(void *arg)
     switch(target) {
     case 0: build_home(); break;
     case 2: build_settings(); break;
-    case 6: build_clock(); break;
+    case 6:
+        /* Returning from Weather is a standalone-screen -> native-pager
+           transition. Repaint the restored Clock and pager explicitly;
+           do not try to animate the old weather root behind it. */
+        { bool from_weather=(page==11);
+          build_clock();
+          if (from_weather && pager_root && pager_clock) {
+              lv_obj_invalidate(pager_clock);
+              lv_obj_invalidate(pager_root);
+          }
+        }
+        break;
     case 11: build_weather_details(); break;
     case 14: build_debug(); break;
     case 1: build_preview(); break;
@@ -416,7 +427,10 @@ static void observe_touch_position(void)
     }
     else
         swipe_intent(dy < 0 ? LV_DIR_TOP : LV_DIR_BOTTOM);
-    if (swipe_candidate_page >= 0 && screen) {
+    if (swipe_candidate_page >= 0 && screen && page != 11) {
+        /* Weather is a separate full-screen view with NO adjacent page
+           underneath it. Moving its root exposes black behind the scene.
+           Keep weather fixed until release, then return to the cached pager. */
         /* Finger-tracked movement limited to a lightweight 96px parallax;
            no second heavy LVGL screen is constructed during a gesture. */
         int amount=abs(dx)>abs(dy)?dx:dy;

@@ -149,6 +149,17 @@ require("nav_settle(direction)" in ui and
         "lv_anim_set_duration(&a,175);" in ui and
         "lv_anim_delete(old_screen,nav_translate_x);" in ui,
         "Swipe must move with finger and settle without overlapping screens")
+require("if (swipe_candidate_page >= 0 && screen && page != 11)" in ui and
+        "bool from_weather=(page==11);" in ui and
+        "lv_obj_invalidate(pager_clock);" in ui and
+        "lv_obj_invalidate(pager_root);" in ui,
+        "Weather right-swipe must not reveal black underlay; Clock must redraw")
+require('d.ota_detail' in pages["firmware"] and
+        'd.ota_http_status' in pages["firmware"] and
+        "'no_internet','time_unsynced'" in pages["firmware"],
+        "OTA dropdown must show actionable HTTPS, clock, and network errors")
+require('"PCT7"' in network and 'PST8PDT' not in network,
+        "BC clock must use permanent Pacific Time UTC-7 without DST")
 require("page == 2" in ui and "case 7:" in ui,
         "Swipe back-navigation omits settings screens")
 settings_nav = ui.split("else if (page == 2)", 1)
