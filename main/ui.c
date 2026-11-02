@@ -444,10 +444,19 @@ static void on_lvgl_gesture(lv_event_t *e)
     if (slider_touch_active || !touch_held || !gesture_origin_valid || clock_settings_popup) return;
     lv_indev_t *indev=lv_indev_active();
     if (!indev || indev!=gesture_indev) return;
-    /* LVGL recognizes quick swipes even if the release arrives at a new
-       widget. We also independently recognize slow drags by distance. */
-    swipe_intent(lv_indev_get_gesture_dir(indev));
+    /* LVGL's gesture event may fire at the input-device scroll limit,
+       which is shorter than our intentional page-swipe threshold. Do not
+       convert a slightly moved button tap into a page transition. */
+    lv_point_t at={0};
+    lv_indev_get_point(indev,&at);
+    int dx=at.x-gesture_origin.x;
+    int dy=at.y-gesture_origin.y;
+    if(dx*dx+dy*dy < LF_SWIPE_MIN_PX*LF_SWIPE_MIN_PX) return;
     observe_touch_position();
+    /* LVGL's direction is only a fallback when physical displacement did
+       not select a page; never enqueue two changes for the same finger. */
+    if(swipe_candidate_page < 0)
+        swipe_intent(lv_indev_get_gesture_dir(indev));
 }
 static void on_touch_release(lv_event_t *e)
 {
