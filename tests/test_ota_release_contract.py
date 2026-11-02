@@ -39,3 +39,16 @@ assert "tools/publish_alpha_ota.py" in workflow
 assert "LyricFlash-OTA-Direct:" in workflow
 assert "raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/" in ui
 print("PASS: direct OTA host and release picker contract")
+
+# Broken 0.8.11 firmware remains on-device with working Web UI.
+# The recovery build must be DISCOVERABLE as a direct OTA update, not only an
+# Actions artifact; do not accidentally skip alpha publication again.
+assert "recovery/0.8.12-ota-stable-core" in workflow, "Recovery branch not listed in build rules"
+assert "Publish and verify direct HTTPS alpha OTA image" in workflow
+assert "Publish validated development OTA as an alpha prerelease" in workflow
+assert "github.ref == 'refs/heads/recovery/0.8.12-ota-stable-core'" in workflow
+assert "--prerelease --latest=false" in workflow
+assert "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin" in workflow
+assert "gh release create" in workflow
+assert "0.8.12-alpha" in (root / "main/version.h").read_text()
+print("PASS: 0.8.12 recovery OTA selector will receive a published alpha release")
