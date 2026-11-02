@@ -257,6 +257,61 @@ static bool boolean_value(const cJSON *root, const char *name, uint8_t *out)
 }
 
 /* Public read-only state; no PIN, Wi-Fi password or cloud credentials. */
+
+/* Global device and lyrics controls (no PIN). Settings are applied under
+   the display lock and committed to the existing NVS namespace. */
+static esp_err_t handle_preferences_get(httpd_req_t *req)
+{
+    lf_settings_t p;
+    if(lf_settings_load(&p)!=ESP_OK)
+        return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot read preferences");
+    cJSON *root=cJSON_CreateObject();
+    if(!root)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddNumberToObject(root,"brightness",p.brightness);
+    cJSON_AddNumberToObject(root,"scroll_speed",p.scroll_speed);
+    cJSON_AddNumberToObject(root,"sleep_seconds",p.sleep_seconds);
+    cJSON_AddNumberToObject(root,"font_size",p.font_size);
+    cJSON_AddNumberToObject(root,"system_font_size",p.system_font_size);
+    cJSON_AddNumberToObject(root,"charging_color",p.charging_color);
+    return send_json(req,root);
+}
+static esp_err_t handle_preferences_post(httpd_req_t *req)
+{
+    if(req->content_len<2||req->content_len>440)
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid preferences request");
+    char json[441]={0};int got=0,timeouts=0;
+    while(got<req->content_len){
+        int n=httpd_req_recv(req,json+got,req->content_len-got);
+        if(n==HTTPD_SOCK_ERR_TIMEOUT&&++timeouts<4)continue;
+        if(n<=0)return httpd_resp_send_err(req,HTTPD_408_REQ_TIMEOUT,"Preferences upload interrupted");
+        timeouts=0;got+=n;
+    }
+    cJSON *root=cJSON_Parse(json);
+    lf_settings_t p;
+    int brightness,scroll,timeout,font,system,colour;
+    bool valid=root&&cJSON_IsObject(root)&&lf_settings_load(&p)==ESP_OK&&
+        number_in_range(root,"brightness",5,100,&brightness)&&
+        number_in_range(root,"scroll_speed",10,100,&scroll)&&
+        number_in_range(root,"sleep_seconds",0,60,&timeout)&&
+        (timeout==0||timeout==15||timeout==30||timeout==60)&&
+        number_in_range(root,"font_size",0,2,&font)&&
+        number_in_range(root,"system_font_size",0,2,&system)&&
+        number_in_range(root,"charging_color",0,0xFFFFFF,&colour);
+    cJSON_Delete(root);
+    if(!valid)return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid device preferences");
+    p.brightness=(uint8_t)brightness;
+    p.scroll_speed=(uint8_t)scroll;
+    p.sleep_seconds=(uint8_t)timeout;
+    p.font_size=(uint8_t)font;
+    p.system_font_size=(uint8_t)system;
+    p.charging_color=(uint32_t)colour;
+    if(lf_ui_apply_device_settings(&p)!=ESP_OK)
+        return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Could not apply preferences");
+    cJSON *answer=cJSON_CreateObject();
+    if(!answer)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddBoolToObject(answer,"saved",true);
+    return send_json(req,answer);
+}
 static esp_err_t handle_basic_get(httpd_req_t *req)
 {
     lf_settings_t s;
@@ -737,7 +792,7 @@ static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
-    cfg.max_uri_handlers=16; /* Web settings/telemetry add routes beyond IDF default. */
+    cfg.max_uri_handlers=18; /* Web settings/telemetry add routes beyond IDF default. */
     cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
@@ -746,6 +801,8 @@ static bool serve(void)
         {.uri="/api/install",.method=HTTP_POST,.handler=handle_github_install},
         {.uri="/api/info",.method=HTTP_GET,.handler=handle_info},
         {.uri="/settings",.method=HTTP_GET,.handler=handle_settings_page},
+        {.uri="/api/preferences",.method=HTTP_GET,.handler=handle_preferences_get},
+        {.uri="/api/preferences",.method=HTTP_POST,.handler=handle_preferences_post},
         {.uri="/api/basic",.method=HTTP_GET,.handler=handle_basic_get},
         {.uri="/api/basic",.method=HTTP_POST,.handler=handle_basic_post},
         {.uri="/api/diagnostics",.method=HTTP_GET,.handler=handle_diagnostics},
