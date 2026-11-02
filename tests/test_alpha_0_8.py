@@ -26,5 +26,7 @@ for key in ['font_style','font_size','ring_mode','show_date','weather','backgrou
 assert 'microphone' in net and 'recent_errors' in net
 assert 'uxTaskGetNumberOfTasks' in diag
 assert '0.8.1-alpha' in (p/'main/version.h').read_text()
+assert 'set(PROJECT_VER "0.8.1-alpha")' in (p/'CMakeLists.txt').read_text()
+assert 'ESP-IDF image descriptor version' in (p/'tools/check_build.py').read_text()
 assert 'LyricFlash-Alpha-0.8.1-FULL-USB-and-OTA-UNTESTED' in workflow
 print('PASS: Alpha 0.8 diagnostics, local settings auth and navigation gates')
