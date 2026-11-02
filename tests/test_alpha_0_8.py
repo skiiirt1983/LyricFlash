@@ -22,6 +22,13 @@ assert 'static void finish_touch(void)' in ui
 assert 'swipe_intent(lv_indev_get_gesture_dir(indev))' in ui
 assert 'Do NOT clear gesture state' in ui
 assert 'swipe_candidate_page' in ui
+# The actual display used to trap users on Settings (page 2).
+# Require a deliberate swipe for both directions and an exit path.
+assert 'else if (page == 2)' in ui
+settings_swipe=ui.split('else if (page == 2)',1)[1].split('else if (page == 6)',1)[0]
+assert 'LV_DIR_LEFT || direction == LV_DIR_RIGHT' in settings_swipe
+assert 'swipe_candidate_page = 0;' in settings_swipe
+assert 'lv_indev_get_state(gesture_indev) == LV_INDEV_STATE_RELEASED' in ui
 assert 'touch_held' in ui and 'on_touch_release' in ui
 assert 'lv_screen_load(screen);' in ui
 assert 'lv_obj_delete_async(old_screen);' in ui
