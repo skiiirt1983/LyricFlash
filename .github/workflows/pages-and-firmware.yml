@@ -18,13 +18,24 @@ permissions:
   contents: read
 
 jobs:
+  preflight:
+    # Fast tests only: no ESP-IDF installation, compilation, or firmware upload.
+    # PR changes are cheap to validate even when unfinished.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Fast source, browser JS and contract tests
+        run: bash tests/run_tests.sh
+
   build:
+    # Full firmware compilations are intentional: explicit manual validation,
+    # or publishing main only. Never compile on every draft PR update.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
-      - name: Test source
-        run: bash tests/run_tests.sh
       - name: Compile firmware
         uses: espressif/esp-idf-ci-action@v1
         with:
