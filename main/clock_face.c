@@ -4,6 +4,7 @@
 #include "basic_clock.h"
 #include "esp_timer.h"
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -123,18 +124,44 @@ static void polar(int r, float angle, lv_point_precise_t *point)
     point->x = (int)(CC + cosf(angle) * r);
     point->y = (int)(CC + sinf(angle) * r);
 }
+/* One custom LVGL drawing widget replaces 60 separate tick widgets.
+   It uses the exact 60 tick positions and anti-aliased lines of the old dial. */
+static void tick_draw_event(lv_event_t *e)
+{
+    lv_obj_t *o=lv_event_get_target(e);
+    lv_layer_t *layer=lv_event_get_layer(e);
+    lv_area_t area;
+    lv_obj_get_coords(o,&area);
+    const bool diver=(uintptr_t)lv_event_get_user_data(e)!=0;
+    for(int i=0;i<60;i++){
+        bool major=(i%5)==0;
+        float angle=(float)(i*6-90)*(PI_F/180.f);
+        int outer=diver?185:181;
+        int inner=major?(diver?171:160):(diver?181:175);
+        lv_draw_line_dsc_t line;
+        lv_draw_line_dsc_init(&line);
+        line.p1.x=area.x1+CC+cosf(angle)*inner;
+        line.p1.y=area.y1+CC+sinf(angle)*inner;
+        line.p2.x=area.x1+CC+cosf(angle)*outer;
+        line.p2.y=area.y1+CC+sinf(angle)*outer;
+        line.color=lv_color_hex(major?colour_fg():colour_ac());
+        line.width=major?5:2;
+        line.round_start=1;
+        line.round_end=1;
+        lv_draw_line(layer,&line);
+    }
+}
 static void draw_ticks(lv_obj_t *parent, bool diver)
 {
-    for (int i = 0; i < 60; i++) {
-        bool hour_mark = i % 5 == 0;
-        float angle = (float)(i * 6 - 90) * (PI_F / 180.f);
-        int outer = diver ? 185 : 181;
-        int inner = hour_mark ? (diver ? 171 : 160) : (diver ? 181 : 175);
-        polar(inner, angle, &tick_points[i][0]);
-        polar(outer, angle, &tick_points[i][1]);
-        dial_line(parent, tick_points[i], hour_mark ? 5 : 2,
-                  hour_mark ? colour_fg() : colour_ac());
-    }
+    lv_obj_t *dial=lv_obj_create(parent);
+    lv_obj_set_size(dial,CW,CW);
+    lv_obj_center(dial);
+    lv_obj_set_style_pad_all(dial,0,0);
+    lv_obj_set_style_bg_opa(dial,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(dial,0,0);
+    lv_obj_remove_flag(dial,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(dial,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(dial,tick_draw_event,LV_EVENT_DRAW_MAIN,(void *)(uintptr_t)(diver?1:0));
 }
 static void add_hour_markers(lv_obj_t *parent)
 {
