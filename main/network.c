@@ -512,7 +512,8 @@ static esp_err_t handle_scan(httpd_req_t *req)
 static esp_err_t handle_update(httpd_req_t *req)
 {
     if (atomic_exchange(&ota_busy,true)) {
-        httpd_resp_send_err(req,HTTPD_409_CONFLICT,"Another firmware update is already in progress");
+        httpd_resp_set_status(req,"409 Conflict");
+        httpd_resp_sendstr(req,"Another firmware update is already in progress");
         return ESP_FAIL;
     }
     ota_received=0;
@@ -679,7 +680,9 @@ static esp_err_t handle_github_install(httpd_req_t *req)
     cJSON_Delete(root);
     if(!valid){free(job);return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Unsupported LyricFlash GitHub OTA URL or version");}
     if(atomic_exchange(&ota_busy,true)){
-        free(job);return httpd_resp_send_err(req,HTTPD_409_CONFLICT,"Another firmware update is active");
+        free(job);
+        httpd_resp_set_status(req,"409 Conflict");
+        return httpd_resp_sendstr(req,"Another firmware update is active");
     }
     ota_received=0;ota_total=0;ota_result="queued";
     if(xTaskCreate(github_ota_worker,"lf_github_ota",12288,job,tskIDLE_PRIORITY+2,NULL)!=pdPASS){
