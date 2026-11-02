@@ -134,20 +134,11 @@ require(abs(old_top-new_top) < 0.00001,
         "New 100% lyric scroll cap does not equal old 35%")
 require("lv_label_set_long_mode(s_text,LV_LABEL_LONG_CLIP)" in ui,
         "Clock settings dialog long label not protected")
-require("lv_indev_set_scroll_throw(input,90);" in ui,
-        "Pager scroll inertia must be tuned to PrintSphere's fast stop")
-require("lv_obj_set_flex_flow(p,LV_FLEX_FLOW_ROW);" in ui and
-        "lv_obj_set_scroll_dir(p,LV_DIR_HOR);" in ui and
-        "lv_obj_scroll_to_x(pager_scroll,target_x,LV_ANIM_ON);" in ui and
-        "LF_PAGER_WIDTH/5" in ui and
-        "pager_build_target=pager_clock;" in ui,
-        "PrintSphere-style native pager for main screens is missing")
-require("if(page==2 && dx<0)swipe_intent(LV_DIR_LEFT);" in ui,
-        "Settings must also support legacy left-swipe escape")
-require("pager_clock=lv_obj_create(p);\n    pager_home=lv_obj_create(p);\n    pager_settings=lv_obj_create(p);" in ui
-        and "return index==0 ? pager_clock : index==1 ? pager_home : pager_settings;" in ui
-        and "page=index==0 ? 6 : index==1 ? 0 : 2;" in ui,
-        "Native pager direction must preserve Home-left Settings/Home-right Clock")
+require("lv_screen_load(screen);" in ui and
+        "lv_obj_delete_async(old_screen);" in ui and
+        "pager_scroll" not in ui and
+        "pager_build(" not in ui,
+        "Safe one-screen-only LVGL navigation must remain in place")
 require("nav_settle(direction)" in ui and
         "lv_obj_set_style_translate_x(screen,amount,0);" in ui and
         "lv_anim_set_duration(&a,175);" in ui and
