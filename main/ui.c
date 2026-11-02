@@ -50,6 +50,8 @@ static bool primary_pager_initializing;
 static uint64_t primary_pager_last_move_ms;
 static uint64_t primary_pager_snap_started_ms;
 static atomic_uint pager_forced_snap_count;
+static atomic_uint pager_snap_last_ms;
+static atomic_uint pager_snap_max_ms;
 static atomic_uint clock_repaint_recoveries;
 /* Keep the clock as a hidden child on the one safe LVGL root instead of
    reconstructing 30+ decorative widgets on every visit. Never create a
@@ -75,6 +77,9 @@ static atomic_uint ui_render_count;
 static atomic_uint ui_flush_start_count;
 static atomic_uint ui_flush_finish_count;
 static atomic_uint ui_refresh_ready_count;
+static atomic_uint render_cycle_last_ms;
+static atomic_uint render_cycle_max_ms;
+static int64_t render_cycle_start_us;
 static atomic_uint nav_transition_completed_count;
 static atomic_uint nav_transition_last_ms;
 
@@ -97,12 +102,17 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->nav_reveal_completions=atomic_load(&nav_transition_completed_count);
     out->nav_reveal_last_ms=atomic_load(&nav_transition_last_ms);
     out->pager_forced_snaps=atomic_load(&pager_forced_snap_count);
+    out->pager_snap_last_ms=atomic_load(&pager_snap_last_ms);
+    out->pager_snap_max_ms=atomic_load(&pager_snap_max_ms);
+    out->render_cycle_last_ms=atomic_load(&render_cycle_last_ms);
+    out->render_cycle_max_ms=atomic_load(&render_cycle_max_ms);
     out->clock_repaint_recoveries=atomic_load(&clock_repaint_recoveries);
 }
 static void display_render_event(lv_event_t *e)
 {
     (void)e;
     atomic_fetch_add(&ui_render_count,1);
+    render_cycle_start_us=esp_timer_get_time();
 }
 static void display_flush_start_event(lv_event_t *e)
 {
@@ -118,6 +128,14 @@ static void display_refresh_ready_event(lv_event_t *e)
 {
     (void)e;
     atomic_fetch_add(&ui_refresh_ready_count,1);
+    if(render_cycle_start_us) {
+        int64_t elapsed=esp_timer_get_time()-render_cycle_start_us;
+        render_cycle_start_us=0;
+        uint32_t ms=(uint32_t)((elapsed>0?elapsed:0)/1000);
+        atomic_store(&render_cycle_last_ms,ms);
+        uint32_t previous=atomic_load(&render_cycle_max_ms);
+        if(ms>previous)atomic_store(&render_cycle_max_ms,ms);
+    }
     if (clock_present_start_us) {
         int64_t elapsed_us=esp_timer_get_time()-clock_present_start_us;
         clock_present_start_us=0;
@@ -1104,6 +1122,12 @@ static void primary_pager_commit(int index)
 {
     if(index<0)index=0;
     if(index>2)index=2;
+    if(primary_pager_snapping) {
+        uint32_t elapsed=(uint32_t)(now_ms()-primary_pager_snap_started_ms);
+        atomic_store(&pager_snap_last_ms,elapsed);
+        uint32_t maximum=atomic_load(&pager_snap_max_ms);
+        if(elapsed>maximum)atomic_store(&pager_snap_max_ms,elapsed);
+    }
     primary_pager_current=index;
     primary_pager_origin=index;
     primary_pager_snap_to=index;
@@ -1187,6 +1211,16 @@ static void primary_pager_scroll_event(lv_event_t *e)
     if(!primary_pager || primary_pager_initializing) return;
     const lv_event_code_t code=lv_event_get_code(e);
     if(code==LV_EVENT_SCROLL_BEGIN){
+        /* LVGL permits editing the scroll animation here. A short,
+           distance-scaled settle avoids redundant full-width redraws on
+           the 466px QSPI AMOLED. Physical finger drag is untouched. */
+        lv_anim_t *anim=lv_event_get_scroll_anim(e);
+        if(primary_pager_snapping && anim) {
+            int32_t remaining=abs(primary_pager_snap_to*466-abs(lv_obj_get_scroll_x(primary_pager)));
+            if(remaining>466)remaining=466;
+            lv_anim_set_duration(anim,95U+(uint32_t)(85U*remaining/466U));
+            lv_anim_set_path_cb(anim,lv_anim_path_ease_out);
+        }
         pager_scrolling=true;
         primary_pager_last_move_ms=now_ms();
         lv_indev_t *indev=lv_indev_active();
@@ -1284,6 +1318,8 @@ static void primary_pager_create(int target_index)
     lv_obj_set_scroll_snap_x(primary_pager,LV_SCROLL_SNAP_NONE);
     lv_obj_set_scrollbar_mode(primary_pager,LV_SCROLLBAR_MODE_OFF);
     lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_ELASTIC);
+    /* One controlled snap on release; disable competing momentum. */
+    lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_GESTURE_BUBBLE);

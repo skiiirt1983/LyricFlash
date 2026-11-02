@@ -430,3 +430,14 @@ require('lv_snapshot_take(' not in ui and
         '"clock_repaint_recoveries"' in network and
         'pager_forced_snaps' in network,
         "Clock must remain live and receive repaint when pager settles")
+
+# 0.8.26: controlled short snaps must not remove hardware regression safety.
+require('lv_event_get_scroll_anim(e)' in ui and
+        'lv_anim_set_duration(anim,95U+' in ui and
+        'lv_anim_set_path_cb(anim,lv_anim_path_ease_out)' in ui and
+        'lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_MOMENTUM);' in ui and
+        '"pager_snap_last_ms"' in network and
+        '"render_cycle_last_ms"' in network and
+        'lv_obj_invalidate(clock_scene);' in ui and
+        'current-primary_pager_snap_started_ms>700' in watchdog,
+        "Fast pager snap and retained Clock recovery contract")

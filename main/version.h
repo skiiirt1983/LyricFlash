@@ -1,13 +1,9 @@
 #pragma once
-/* 0.8.25 diagnostic recovery: fix intermittent black Clock on return
-   from Home reported on 0.8.24. Remove the optional RGB565 snapshot proxy
-   that swapped hidden/live clock objects during swipes, and explicitly
-   invalidate the live Clock when the native pager settles.
-   Keep 0.8.23's finger-following pages and stuck-snap watchdog.
-   Revert the ineffective 0.8.24 QSPI batching experiment to the proven
-   four-row DMA staging: CO5300 80MHz, TE OFF, queue depth 1.
-   No changes to battery, OTA, Wi-Fi, NVS or partitions.
-   Hardware visibility, swipes and memory stability must be tested. */
-#define LF_VERSION "0.8.25-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.25"
-/* 0.8.25 black Clock recovery compile checkpoint: tests and diff audit passed. */
+/* 0.8.26: shorten distance-scaled LVGL pager snaps, disable scroll momentum
+   on the 3-page pager (without changing live finger-following), and expose
+   pager snap / render-cycle timing to the local diagnostics endpoint.
+   Preserve 0.8.25's real visible Clock, forced-snap watchdog and repaint fix.
+   Keep QSPI 80MHz, four-row DMA, TE OFF, Wi-Fi/OTA, NVS and partition layout
+   unchanged. Hardware smoothness and memory stability require validation. */
+#define LF_VERSION "0.8.26-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.26"
