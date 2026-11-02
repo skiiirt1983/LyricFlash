@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Alpha 0.8.4 OTA and USB release contract, host-side checks."""
+"""Alpha 0.8.5 OTA and USB release contract, host-side checks."""
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
@@ -25,12 +25,12 @@ for token in ("XMLHttpRequest", "xhr.upload.onprogress", "xhr.onerror",
 assert "pin_matches" not in net and "X-LyricFlash-PIN" not in net
 assert "esp_https_ota_begin" in net and "esp_https_ota_finish" in net
 assert "OTA_SIZE_UNKNOWN" not in net
-assert "LyricFlash-Alpha-0.8.4-FULL-USB-and-OTA-UNTESTED" in workflow
+assert "LyricFlash-Alpha-0.8.5-FULL-USB-and-OTA-UNTESTED" in workflow
 assert "tools/publish_build_catalog.py _site" in workflow
 assert "_site/beta/firmware/" in workflow
 assert "lyricflash-full.bin" in workflow and "lyricflash-ota.bin" in workflow
 assert "tools/validate_full_image.py" in workflow
-assert "0.8.4-alpha" in preparer
-assert "Alpha 0.8.4" in page
+assert "0.8.5-alpha" in preparer
+assert "Alpha 0.8.5" in page
 assert "LF_VERSION" in main
-print("PASS: Alpha 0.8.4 OTA and full-USB packaging contract")
+print("PASS: Alpha 0.8.5 OTA and full-USB packaging contract")
