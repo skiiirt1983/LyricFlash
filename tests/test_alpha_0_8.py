@@ -10,7 +10,8 @@ diag=(p/'main/diagnostics.c').read_text()
 workflow=(p/'.github/workflows/pages-and-firmware.yml').read_text()
 assert 'lv_screen_load_anim(' not in ui
 assert 'lv_screen_load(screen);' in ui
-assert 'lv_obj_delete(old_screen);' in ui
+assert 'lv_obj_delete_async(old_screen);' in ui
+assert 'lv_obj_delete(old_screen);' not in ui
 assert 'build_debug();' in ui and 'page == 14' in ui
 assert 'lf_diag_snapshot(&d);' in ui and 'lf_ui_max_tick_gap_ms' in ui
 assert 'add_space(' in wheel and 'SPACE' in wheel and "input[n]=' '" in wheel
@@ -24,6 +25,6 @@ for key in ['font_style','font_size','ring_mode','show_date','weather','backgrou
     assert key in web and key in net, key
 assert 'microphone' in net and 'recent_errors' in net
 assert 'uxTaskGetNumberOfTasks' in diag
-assert '0.8.0-alpha' in (p/'main/version.h').read_text()
-assert 'LyricFlash-Alpha-0.8-FULL-USB-and-OTA-UNTESTED' in workflow
+assert '0.8.1-alpha' in (p/'main/version.h').read_text()
+assert 'LyricFlash-Alpha-0.8.1-FULL-USB-and-OTA-UNTESTED' in workflow
 print('PASS: Alpha 0.8 diagnostics, local settings auth and navigation gates')
