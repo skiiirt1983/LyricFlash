@@ -47,6 +47,9 @@ static atomic_bool ota_busy = false;
 static const char *ota_detail = "";
 static atomic_int ota_error_code = 0;
 static atomic_int ota_http_status = 0;
+static atomic_int ota_tls_code = 0;
+static atomic_int ota_tls_flags = 0;
+static atomic_int ota_socket_errno = 0;
 /* URL is taken only from the official LyricFlash GitHub Pages beta asset
    or versioned Github Release assets belonging to this repository. */
 typedef struct {
@@ -508,6 +511,9 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddStringToObject(root, "ota_detail", ota_detail);
     cJSON_AddNumberToObject(root, "ota_error_code", atomic_load(&ota_error_code));
     cJSON_AddNumberToObject(root, "ota_http_status", atomic_load(&ota_http_status));
+    cJSON_AddNumberToObject(root, "ota_tls_code", atomic_load(&ota_tls_code));
+    cJSON_AddNumberToObject(root, "ota_tls_flags", atomic_load(&ota_tls_flags));
+    cJSON_AddNumberToObject(root, "ota_socket_errno", atomic_load(&ota_socket_errno));
     cJSON_AddNumberToObject(root, "ota_received", ota_received);
     cJSON_AddNumberToObject(root, "ota_total", ota_total);
     cJSON_AddNumberToObject(root, "max_ui_tick_gap_ms", lf_ui_max_tick_gap_ms());
@@ -542,6 +548,9 @@ static esp_err_t handle_info(httpd_req_t *req)
     cJSON_AddStringToObject(root, "ota_detail", ota_detail);
     cJSON_AddNumberToObject(root, "ota_error_code", atomic_load(&ota_error_code));
     cJSON_AddNumberToObject(root, "ota_http_status", atomic_load(&ota_http_status));
+    cJSON_AddNumberToObject(root, "ota_tls_code", atomic_load(&ota_tls_code));
+    cJSON_AddNumberToObject(root, "ota_tls_flags", atomic_load(&ota_tls_flags));
+    cJSON_AddNumberToObject(root, "ota_socket_errno", atomic_load(&ota_socket_errno));
     cJSON_AddNumberToObject(root, "ota_received", ota_received);
     cJSON_AddNumberToObject(root, "ota_total", ota_total);
     cJSON_AddStringToObject(root, "connected_ssid", ssid);
@@ -690,6 +699,19 @@ static bool allowed_github_ota_url(const char *url)
 {
     const char *beta = "https://skiiirt1983.github.io/LyricFlash/beta/firmware/lyricflash-ota.bin";
     const char *releases = "https://github.com/skiiirt1983/LyricFlash/releases/download/";
+    /* Signed and versioned release binaries on a separate branch avoid the
+       multi-host GitHub Releases download redirect chain. */
+    const char *direct = "https://raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/";
+    if (url && strncmp(url,direct,strlen(direct))==0) {
+        const char *path=url+strlen(direct);
+        const char *file="/lyricflash-ota.bin";
+        if(strncmp(path,"alpha-build-",12)!=0 || strlen(path)!=12+12+strlen(file) ||
+           strcmp(path+24,file)!=0)return false;
+        for(int i=12;i<24;i++) {
+            char c=path[i]; if(!((c>='0'&&c<='9')||(c>='a'&&c<='f')))return false;
+        }
+        return true;
+    }
     if (!url || strlen(url) >= sizeof(((lf_github_request_t *)0)->url)) return false;
     if (strcmp(url, beta) == 0) return true;
     const char *history="https://skiiirt1983.github.io/LyricFlash/beta/firmware/releases/";
@@ -720,9 +742,19 @@ static bool allowed_github_ota_url(const char *url)
    Record the final HTTP status; never disable TLS peer verification. */
 static esp_err_t ota_http_event(esp_http_client_event_t *event)
 {
-    if (event && event->event_id == HTTP_EVENT_ON_HEADER && event->client) {
-        int status=esp_http_client_get_status_code(event->client);
-        if(status>0)atomic_store(&ota_http_status,status);
+    if (event && event->client) {
+        if(event->event_id==HTTP_EVENT_ON_HEADER ||
+           event->event_id==HTTP_EVENT_ON_FINISH) {
+            int status=esp_http_client_get_status_code(event->client);
+            if(status>0)atomic_store(&ota_http_status,status);
+        }
+        if(event->event_id==HTTP_EVENT_ERROR) {
+            int tls_code=0,flags=0;
+            esp_err_t tls=esp_http_client_get_and_clear_last_tls_error(event->client,&tls_code,&flags);
+            atomic_store(&ota_tls_code,tls_code ? tls_code : (int)tls);
+            atomic_store(&ota_tls_flags,flags);
+            atomic_store(&ota_socket_errno,esp_http_client_get_errno(event->client));
+        }
     }
     return ESP_OK;
 }
@@ -734,6 +766,9 @@ static void github_ota_worker(void *arg)
     ota_detail="";
     atomic_store(&ota_error_code,0);
     atomic_store(&ota_http_status,0);
+    atomic_store(&ota_tls_code,0);
+    atomic_store(&ota_tls_flags,0);
+    atomic_store(&ota_socket_errno,0);
     /* Setup AP is local-only. Do not present its lack of Internet as a TLS error. */
     if (!lf_network_is_connected()) {
         ota_result="no_internet";
@@ -860,6 +895,8 @@ static esp_err_t handle_github_install(httpd_req_t *req)
     }
     ota_received=0;ota_total=0;ota_result="queued";ota_detail="";
     atomic_store(&ota_error_code,0);atomic_store(&ota_http_status,0);
+    atomic_store(&ota_tls_code,0);atomic_store(&ota_tls_flags,0);
+    atomic_store(&ota_socket_errno,0);
     if(xTaskCreate(github_ota_worker,"lf_github_ota",12288,job,tskIDLE_PRIORITY+2,NULL)!=pdPASS){
         atomic_store(&ota_busy,false);free(job);ota_result="download_failed";
         return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot start OTA download");

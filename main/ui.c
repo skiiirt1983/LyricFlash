@@ -302,18 +302,7 @@ static void commit_swipe(void *arg)
     switch(target) {
     case 0: build_home(); break;
     case 2: build_settings(); break;
-    case 6:
-        /* Returning from Weather is a standalone-screen -> native-pager
-           transition. Repaint the restored Clock and pager explicitly;
-           do not try to animate the old weather root behind it. */
-        { bool from_weather=(page==11);
-          build_clock();
-          if (from_weather && pager_root && pager_clock) {
-              lv_obj_invalidate(pager_clock);
-              lv_obj_invalidate(pager_root);
-          }
-        }
-        break;
+    case 6: build_clock(); break;
     case 11: build_weather_details(); break;
     case 14: build_debug(); break;
     case 1: build_preview(); break;
@@ -1115,6 +1104,23 @@ static void pager_scroll_event(lv_event_t *e)
 static void pager_build(int target_index)
 {
     lv_obj_t *old=lv_screen_active();
+    if (page==11 && old) {
+        /* Weather has a large scroll hierarchy. The old implementation
+           built THREE full pager pages while Weather still occupied heap,
+           then deferred Weather deletion. Return happens after touch
+           release (via LVGL async), so synchronously free Weather before
+           constructing the pager; this prevents a failed/black redraw.
+           Keep a tiny colored active handoff screen until the new pager is
+           fully constructed. Never delete the active LVGL screen. */
+        lv_obj_t *handoff=lv_obj_create(NULL);
+        lv_obj_set_style_bg_color(handoff,lv_color_hex(prefs->background_color),0);
+        lv_obj_set_style_bg_opa(handoff,LV_OPA_COVER,0);
+        lv_screen_load(handoff);
+        lf_weather_visual_clear();
+        lv_obj_delete(old);
+        old=handoff;
+        ESP_LOGI(TAG,"Weather scene released before main pager rebuild");
+    }
     lv_obj_t *root=lv_obj_create(NULL);
     lv_obj_set_style_bg_color(root,lv_color_hex(prefs->background_color),0);
     lv_obj_set_style_bg_opa(root,LV_OPA_COVER,0);
@@ -1168,9 +1174,19 @@ static void pager_build(int target_index)
     lv_obj_update_layout(pager_scroll);
     pager_show(target_index,LV_ANIM_OFF);
 }
+/* Weather's BACK button fires from within its own LVGL input callback.
+   Defer destruction of the Weather scene until after that callback returns.
+   Weather swipe exits already dispatch via commit_swipe asynchronously. */
+static void weather_back_deferred(void *arg)
+{
+    (void)arg;
+    if(page==11)build_clock();
+}
 static void on_clock_back(lv_event_t *e)
 {
-    (void)e; activity(); build_clock();
+    (void)e; activity();
+    if(page==11)lv_async_call(weather_back_deferred,NULL);
+    else build_clock();
 }
 static void on_clock_options(lv_event_t *e)
 {

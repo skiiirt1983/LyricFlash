@@ -150,10 +150,16 @@ require("nav_settle(direction)" in ui and
         "lv_anim_delete(old_screen,nav_translate_x);" in ui,
         "Swipe must move with finger and settle without overlapping screens")
 require("if (swipe_candidate_page >= 0 && screen && page != 11)" in ui and
-        "bool from_weather=(page==11);" in ui and
-        "lv_obj_invalidate(pager_clock);" in ui and
-        "lv_obj_invalidate(pager_root);" in ui,
-        "Weather right-swipe must not reveal black underlay; Clock must redraw")
+        "if (page==11 && old)" in ui and
+        "lv_screen_load(handoff);" in ui and
+        "lv_obj_delete(old);" in ui and
+        "lf_weather_visual_clear();" in ui and
+        "lv_async_call(weather_back_deferred,NULL);" in ui,
+        "Weather exit must free its scene before pager creation, off the LVGL button callback")
+require("raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/" in network and
+        "esp_http_client_get_and_clear_last_tls_error" in network and
+        "ota_socket_errno" in network,
+        "Direct HTTPS OTA host and TLS diagnostics are required")
 require('d.ota_detail' in pages["firmware"] and
         'd.ota_http_status' in pages["firmware"] and
         "'no_internet','time_unsynced'" in pages["firmware"],
