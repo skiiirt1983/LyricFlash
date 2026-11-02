@@ -19,7 +19,7 @@ static const char lf_basic_settings_html[] =
 "#status{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #425a76;background:#091727;padding:12px;border-radius:10px;margin-top:12px}\n"
 "pre{white-space:pre-wrap;font:12px ui-monospace,monospace;color:#bcd7eb;overflow-wrap:anywhere}\n"
 "</style></head>\n"
-"<body><main><a href=\"/\">← Device home</a><h1>BASIC CLOCK STUDIO</h1>\n"
+"<body><main><a href=\"/\">← Device home</a> <a href="/updates">Firmware updates</a><h1>BASIC CLOCK STUDIO</h1>\n"
 "<p>Adjust the Basic clock on your computer rather than through the small touchscreen. Settings are saved on the device. Clock changes appear when you open the clock face again, or immediately if it is already showing.</p>\n"
 "<section><h2>Appearance</h2><div class=\"grid\">\n"
 "<label>Font preset<select id=\"font_style\"><option value=\"0\">Preset 1</option><option value=\"1\">Preset 2</option><option value=\"2\">Preset 3</option><option value=\"3\">Preset 4</option><option value=\"4\">Preset 5</option></select></label>\n"
