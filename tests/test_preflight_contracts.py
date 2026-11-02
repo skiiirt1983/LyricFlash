@@ -257,3 +257,24 @@ require('observe_touch_position();' in gesture and threshold in gesture and
         gesture.index('swipe_intent(lv_indev_get_gesture_dir(indev));') and
         'if(swipe_candidate_page<0)' in gesture,
         "Short LVGL gestures could steal button taps or double-trigger navigation")
+
+# AMOLED QSPI stale-pixel regression: force complete repaint after every
+# transition and wake, and expose flush/render counters over the existing UI.
+require('invalidate_full_screen();' in ui and
+        'lv_obj_invalidate(screen);' in ui and
+        'lv_async_call(wake_finish_async,NULL);' in ui and
+        'static void wake_finish_async(void *arg)' in ui and
+        'if(cover)lv_obj_delete(cover);' in ui and
+        'if(target) {' in ui and
+        'target();' in ui and
+        'lv_display_add_event_cb(disp,display_flush_start_event,LV_EVENT_FLUSH_START,NULL);' in ui and
+        'lv_display_add_event_cb(disp,display_flush_finish_event,LV_EVENT_FLUSH_FINISH,NULL);' in ui,
+        "AMOLED full redraw and flush lifecycle metrics missing")
+for key in ('ui_touch_presses','ui_navigation_commits','ui_full_redraws',
+            'display_render_count','display_flush_starts',
+            'display_flush_finishes','display_refresh_ready'):
+    require('"' + key + '"' in network, "Missing diagnostic JSON key " + key)
+require('lf_ui_display_stats_t' in read('main/ui.h') and
+        'static atomic_uint ui_flush_start_count' in ui and
+        'static atomic_uint ui_flush_finish_count' in ui,
+        "Thread-safe display metrics contract missing")

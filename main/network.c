@@ -517,6 +517,15 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "ota_received", ota_received);
     cJSON_AddNumberToObject(root, "ota_total", ota_total);
     cJSON_AddNumberToObject(root, "max_ui_tick_gap_ms", lf_ui_max_tick_gap_ms());
+    lf_ui_display_stats_t display_stats={0};
+    lf_ui_display_stats(&display_stats);
+    cJSON_AddNumberToObject(root, "ui_touch_presses", display_stats.touch_presses);
+    cJSON_AddNumberToObject(root, "ui_navigation_commits", display_stats.navigation_commits);
+    cJSON_AddNumberToObject(root, "ui_full_redraws", display_stats.full_redraws);
+    cJSON_AddNumberToObject(root, "display_render_count", display_stats.render_count);
+    cJSON_AddNumberToObject(root, "display_flush_starts", display_stats.flush_starts);
+    cJSON_AddNumberToObject(root, "display_flush_finishes", display_stats.flush_finishes);
+    cJSON_AddNumberToObject(root, "display_refresh_ready", display_stats.refresh_ready);
     lf_weather_config_t weather;
     lf_weather_get_config(&weather);
     cJSON_AddStringToObject(root, "weather_city", weather.city);

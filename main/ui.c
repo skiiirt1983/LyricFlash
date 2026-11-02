@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdatomic.h>
 
 static const char *TAG = "LyricFlashUI";
 static lf_settings_t *prefs;
@@ -33,6 +34,53 @@ static lv_obj_t *brightness_text;
 static lv_obj_t *timeout_text;
 static lv_obj_t *screen;
 static lv_obj_t *sleep_overlay;
+/* Display diagnostic counters must be readable from the HTTP task without
+   taking the LVGL mutex (which could block during a display failure). */
+static atomic_uint ui_touch_count;
+static atomic_uint ui_nav_count;
+static atomic_uint ui_full_redraw_count;
+static atomic_uint ui_render_count;
+static atomic_uint ui_flush_start_count;
+static atomic_uint ui_flush_finish_count;
+static atomic_uint ui_refresh_ready_count;
+
+void lf_ui_display_stats(lf_ui_display_stats_t *out)
+{
+    if(!out)return;
+    out->touch_presses=atomic_load(&ui_touch_count);
+    out->navigation_commits=atomic_load(&ui_nav_count);
+    out->full_redraws=atomic_load(&ui_full_redraw_count);
+    out->render_count=atomic_load(&ui_render_count);
+    out->flush_starts=atomic_load(&ui_flush_start_count);
+    out->flush_finishes=atomic_load(&ui_flush_finish_count);
+    out->refresh_ready=atomic_load(&ui_refresh_ready_count);
+}
+static void display_render_event(lv_event_t *e)
+{
+    (void)e;
+    atomic_fetch_add(&ui_render_count,1);
+}
+static void display_flush_start_event(lv_event_t *e)
+{
+    (void)e;
+    atomic_fetch_add(&ui_flush_start_count,1);
+}
+static void display_flush_finish_event(lv_event_t *e)
+{
+    (void)e;
+    atomic_fetch_add(&ui_flush_finish_count,1);
+}
+static void display_refresh_ready_event(lv_event_t *e)
+{
+    (void)e;
+    atomic_fetch_add(&ui_refresh_ready_count,1);
+}
+static void invalidate_full_screen(void)
+{
+    if(!screen || asleep)return;
+    lv_obj_invalidate(screen);
+    atomic_fetch_add(&ui_full_redraw_count,1);
+}
 /* Every navigation request is executed from the LVGL async queue, after the
    originating input event has finished. No active touch target is destroyed
    inside its own PRESSED/CLICKED/RELEASED callback. */
@@ -385,6 +433,7 @@ static void on_gesture_press(lv_event_t *e)
     if (!is_swipe_page() || clock_settings_popup || touch_held) return;
     lv_indev_t *indev=lv_indev_active();
     if (!indev || lv_indev_get_type(indev)!=LV_INDEV_TYPE_POINTER) return;
+    atomic_fetch_add(&ui_touch_count,1);
     gesture_indev=indev;
     gesture_origin_valid=true;
     lv_indev_get_point(indev, &gesture_origin);
@@ -1266,18 +1315,24 @@ static void build_weather_location_now(void)
                       wheel_weather_save, wheel_weather_cancel);
 }
 
+/* Remove the wake overlay after the input event has finished. An explicit
+   full-screen invalidation then redraws the pixels previously under it. */
+static void wake_finish_async(void *arg)
+{
+    (void)arg;
+    lv_obj_t *cover=sleep_overlay;
+    sleep_overlay=NULL;
+    if(cover)lv_obj_delete(cover);
+    invalidate_full_screen();
+}
 static void on_wake(lv_event_t *e)
 {
     (void)e;
     if(!asleep)return;
-    /* The old code rebuilt Home inside LV_EVENT_PRESSED. That discarded the
-       input target during input dispatch and could freeze or stack screens. */
     asleep=false;
     activity();
     apply_brightness();
-    lv_obj_t *cover=sleep_overlay;
-    sleep_overlay=NULL;
-    if(cover)lv_obj_delete_async(cover);
+    lv_async_call(wake_finish_async,NULL);
     touch_held=false;
     gesture_origin_valid=false;
     gesture_indev=NULL;
@@ -1514,7 +1569,14 @@ static void nav_drain(void *arg)
     nav_queued=false;
     void (*target)(void)=nav_pending;
     nav_pending=NULL;
-    if(target)target();
+    if(target) {
+        target();
+        atomic_fetch_add(&ui_nav_count,1);
+        /* The QSPI AMOLED retains its pixel memory; redraw the full 466px
+           root after every navigation instead of relying on dirty children.
+           This uses the existing Waveshare 50-row partial flush driver. */
+        invalidate_full_screen();
+    }
 }
 static void nav_schedule(void (*target)(void))
 {
@@ -1553,6 +1615,14 @@ bool lf_ui_start(lf_settings_t *s)
     (void)lf_power_background_start();
     /* First root is built during startup, before any touch callback exists. */
     render_home();
+    lv_display_t *disp=lv_display_get_default();
+    if(disp) {
+        lv_display_add_event_cb(disp,display_render_event,LV_EVENT_RENDER_START,NULL);
+        lv_display_add_event_cb(disp,display_flush_start_event,LV_EVENT_FLUSH_START,NULL);
+        lv_display_add_event_cb(disp,display_flush_finish_event,LV_EVENT_FLUSH_FINISH,NULL);
+        lv_display_add_event_cb(disp,display_refresh_ready_event,LV_EVENT_REFR_READY,NULL);
+    }
+    invalidate_full_screen();
     lv_timer_create(on_tick, 50, NULL);
     lv_timer_create(on_clock_sweep, 16, NULL);
     esp_lv_adapter_unlock();
