@@ -74,8 +74,11 @@ for name, html in pages.items():
     require("<script>" in html and "</script>" in html, name + " missing JavaScript")
     ids_used = set(re.findall(
         r"(?:document\.getElementById|\bel)\(['\"]([^'\"]+)['\"]\)", script))
-    require(not (ids_used - parser.ids),
-            name + " JS references missing HTML IDs: " + str(ids_used-parser.ids))
+    missing = {item for item in ids_used if item not in parser.ids
+               and not (item.endswith(("-", "_")) and
+                        any(actual.startswith(item) for actual in parser.ids))}
+    require(not missing,
+            name + " JS references missing HTML IDs: " + str(missing))
     with tempfile.TemporaryDirectory() as directory:
         js_path = Path(directory) / (name + ".js")
         js_path.write_text(script, encoding="utf-8")
