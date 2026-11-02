@@ -23,9 +23,9 @@ with TemporaryDirectory() as temporary:
     app[0] = 0xE9
     app[12:14] = bytes([9, 0])
     app[0x20:0x24] = bytes.fromhex("3254cdab")
-    app[0x30:0x3c] = b"0.8.1-alpha"
+    app[0x30:0x30 + len(b"0.8.1-alpha")] = b"0.8.1-alpha"
     app[0x50:0x5a] = b"lyricflash"
-    full = bytearray(mod.APP_OFFSET + len(app))
+    full = bytearray(0x120100)
     full[0] = 0xE9
     full[0x8000:0x8002] = b"\xaa\x50"
     full[mod.APP_OFFSET:] = app
