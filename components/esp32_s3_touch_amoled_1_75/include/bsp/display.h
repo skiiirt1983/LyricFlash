@@ -93,6 +93,10 @@ esp_err_t bsp_display_brightness_set(int brightness_percent);
 
 int bsp_display_brightness_get(void);
 
+/* Runtime-selected safe QSPI DMA batch size (24/16/8/4 pixel rows).
+   Exposed read-only for LyricFlash Web UI diagnostics. */
+uint32_t bsp_display_dma_staging_rows(void);
+
 /**
  * @brief Turn on display backlight
  *
