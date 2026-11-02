@@ -43,17 +43,14 @@ static int primary_pager_origin=1;
 static int primary_pager_snap_to=1;
 static bool primary_pager_snapping;
 static bool primary_pager_initializing;
-/* 0.8.23: safe snap watchdog and optional RGB565 PSRAM snapshot of the
-   STATIC Clock face. The live clock is always restored once paging settles. */
+/* 0.8.25: retain the 0.8.23 stuck-snap recovery, but always keep the
+   actual clock scene visible. The optional off-screen RGB565 snapshot was
+   hiding the live clock during page flips and could leave a black page
+   until an unrelated touch caused a new display refresh. */
 static uint64_t primary_pager_last_move_ms;
 static uint64_t primary_pager_snap_started_ms;
-static lv_draw_buf_t *primary_clock_snapshot;
-static lv_obj_t *primary_clock_image;
-static bool primary_clock_snapshot_pending;
-static uint64_t primary_clock_snapshot_after_ms;
 static atomic_uint pager_forced_snap_count;
-static atomic_uint clock_frame_cache_count;
-static atomic_uint clock_frame_cache_fail_count;
+static atomic_uint clock_repaint_recoveries;
 /* Keep the clock as a hidden child on the one safe LVGL root instead of
    reconstructing 30+ decorative widgets on every visit. Never create a
    second active LVGL screen or swap roots during touch dispatch. */
@@ -100,8 +97,7 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->nav_reveal_completions=atomic_load(&nav_transition_completed_count);
     out->nav_reveal_last_ms=atomic_load(&nav_transition_last_ms);
     out->pager_forced_snaps=atomic_load(&pager_forced_snap_count);
-    out->clock_frame_cache_count=atomic_load(&clock_frame_cache_count);
-    out->clock_frame_cache_failures=atomic_load(&clock_frame_cache_fail_count);
+    out->clock_repaint_recoveries=atomic_load(&clock_repaint_recoveries);
 }
 static void display_render_event(lv_event_t *e)
 {
@@ -370,9 +366,6 @@ static void render_settings(void);
 static void render_clock(void);
 static void primary_pager_enter(int page_index);
 static void primary_pager_watchdog(uint64_t now);
-static void primary_clock_prepare_snapshot(uint64_t now);
-static void primary_clock_snapshot_reset(void);
-static void primary_clock_snapshot_visible(bool visible);
 
 static bool is_swipe_page(void)
 {
@@ -643,7 +636,6 @@ static void make_base(void)
     /* Preserve the cached clock across visits to Weather/settings subpages.
        Reparent before deleting the pager that previously owned it. */
     if(primary_pager) {
-        primary_clock_snapshot_reset();
         if(clock_scene && lv_obj_get_parent(clock_scene)!=screen) {
             lv_obj_set_parent(clock_scene,screen);
             lv_obj_add_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
@@ -1105,72 +1097,13 @@ static void render_clock(void)
    Home and Settings side by side. No secondary screen roots, no invalidation
    suppression, no synthetic divider. LVGL's own scroll inertia and snap
    handle the physical finger's movement, as the original user requested. */
-/* PSRAM snapshot is display-only and optional: on allocation failure,
-   continue with the original live clock rendering and never block navigation.
-   The image is a direct RGB565 LVGL draw-buffer source; no 2nd LVGL root. */
-static void primary_clock_snapshot_visible(bool visible)
-{
-    if(!clock_scene)return;
-    bool use_proxy=visible && primary_clock_image && primary_clock_snapshot;
-    if(use_proxy){
-        lv_obj_add_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_flag(primary_clock_image,LV_OBJ_FLAG_HIDDEN);
-    }else{
-        if(primary_clock_image)lv_obj_add_flag(primary_clock_image,LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
-    }
-}
-static void primary_clock_snapshot_reset(void)
-{
-    if(primary_clock_image){
-        lv_image_set_src(primary_clock_image,NULL);
-        lv_obj_delete(primary_clock_image);
-        primary_clock_image=NULL;
-    }
-    if(primary_clock_snapshot){
-        lv_draw_buf_destroy(primary_clock_snapshot);
-        primary_clock_snapshot=NULL;
-    }
-    primary_clock_snapshot_pending=false;
-    primary_clock_snapshot_after_ms=0;
-}
-static void primary_clock_prepare_snapshot(uint64_t current)
-{
-#if LV_USE_SNAPSHOT
-    if(!primary_clock_snapshot_pending || !primary_pager || !clock_scene ||
-       primary_pager_current!=0 || pager_scrolling || primary_pager_snapping ||
-       touch_held || current<primary_clock_snapshot_after_ms) return;
-    primary_clock_snapshot_pending=false; /* At most one attempt per face. */
-    if(primary_clock_snapshot)return;
-    lv_draw_buf_t *buffer=lv_snapshot_take(clock_scene,LV_COLOR_FORMAT_RGB565);
-    if(!buffer){
-        atomic_fetch_add(&clock_frame_cache_fail_count,1);
-        ESP_LOGW(TAG,"Clock scene snapshot unavailable; native rendering retained");
-        return;
-    }
-    lv_obj_t *image=lv_image_create(primary_pager_pages[0]);
-    if(!image){
-        lv_draw_buf_destroy(buffer);
-        atomic_fetch_add(&clock_frame_cache_fail_count,1);
-        return;
-    }
-    lv_image_set_src(image,buffer);
-    lv_obj_center(image);
-    lv_obj_remove_flag(image,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(image,LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(image,LV_OBJ_FLAG_HIDDEN);
-    primary_clock_image=image;
-    primary_clock_snapshot=buffer;
-    atomic_fetch_add(&clock_frame_cache_count,1);
-#else
-    (void)current;
-#endif
-}
+/* Keep the live Clock in the native LVGL page tree throughout swipes.
+   0.8.23's snapshot hid the clock and could leave the AMOLED black after
+   an incomplete visibility invalidation; render the real scene instead. */
 static void primary_pager_commit(int index)
 {
     if(index<0)index=0;
     if(index>2)index=2;
-    primary_clock_snapshot_visible(false);
     primary_pager_current=index;
     primary_pager_origin=index;
     primary_pager_snap_to=index;
@@ -1180,12 +1113,17 @@ static void primary_pager_commit(int index)
     last_power_refresh_ms=0;
     clock_last_refresh=0;
     activity();
-    if(index==0){
-        lf_clock_update();
-        if(!primary_clock_snapshot){
-            primary_clock_snapshot_pending=true;
-            primary_clock_snapshot_after_ms=now_ms()+320;
+    if(index==0) {
+        /* A touch used to reveal a black Clock after a return swipe. Do not
+           depend on another touch to trigger the panel's dirty rectangle:
+           unhide the live scene and explicitly repaint the settled page.
+           Only one full Clock refresh, not repeated full-frame animation. */
+        if(clock_scene) {
+            lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
+            lv_obj_invalidate(clock_scene);
+            atomic_fetch_add(&clock_repaint_recoveries,1);
         }
+        lf_clock_update();
     }
 }
 /* Start EXACTLY one ease-out snap. A 700ms watchdog handles scroll-end events
@@ -1199,7 +1137,6 @@ static void primary_pager_start_snap(int target)
     primary_pager_snap_started_ms=now_ms();
     primary_pager_snapping=true;
     pager_scrolling=true;
-    primary_clock_snapshot_visible(true);
     lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);
 }
 static int primary_pager_target(int32_t x)
@@ -1252,7 +1189,6 @@ static void primary_pager_scroll_event(lv_event_t *e)
     if(code==LV_EVENT_SCROLL_BEGIN){
         pager_scrolling=true;
         primary_pager_last_move_ms=now_ms();
-        primary_clock_snapshot_visible(true);
         lv_indev_t *indev=lv_indev_active();
         if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED){
             primary_pager_snapping=false; /* Finger interrupts existing snap. */
@@ -1300,7 +1236,6 @@ static void primary_pager_build_clock(void)
 {
     if(!primary_pager_pages[0])return;
     if(clock_scene && (clock_scene_stale||clock_scene_style!=prefs->clock_face)){
-        primary_clock_snapshot_reset();
         lf_clock_clear();
         lv_obj_delete(clock_scene);
         clock_scene=NULL;
@@ -1889,7 +1824,6 @@ static void on_tick(lv_timer_t *timer)
         sleep_deep();
     }
     if (asleep) return;
-    primary_clock_prepare_snapshot(current);
     if (page == 11 && !touch_held && current >= screen_animation_until_ms && current - weather_detail_refresh >= 4000) {
         weather_detail_refresh = current;
         lf_weather_view_t weather;

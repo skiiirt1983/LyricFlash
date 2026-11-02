@@ -414,16 +414,19 @@ require('primary_pager_snap_started_ms' in ui and
         'lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)return;' in watchdog and
         'if(primary_pager)primary_pager_watchdog(current);' in ui,
         "Mid-page scroll watchdog / finger ownership regression")
-# RGB565 clock snapshot is optional. The live clock must always be restored
-# after a snap; on memory allocation failure, fall back to full live rendering.
-snapshot=ui.split('static void primary_clock_prepare_snapshot(uint64_t current)\n{',1)[1].split('static void primary_pager_commit',1)[0]
-require('CONFIG_LV_USE_SNAPSHOT=y' in read('sdkconfig.defaults') and
-        'lv_snapshot_take(clock_scene,LV_COLOR_FORMAT_RGB565)' in snapshot and
-        'if(!buffer)' in snapshot and
-        'lv_image_set_src(image,buffer);' in snapshot and
-        'lv_draw_buf_destroy(primary_clock_snapshot);' in ui and
-        'primary_clock_snapshot_reset();' in make_base and
-        'primary_clock_snapshot_visible(false);' in ui and
-        'pager_forced_snaps' in network and
-        'clock_frame_cache_count' in network,
-        "Optional RGB565 clock cache and recovery safety missing")
+# User hardware regression: occasional black Clock on return, revealed by
+# a tap after screenshot/live visibility swapping in 0.8.23–0.8.24.
+# No snapshot image, no off-screen proxy, no dynamic hiding of real clock.
+# Repaint on Clock settle *without requiring an additional touch*.
+commit=ui.split('static void primary_pager_commit(int index)\n{',1)[1].split('static void primary_pager_start_snap',1)[0]
+require('lv_snapshot_take(' not in ui and
+        'primary_clock_snapshot' not in ui and
+        'primary_clock_image' not in ui and
+        'CONFIG_LV_USE_SNAPSHOT=y' not in read('sdkconfig.defaults') and
+        'lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);' in commit and
+        'lv_obj_invalidate(clock_scene);' in commit and
+        'atomic_fetch_add(&clock_repaint_recoveries,1);' in commit and
+        'primary_pager_watchdog(current);' in ui and
+        '"clock_repaint_recoveries"' in network and
+        'pager_forced_snaps' in network,
+        "Clock must remain live and receive repaint when pager settles")

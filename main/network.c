@@ -535,8 +535,7 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "nav_reveal_completions", display_stats.nav_reveal_completions);
     cJSON_AddNumberToObject(root, "nav_reveal_last_ms", display_stats.nav_reveal_last_ms);
     cJSON_AddNumberToObject(root, "pager_forced_snaps", display_stats.pager_forced_snaps);
-    cJSON_AddNumberToObject(root, "clock_frame_cache_count", display_stats.clock_frame_cache_count);
-    cJSON_AddNumberToObject(root, "clock_frame_cache_failures", display_stats.clock_frame_cache_failures);
+    cJSON_AddNumberToObject(root, "clock_repaint_recoveries", display_stats.clock_repaint_recoveries);
     lf_weather_config_t weather;
     lf_weather_get_config(&weather);
     cJSON_AddStringToObject(root, "weather_city", weather.city);

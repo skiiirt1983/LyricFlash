@@ -31,7 +31,6 @@ typedef struct {
     uint32_t nav_reveal_completions;
     uint32_t nav_reveal_last_ms;
     uint32_t pager_forced_snaps;
-    uint32_t clock_frame_cache_count;
-    uint32_t clock_frame_cache_failures;
+    uint32_t clock_repaint_recoveries;
 } lf_ui_display_stats_t;
 void lf_ui_display_stats(lf_ui_display_stats_t *out);
