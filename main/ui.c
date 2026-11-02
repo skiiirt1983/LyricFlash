@@ -1575,10 +1575,10 @@ static void nav_drain(void *arg)
     if(target) {
         target();
         atomic_fetch_add(&ui_nav_count,1);
-        /* The QSPI AMOLED retains its pixel memory; redraw the full 466px
-           root after every navigation instead of relying on dirty children.
-           This uses the existing Waveshare 50-row partial flush driver. */
-        invalidate_full_screen();
+        /* The scene rebuild already invalidates affected LVGL areas.
+           The 0.8.15 forced full-root invalidation was a failed workaround
+           for the old display driver: avoid transmitting it again after
+           every page switch. Keep explicit wake/startup repaints. */
     }
 }
 static void nav_schedule(void (*target)(void))

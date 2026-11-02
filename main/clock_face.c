@@ -29,6 +29,16 @@ static lv_obj_t *sundial_shadow;
 static lv_point_precise_t sundial_shadow_points[2];
 static uint8_t current_style;
 static time_t last_second = (time_t)-1;
+static uint32_t displayed_battery_color = UINT32_MAX;
+/* lv_label_set_text() invalidates pixels even if the text did not change.
+   The Basic face has a blended ring underneath these labels: avoid triggering
+   an expensive refresh every second for a clock that displays minutes. */
+static void update_label_if_changed(lv_obj_t *label, const char *value)
+{
+    if (!label || !value) return;
+    const char *shown = lv_label_get_text(label);
+    if (!shown || strcmp(shown, value) != 0) lv_label_set_text(label, value);
+}
 static bool clock_active;
 static const lf_settings_t *clock_settings;
 static uint32_t colour_bg(void){return clock_settings->face_background[current_style];}
@@ -344,6 +354,7 @@ const char *lf_clock_style_name(uint8_t style)
 void lf_clock_clear(void)
 {
     clock_active = false;
+    displayed_battery_color = UINT32_MAX;
     for (int i = 0; i < 3; i++) hands[i] = NULL;
     info_label = NULL;
     date_label = NULL;
@@ -417,19 +428,22 @@ void lf_clock_update(void)
                      state.percentage);
         else
             snprintf(text, sizeof(text), "%s", state.charging ? "CHARGING" : "BATTERY");
-        lv_label_set_text(battery_label, text);
-        lv_obj_set_style_text_color(battery_label,
-            lv_color_hex(state.usb_connected ? clock_settings->charging_color : lf_power_color(&state)), 0);
+        update_label_if_changed(battery_label, text);
+        uint32_t color = state.usb_connected ? clock_settings->charging_color : lf_power_color(&state);
+        if (color != displayed_battery_color) {
+            lv_obj_set_style_text_color(battery_label, lv_color_hex(color), 0);
+            displayed_battery_color = color;
+        }
     }
     if (weather_label) {
         int temperature=0, condition=0;
         if (lf_weather_get_current(&temperature, &condition)) {
             char value[22];
             snprintf(value, sizeof value, "%d C", temperature);
-            lv_label_set_text(weather_label, value);
+            update_label_if_changed(weather_label, value);
             update_weather_icon(condition);
         } else {
-            lv_label_set_text(weather_label, "-- C");
+            update_label_if_changed(weather_label, "-- C");
         }
     }
     time_t now = time(NULL);
@@ -437,31 +451,31 @@ void lf_clock_update(void)
     last_second = now;
     bool synced = now > 1700000000;
     if (!synced) {
-        if (info_label) lv_label_set_text(info_label, "CONNECT WI-FI TO SYNC");
-        if (time_label) lv_label_set_text(time_label, "--:--");
-        if (sundial_time_label) lv_label_set_text(sundial_time_label, "??:??");
+        update_label_if_changed(info_label, "CONNECT WI-FI TO SYNC");
+        update_label_if_changed(time_label, "--:--");
+        update_label_if_changed(sundial_time_label, "??:??");
         return;
     }
     struct tm local;
     localtime_r(&now, &local);
-    if (info_label) lv_label_set_text(info_label, "");
+    update_label_if_changed(info_label, "");
     if (date_label) {
         char date[32];
         if (current_style == 0) strftime(date, sizeof(date), "%d", &local);
         else if (current_style == 3) strftime(date, sizeof(date), "%a %m-%d", &local);
         else strftime(date, sizeof(date), "%a %b %d", &local);
-        lv_label_set_text(date_label, date);
+        update_label_if_changed(date_label, date);
     }
     if (time_label) {
         char t[20];
         strftime(t, sizeof(t), clock_settings->face_24h[current_style] ? "%H:%M" : "%I:%M %p", &local);
-        lv_label_set_text(time_label, t);
+        update_label_if_changed(time_label, t);
     }
     if (sundial_time_label) {
         char t[20];
         strftime(t, sizeof(t), clock_settings->face_24h[current_style] ? "%H:%M" : "%I:%M", &local);
-        lv_label_set_text(sundial_time_label, t);
-        if (info_label) lv_label_set_text(info_label, "SHADE ACCURACY: QUESTIONABLE");
+        update_label_if_changed(sundial_time_label, t);
+        update_label_if_changed(info_label, "SHADE ACCURACY: QUESTIONABLE");
     }
     if (sundial_shadow) {
         /* Noon points upward, night is still a joke. */

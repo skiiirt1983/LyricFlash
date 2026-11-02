@@ -260,8 +260,9 @@ require('observe_touch_position();' in gesture and threshold in gesture and
         'if(swipe_candidate_page<0)' in gesture,
         "Short LVGL gestures could steal button taps or double-trigger navigation")
 
-# AMOLED QSPI stale-pixel regression: force complete repaint after every
-# transition and wake, and expose flush/render counters over the existing UI.
+# AMOLED stack regression: preserve explicit startup/wake repaint and
+# telemetry; page rebuilds should rely on LVGL invalidated scene regions
+# instead of redundantly forcing a full root repaint after every navigation.
 require('invalidate_full_screen();' in ui and
         'lv_obj_invalidate(screen);' in ui and
         'lv_async_call(wake_finish_async,NULL);' in ui and
@@ -299,3 +300,20 @@ require('esp_ptr_external_ram(color_data)' in bsp and
         'bsp_display_brightness_set(asleep ? 1 : prefs->brightness);' in ui and
         (ROOT/'components/esp32_s3_touch_amoled_1_75/LICENSE').is_file(),
         "CO5300 staged DMA, TE-off test, or license missing")
+
+# Basic Clock should not redraw unchanged clock fields or force a full-screen
+# redraw after normal page transitions (safe renderer retained from 0.8.17).
+clock_face=read("main/clock_face.c")
+nav_drain=ui.split('static void nav_drain(void *arg)\n{',1)[1].split('static void nav_schedule',1)[0]
+require('invalidate_full_screen();' not in nav_drain and
+        'lv_obj_clean(screen);' in ui and
+        'lv_async_call(wake_finish_async,NULL);' in ui and
+        'invalidate_full_screen();' in ui,
+        "Navigation still triggers redundant root invalidation or wake is unprotected")
+require('static void update_label_if_changed(' in clock_face and
+        'strcmp(shown, value) != 0' in clock_face and
+        'update_label_if_changed(time_label, t);' in clock_face and
+        'update_label_if_changed(battery_label, text);' in clock_face and
+        'update_label_if_changed(weather_label, value);' in clock_face and
+        'displayed_battery_color' in clock_face,
+        "Basic Clock unchanged-value LVGL invalidation guard missing")
