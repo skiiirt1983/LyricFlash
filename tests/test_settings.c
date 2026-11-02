@@ -19,6 +19,10 @@ int main(void)
     initial.accent_color=0xABCDEF;
     initial.timing_offset_ms=-420;
     initial.line_spacing_px=13;
+    initial.face_background[0]=0x445566;
+    initial.face_accent[2]=0xF0AC22;
+    initial.face_show_seconds[0]=0;
+    initial.face_24h[1]=1;
     assert(lf_settings_save(&initial)==ESP_OK);
     assert(mock_nvs_count()>=10);
     // Simulated reboot or app-slot switch: new struct, same NVS storage.
@@ -27,6 +31,9 @@ int main(void)
     assert(next.text_color==0xFF55AB&&next.background_color==0x123456);
     assert(next.accent_color==0xABCDEF&&next.timing_offset_ms==-420);
     assert(next.line_spacing_px==13);
+    assert(next.face_background[0]==0x445566);
+    assert(next.face_accent[2]==0xF0AC22);
+    assert(next.face_show_seconds[0]==0 && next.face_24h[1]==1);
     // Corrupt/out-of-range values must be normalized, never require erasing NVS.
     nvs_handle_t h; assert(nvs_open(LF_CONFIG_NS,NVS_READWRITE,&h)==ESP_OK);
     assert(nvs_set_u8(h,"brightness",255)==ESP_OK);
