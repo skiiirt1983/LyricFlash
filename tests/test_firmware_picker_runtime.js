@@ -37,6 +37,13 @@ const makeResponse=data=>({ok:true,json:async()=>data,text:async()=>JSON.stringi
 async function fetchStub(url,opts={}){
  requests.push(url);assert.equal(opts.cache,"no-store","Catalog must bypass browser cache");
  if(url==="/api/info")return makeResponse({version:installed,ota_result:"idle"});
+ if(url.includes("api.github.com/repos/skiiirt1983/LyricFlash/releases")){
+   if(phase!==2)return makeResponse([]);
+   return makeResponse([{tag_name:"alpha-build-abc123456789",draft:false,prerelease:true,
+      published_at:"2026-11-02T22:00:00Z",body:"LyricFlash-OTA-Version: 0.8.6-alpha",
+      assets:[{name:"lyricflash-ota.bin",size:2100000,
+       browser_download_url:"https://github.com/skiiirt1983/LyricFlash/releases/download/alpha-build-abc123456789/lyricflash-ota.bin"}]}]);
+ }
  if(url.includes("catalog.json")){
   const versions=phase===0?["0.8.3-alpha","0.7.9-alpha","0.8.4-alpha"]:["0.8.3-alpha","0.8.5-alpha"];
   return makeResponse({product:"LyricFlash",chipFamily:"ESP32-S3",
@@ -73,5 +80,11 @@ const runtime=new Function("document","fetch","Option","confirm","setTimeout",
  assert.equal(el("refresh-builds").disabled,false);
  el("builds").value="0";el("builds").onchange();
  assert.equal(el("install").disabled,false,"Valid newer build should be selectable");
+ phase=2;
+ await el("refresh-builds").onclick();
+ assert.match(el("builds").options[1].label,/0\.8\.6-alpha.*LATEST DEVELOPMENT/);
+ el("builds").value="0";el("builds").onchange();
+ assert.equal(el("install").disabled,false,"Alpha prerelease build must be selectable");
+ assert(el("build-info").textContent.includes("alpha development builds"));
  console.log("PASS: matching Settings/Firmware headers, sorted OTA builds, safe old-build handling, live GitHub refresh");
 })().catch(e=>{console.error(e);process.exitCode=1});

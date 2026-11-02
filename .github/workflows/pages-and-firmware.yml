@@ -39,6 +39,8 @@ jobs:
        github.ref == 'refs/heads/work/webui-first-no-pins' &&
        contains(github.event.head_commit.message, '[compile-once]'))
     needs: preflight
+    permissions:
+      contents: write # only this gated build job can publish alpha-prerelease assets
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -88,6 +90,19 @@ jobs:
           if-no-files-found: error
       - name: Verify complete USB+OTA release again before deployment
         run: python3 tools/package_release.py --verify _site
+      - name: Publish validated development OTA as an alpha prerelease (never stable)
+        if: github.ref == 'refs/heads/work/webui-first-no-pins' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(awk '/^#define LF_VERSION /{gsub(/"/,"",$3);print $3}' main/version.h)
+          test -n "$VERSION"
+          TAG="alpha-build-${GITHUB_SHA:0:12}"
+          gh release create "$TAG" _site/beta/firmware/lyricflash-ota.bin \\
+            --target "$GITHUB_SHA" --title "LyricFlash $VERSION · Alpha ${GITHUB_SHA:0:8} (untested)" \\
+            --notes "LyricFlash-OTA-Version: $VERSION
+          Automated validated ESP32-S3 application-only development build. Hardware untested. Experimental alpha channel; not an official stable release." \\
+            --prerelease --latest=false
       - uses: actions/configure-pages@v5
         if: github.ref == 'refs/heads/main'
       - uses: actions/upload-pages-artifact@v4
