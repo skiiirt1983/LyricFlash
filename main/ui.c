@@ -33,6 +33,15 @@ static lv_obj_t *speed_text;
 static lv_obj_t *brightness_text;
 static lv_obj_t *timeout_text;
 static lv_obj_t *screen;
+/* The original LVGL screen remains the ONLY active screen. This child pager
+   holds the three permanently adjacent menu pages (Clock | Home | Settings).
+   Weather and configuration subpages keep their proven deferred navigation. */
+static lv_obj_t *primary_pager;
+static lv_obj_t *primary_pager_pages[3];
+static int primary_pager_current=1;
+static int primary_pager_origin=1;
+static int primary_pager_snap_to=1;
+static bool primary_pager_snapping;
 /* Keep the clock as a hidden child on the one safe LVGL root instead of
    reconstructing 30+ decorative widgets on every visit. Never create a
    second active LVGL screen or swap roots during touch dispatch. */
@@ -344,6 +353,7 @@ static void build_clock_settings(void);
 static void render_home(void);
 static void render_settings(void);
 static void render_clock(void);
+static void primary_pager_enter(int page_index);
 
 static bool is_swipe_page(void)
 {
@@ -394,6 +404,10 @@ static void queue_swipe(int target, lv_screen_load_anim_t animation)
 static void swipe_intent(lv_dir_t direction)
 {
     if (clock_settings_popup || swipe_candidate_page >= 0) return;
+    /* Horizontal Clock/Home/Settings navigation belongs exclusively to the
+       scrolling pager, not the old on-release page-rebuild mechanism. */
+    if(primary_pager && (page==0 || page==2 || page==6) &&
+       (direction==LV_DIR_LEFT || direction==LV_DIR_RIGHT)) return;
     if (page == 0) {
         if (direction == LV_DIR_LEFT) {
             swipe_candidate_page = 2;
@@ -607,6 +621,18 @@ static void make_base(void)
         lv_obj_delete(clock_scene);
         clock_scene=NULL;
     }
+    /* Preserve the cached clock across visits to Weather/settings subpages.
+       Reparent before deleting the pager that previously owned it. */
+    if(primary_pager) {
+        if(clock_scene && lv_obj_get_parent(clock_scene)!=screen) {
+            lv_obj_set_parent(clock_scene,screen);
+            lv_obj_add_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
+        }
+        primary_pager=NULL;
+        primary_pager_pages[0]=primary_pager_pages[1]=primary_pager_pages[2]=NULL;
+        primary_pager_snapping=false;
+        pager_scrolling=false;
+    }
     if (!screen) {
         lv_obj_t *old_screen=lv_screen_active();
         screen=lv_obj_create(NULL);
@@ -680,23 +706,22 @@ static void build_connection_help_now(void)
     last_power_refresh_ms = 0; /* Refresh the network details immediately. */
 }
 
+static void primary_render_home_content(lv_obj_t *parent)
+{
+    label(parent, "LYRICFLASH", 36, &lv_font_montserrat_24, prefs->text_color);
+    label(parent, LF_VERSION_LABEL, 82, &lv_font_montserrat_20, 0xB7C7D7);
+    battery_status = label(parent, "BATTERY", 129, &lv_font_montserrat_20, 0xDCE8F0);
+    button(parent, "CLOCK", 132, 48, -80, -43, 0xA8D6FF, on_clock_back, NULL);
+    button(parent, "SETTINGS", 132, 48, 80, -43, 0xA8D6FF, on_settings, NULL);
+    button(parent, "LYRICS", 242, 55, 0, 28, 0xA8D6FF, on_preview, NULL);
+    button(parent, "CONNECT / OTA", 206, 49, 0, 100, 0xA8D6FF, on_connection_help, NULL);
+    network_status=label(parent, "Wi-Fi starting...", 371, &lv_font_montserrat_16, 0xB9CADB);
+    label(parent, "CLOCK     •     HOME     •     SETTINGS", 405, &lv_font_montserrat_16, 0x6E8CAC);
+    last_power_refresh_ms=0;
+}
 static void render_home(void)
 {
-    page = 0;
-    make_base();
-    label(screen, "LYRICFLASH", 36, &lv_font_montserrat_24, prefs->text_color);
-    label(screen, LF_VERSION_LABEL, 82, &lv_font_montserrat_20, 0xB7C7D7);
-    battery_status = label(screen, "BATTERY", 129, &lv_font_montserrat_20, 0xDCE8F0);
-    /* Recovery fallback: visible Clock and Settings buttons must work even
-       if physical swipe recognition fails. Keep all controls on one screen. */
-    button(screen, "CLOCK", 132, 48, -80, -43, 0xA8D6FF, on_clock_back, NULL);
-    button(screen, "SETTINGS", 132, 48, 80, -43, 0xA8D6FF, on_settings, NULL);
-    button(screen, "LYRICS", 242, 55, 0, 28, 0xA8D6FF, on_preview, NULL);
-    /* Connection and browser settings remain reachable without a PIN. */
-    button(screen, "CONNECT / OTA", 206, 49, 0, 100, 0xA8D6FF, on_connection_help, NULL);
-    network_status = label(screen, "Wi-Fi starting...", 371, &lv_font_montserrat_16, 0xB9CADB);
-    label(screen, "SWIPE FOR NAVIGATION", 406, &lv_font_montserrat_16, 0x6E8CAC);
-    last_power_refresh_ms = 0;
+    primary_pager_enter(1);
 }
 static void build_home_now(void)
 {
@@ -964,16 +989,18 @@ static void on_device_settings(lv_event_t *e)
 {
     (void)e; activity(); build_device_settings();
 }
+static void primary_render_settings_content(lv_obj_t *parent)
+{
+    label(parent,"SETTINGS",41,&lv_font_montserrat_24,prefs->text_color);
+    button(parent,"LYRICS",250,54,0,-99,0xB2C6D3,on_lyrics_settings,NULL);
+    button(parent,"CLOCK & WEATHER",250,54,0,-33,0xB2C6D3,on_clock_options,NULL);
+    button(parent,"DEVICE",250,54,0,33,0xB2C6D3,on_device_settings,NULL);
+    button(parent,"WI-FI",250,54,0,99,0xB2C6D3,on_wifi,NULL);
+    button(parent,"HOME",153,44,0,175,prefs->text_color,on_home,NULL);
+}
 static void render_settings(void)
 {
-    page = 2;
-    make_base();
-    label(screen, "SETTINGS", 41, &lv_font_montserrat_24, prefs->text_color);
-    button(screen, "LYRICS", 250, 54, 0, -99, 0xB2C6D3, on_lyrics_settings, NULL);
-    button(screen, "CLOCK & WEATHER", 250, 54, 0, -33, 0xB2C6D3, on_clock_options, NULL);
-    button(screen, "DEVICE", 250, 54, 0, 33, 0xB2C6D3, on_device_settings, NULL);
-    button(screen, "WI-FI", 250, 54, 0, 99, 0xB2C6D3, on_wifi, NULL);
-    button(screen, "HOME", 153, 44, 0, 175, prefs->text_color, on_home, NULL);
+    primary_pager_enter(2);
 }
 static void build_settings_now(void)
 {
@@ -1052,39 +1079,7 @@ static void clock_children_input_transparent(lv_obj_t *parent)
 }
 static void render_clock(void)
 {
-    page = 6;
-    make_base();
-    if (!clock_scene) {
-        uint64_t build_start=now_ms();
-        clock_scene=lv_obj_create(screen);
-        lv_obj_set_size(clock_scene,466,466);
-        lv_obj_center(clock_scene);
-        lv_obj_set_style_pad_all(clock_scene,0,0);
-        lv_obj_set_style_radius(clock_scene,0,0);
-        lv_obj_set_style_border_width(clock_scene,0,0);
-        lv_obj_set_style_bg_opa(clock_scene,LV_OPA_COVER,0);
-        lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_CLICKABLE);
-        lf_clock_build(clock_scene,prefs->clock_face,prefs);
-        clock_children_input_transparent(clock_scene);
-        clock_scene_style=prefs->clock_face;
-        clock_scene_stale=false;
-        atomic_fetch_add(&ui_clock_scene_builds,1);
-        uint32_t elapsed=(uint32_t)(now_ms()-build_start);
-        atomic_store(&ui_clock_build_last_ms,elapsed);
-        uint32_t maximum=atomic_load(&ui_clock_build_max_ms);
-        if(elapsed>maximum)atomic_store(&ui_clock_build_max_ms,elapsed);
-    } else {
-        lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
-        atomic_fetch_add(&ui_clock_cache_hits,1);
-        lf_clock_update(); /* Refresh time/battery only; no ring rebuild. */
-    }
-    /* Children are input-transparent; root remains the sole touch target.
-       Long-hold settings and left/up swipe retain the existing callbacks. */
-    lv_obj_add_flag(screen,LV_OBJ_FLAG_CLICKABLE);
-    clock_present_start_us=esp_timer_get_time();
-    clock_last_refresh=0;
-    activity();
+    primary_pager_enter(0);
 }
 static void build_clock_now(void)
 {
