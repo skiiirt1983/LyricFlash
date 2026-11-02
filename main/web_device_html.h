@@ -1,5 +1,5 @@
 #pragma once
-/* LyricFlash responsive Web UI: Settings primary, Firmware secondary. */
+/* Embedded responsive device settings and maintenance pages */
 static const char lf_device_settings_html[] =
 "<!doctype html>\n"
 "<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>LyricFlash | Settings</title><style>.subnav{display:flex;flex-wrap:wrap;gap:8px;background:#0d2237;border:1px solid #2b4d67;border-radius:15px;padding:10px;margin:16px 0 24px}\n"
@@ -108,6 +108,7 @@ static const char lf_device_settings_html[] =
 "</script></body></html>\n"
 "\n"
 "\n"
+"\n"
 ;
 static const char lf_device_firmware_html[] =
 "<!doctype html>\n"
@@ -170,23 +171,22 @@ static const char lf_device_firmware_html[] =
 "async function loadBuilds(){\n"
 " entries=[];const errors=[];\n"
 " try{\n"
-" const releases=await get('https://api.github.com/repos/skiiirt1983/LyricFlash/releases?per_page=30');\n"
-" for(const r of releases){for(const a of r.assets||[]){\n"
-" if(!/^(?:lyricflash[-_.].*[-_.])?ota(?:[-_.].*)?\\.bin$/i.test(a.name)&&!/^lyricflash-ota\\.bin$/i.test(a.name))continue;\n"
-" if(!a.browser_download_url||!a.browser_download_url.startsWith('https://github.com/skiiirt1983/LyricFlash/releases/download/'))continue;\n"
-" entries.push({version:r.tag_name,url:a.browser_download_url,label:(r.prerelease?'BETA':'STABLE')+' '+r.tag_name,channel:r.prerelease?'Beta':'Stable'});\n"
-" }} }catch(e){errors.push('Releases: '+e.message);}\n"
-" try{\n"
+" const c=await get('https://skiiirt1983.github.io/LyricFlash/beta/catalog.json');\n"
+" if(c.product!=='LyricFlash'||c.chipFamily!=='ESP32-S3'||!Array.isArray(c.builds))throw Error('Invalid firmware catalog');\n"
+" for(const b of c.builds){\n"
+" if(!b.version||!/^https:\\/\\/skiiirt1983\\.github\\.io\\/LyricFlash\\/beta\\/firmware\\//.test(b.url))continue;\n"
+" entries.push({version:b.version,url:b.url,label:b.label||b.version,channel:b.channel||'Beta'});\n"
+" }\n"
+" }catch(e){errors.push('Version catalog: '+e.message);}\n"
+" if(!entries.length)try{\n"
 " const m=await get('https://skiiirt1983.github.io/LyricFlash/beta/manifest.json');\n"
-" if(m.version&&m.builds?.some(b=>b.chipFamily==='ESP32-S3')){\n"
-" const v=m.version;\n"
-" if(!entries.some(x=>x.version===v))\n"
-" entries.unshift({version:v,url:'https://skiiirt1983.github.io/LyricFlash/beta/firmware/lyricflash-ota.bin',label:'BETA '+v,channel:'Beta'});\n"
-" }}catch(e){errors.push('Current Beta: '+e.message)}\n"
+" if(m.version&&m.builds?.some(b=>b.chipFamily==='ESP32-S3'))\n"
+" entries.push({version:m.version,url:'https://skiiirt1983.github.io/LyricFlash/beta/firmware/lyricflash-ota.bin',label:'BETA '+m.version,channel:'Beta'});\n"
+" }catch(e){errors.push('Beta fallback: '+e.message)}\n"
 " const select=el('builds');select.replaceChildren(new Option(entries.length?'Choose a firmware version':'No published builds available',''));\n"
 " for(let i=0;i<entries.length;i++){const b=entries[i];select.add(new Option(b.label+(i===0?'  — NEW':'')+(b.version===installed?'  — INSTALLED':''),String(i)))}\n"
 " select.disabled=!entries.length;el('install').disabled=!entries.length;\n"
-" el('build-info').textContent=entries.length?entries.length+' published OTA build(s) available from GitHub. Firmware installs preserve Wi-Fi.':errors.length?'Build catalog unavailable: '+errors.join('; '):'No public GitHub Releases or Beta firmware are available yet.';\n"
+" el('build-info').textContent=entries.length?entries.length+' published OTA build(s) available from GitHub. Firmware installs preserve Wi-Fi.':errors.length?'Build catalog unavailable: '+errors.join('; '):'No verified LyricFlash OTA versions have been published.';\n"
 "}\n"
 "el('builds').onchange=()=>{const b=entries[Number(el('builds').value)];el('install').disabled=!b;};\n"
 "el('install').onclick=async()=>{\n"
@@ -216,6 +216,7 @@ static const char lf_device_firmware_html[] =
 "};\n"
 "loadInstalled().then(loadBuilds);\n"
 "</script></body></html>\n"
+"\n"
 "\n"
 "\n"
 ;
