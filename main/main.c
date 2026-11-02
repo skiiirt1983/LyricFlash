@@ -29,13 +29,13 @@ void app_main(void)
         lf_ota_guard_failure("Settings read failed");
         return;
     }
-    /* On-device AMOLED reference: TE-synchronized CO5300 QSPI panel,
-       staged DMA writes and LVGL isolated from Wi-Fi on CPU 1.
-       Never enable TE sync without the matched display driver. */
+    /* Isolate 0.8.16's second-flush TE deadlock: keep the PrintSphere-derived
+       CO5300 PSRAM DMA staging and SPI queue depth 1, but disable TE waiting
+       while keeping the same core-1 LVGL worker and application. */
     bsp_display_cfg_t display_cfg = {
         .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
         .rotation = ESP_LV_ADAPTER_ROTATE_0,
-        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC,
+        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE,
         .touch_flags = { .swap_xy = 0, .mirror_x = 1, .mirror_y = 1 },
     };
     display_cfg.lv_adapter_cfg.task_core_id = 1;

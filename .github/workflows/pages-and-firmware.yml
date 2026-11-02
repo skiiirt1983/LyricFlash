@@ -5,7 +5,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, fix/alpha-0-8-4-reliable-swipe, work/webui-first-no-pins, recovery/0.8.12-ota-stable-core, fix/0.8.13-touch-screen-lifecycle, fix/0.8.14-touch-button-ownership, fix/0.8.15-qspi-refresh-diagnostics, fix/0.8.16-amoled-dma-te-sync]
+    branches: [main, fix/alpha-0-8-4-reliable-swipe, work/webui-first-no-pins, recovery/0.8.12-ota-stable-core, fix/0.8.13-touch-screen-lifecycle, fix/0.8.14-touch-button-ownership, fix/0.8.15-qspi-refresh-diagnostics, fix/0.8.16-amoled-dma-te-sync, fix/0.8.17-dma-staging-no-te]
     paths:
       - 'docs/**'
       - 'main/**'
@@ -41,7 +41,8 @@ jobs:
         github.ref == 'refs/heads/fix/0.8.13-touch-screen-lifecycle' ||
         github.ref == 'refs/heads/fix/0.8.14-touch-button-ownership' ||
         github.ref == 'refs/heads/fix/0.8.15-qspi-refresh-diagnostics' ||
-        github.ref == 'refs/heads/fix/0.8.16-amoled-dma-te-sync') &&
+        github.ref == 'refs/heads/fix/0.8.16-amoled-dma-te-sync' ||
+        github.ref == 'refs/heads/fix/0.8.17-dma-staging-no-te') &&
        contains(github.event.head_commit.message, '[compile-once]'))
     needs: preflight
     permissions:
@@ -82,7 +83,7 @@ jobs:
       - name: Upload complete USB and OTA release
         uses: actions/upload-artifact@v4
         with:
-          name: LyricFlash-Alpha-0.8.16-FULL-USB-and-OTA-UNTESTED
+          name: LyricFlash-Alpha-0.8.17-FULL-USB-and-OTA-UNTESTED
           path: |
             _site/beta/firmware/lyricflash-full.bin
             _site/beta/firmware/lyricflash-ota.bin
@@ -96,12 +97,12 @@ jobs:
       - name: Verify complete USB+OTA release again before deployment
         run: python3 tools/package_release.py --verify _site
       - name: Publish and verify direct HTTPS alpha OTA image
-        if: (github.ref == 'refs/heads/work/webui-first-no-pins' || github.ref == 'refs/heads/recovery/0.8.12-ota-stable-core' || github.ref == 'refs/heads/fix/0.8.13-touch-screen-lifecycle' || github.ref == 'refs/heads/fix/0.8.14-touch-button-ownership' || github.ref == 'refs/heads/fix/0.8.15-qspi-refresh-diagnostics' || github.ref == 'refs/heads/fix/0.8.16-amoled-dma-te-sync') && github.event_name == 'push'
+        if: (github.ref == 'refs/heads/work/webui-first-no-pins' || github.ref == 'refs/heads/recovery/0.8.12-ota-stable-core' || github.ref == 'refs/heads/fix/0.8.13-touch-screen-lifecycle' || github.ref == 'refs/heads/fix/0.8.14-touch-button-ownership' || github.ref == 'refs/heads/fix/0.8.15-qspi-refresh-diagnostics' || github.ref == 'refs/heads/fix/0.8.16-amoled-dma-te-sync' || github.ref == 'refs/heads/fix/0.8.17-dma-staging-no-te') && github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin
       - name: Publish validated development OTA as an alpha prerelease (never stable)
-        if: (github.ref == 'refs/heads/work/webui-first-no-pins' || github.ref == 'refs/heads/recovery/0.8.12-ota-stable-core' || github.ref == 'refs/heads/fix/0.8.13-touch-screen-lifecycle' || github.ref == 'refs/heads/fix/0.8.14-touch-button-ownership' || github.ref == 'refs/heads/fix/0.8.15-qspi-refresh-diagnostics' || github.ref == 'refs/heads/fix/0.8.16-amoled-dma-te-sync') && github.event_name == 'push'
+        if: (github.ref == 'refs/heads/work/webui-first-no-pins' || github.ref == 'refs/heads/recovery/0.8.12-ota-stable-core' || github.ref == 'refs/heads/fix/0.8.13-touch-screen-lifecycle' || github.ref == 'refs/heads/fix/0.8.14-touch-button-ownership' || github.ref == 'refs/heads/fix/0.8.15-qspi-refresh-diagnostics' || github.ref == 'refs/heads/fix/0.8.16-amoled-dma-te-sync' || github.ref == 'refs/heads/fix/0.8.17-dma-staging-no-te') && github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

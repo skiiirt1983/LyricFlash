@@ -1,7 +1,7 @@
 #pragma once
-/* Experimental 0.8.16: Apache-2.0 AMOLED BSP with QSPI DMA staging
-   and CO5300 TE synchronization. Hardware test required.
-   Saved settings and OTA partition layout are unchanged. */
-#define LF_VERSION "0.8.16-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.16"
-/* 0.8.16 AMOLED build checkpoint: source preflight passed. */
+/* 0.8.17 experimental AMOLED isolation: disables TE wait after 0.8.16
+   blocked on second display flush, retains PSRAM DMA staging, QSPI queue
+   depth one and core-1 LVGL. No changes to NVS, Wi-Fi, OTA or partitions.
+   Hardware validation still required. */
+#define LF_VERSION "0.8.17-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.17"
