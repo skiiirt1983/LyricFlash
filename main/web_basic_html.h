@@ -140,8 +140,8 @@ static const char lf_basic_settings_html[] =
 "async function diagnostics(){let p=$('diagnostics');p.hidden=!p.hidden;if(p.hidden)return;try{p.textContent=JSON.stringify(await request('/api/diagnostics'),null,2);}catch(e){p.textContent=e.message;}}\n"
 "$('clock_face').addEventListener('change',()=>{readProfile();activeFace=nval('clock_face');writeProfile();});\n"
 "for(let id of ['face_background','face_foreground','face_accent','face_show_date','face_show_seconds','face_show_battery','face_24h'])$(id).addEventListener('input',()=>{readProfile();render();});\n"
-"for(let id of ['font_style','font_size','ring_mode','show_date','weather','ring_a','ring_b','ring_c'])$(id).addEventListener('input',()=>{if(id==='show_date'&&activeFace===5){faceProfiles[5].show_date=$('show_date').checked;$('face_show_date').checked=$('show_date').checked;}render();});
-for(let id of ['background','foreground'])$(id).addEventListener('input',()=>{if(activeFace===5){faceProfiles[5][id]=parseInt($(id).value.slice(1),16);$('face_'+id).value=$(id).value;}render();});\n"
+"for(let id of ['font_style','font_size','ring_mode','show_date','weather','ring_a','ring_b','ring_c'])$(id).addEventListener('input',()=>{if(id==='show_date'&&activeFace===5){faceProfiles[5].show_date=$('show_date').checked;$('face_show_date').checked=$('show_date').checked;}render();});\n"
+"for(let id of ['background','foreground'])$(id).addEventListener('input',()=>{if(activeFace===5){faceProfiles[5][id]=parseInt($(id).value.slice(1),16);$('face_'+id).value=$(id).value;}render();});\n"
 "$('reset-face').onclick=()=>{faceProfiles[activeFace]={...defaults[activeFace]};writeProfile();status(names[activeFace]+' restored to defaults in preview. Save to apply.');};\n"
 "$('save').onclick=save;$('refresh').onclick=diagnostics;\n"
 "load();setInterval(render,1000);\n"
