@@ -57,6 +57,8 @@ static atomic_uint ui_render_count;
 static atomic_uint ui_flush_start_count;
 static atomic_uint ui_flush_finish_count;
 static atomic_uint ui_refresh_ready_count;
+static atomic_uint nav_transition_completed_count;
+static atomic_uint nav_transition_last_ms;
 
 void lf_ui_display_stats(lf_ui_display_stats_t *out)
 {
@@ -74,6 +76,8 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->clock_build_max_ms=atomic_load(&ui_clock_build_max_ms);
     out->clock_present_last_ms=atomic_load(&ui_clock_present_last_ms);
     out->clock_present_max_ms=atomic_load(&ui_clock_present_max_ms);
+    out->nav_reveal_completions=atomic_load(&nav_transition_completed_count);
+    out->nav_reveal_last_ms=atomic_load(&nav_transition_last_ms);
 }
 static void display_render_event(lv_event_t *e)
 {
@@ -318,8 +322,6 @@ static uint8_t nav_transition_step;
 static int32_t nav_transition_cursor;
 static lv_screen_load_anim_t nav_transition_dir;
 static uint64_t nav_transition_started_ms;
-static atomic_uint nav_transition_completed_count;
-static atomic_uint nav_transition_last_ms;
 #define LF_NAV_REVEAL_STEPS 16
 #define LF_NAV_REVEAL_PERIOD_MS 22
 #define LF_NAV_PANEL_SIZE 466
