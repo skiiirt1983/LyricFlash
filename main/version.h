@@ -4,3 +4,4 @@
    NOT hardware validated. OTA/network and settings preserved. */
 #define LF_VERSION "0.8.15-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.15"
+/* 0.8.15 flush diagnostic compile checkpoint: preflight passed. */
