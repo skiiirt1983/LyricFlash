@@ -448,6 +448,9 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "uptime_seconds", d.uptime_seconds);
     cJSON_AddNumberToObject(root, "free_heap_bytes", d.heap_free_bytes);
     cJSON_AddNumberToObject(root, "min_free_heap_bytes", d.heap_min_bytes);
+    cJSON_AddNumberToObject(root, "largest_free_block_bytes", d.heap_largest_block_bytes);
+    cJSON_AddNumberToObject(root, "reset_reason_code", d.reset_reason);
+    cJSON_AddNumberToObject(root, "freertos_task_count", d.task_count);
     cJSON_AddNumberToObject(root, "free_psram_bytes", d.psram_free_bytes);
     cJSON_AddBoolToObject(root, "battery_valid", d.battery_valid);
     if (d.battery_valid) {
