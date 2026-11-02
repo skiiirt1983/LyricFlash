@@ -134,7 +134,7 @@ require(abs(old_top-new_top) < 0.00001,
         "New 100% lyric scroll cap does not equal old 35%")
 require("lv_label_set_long_mode(s_text,LV_LABEL_LONG_CLIP)" in ui,
         "Clock settings dialog long label not protected")
-# PrintSphere-style finger-following pager on MAIN pages only:
+# Swiper-style finger-following pager on MAIN pages only:
 # scrolling must be native LVGL, not root translation or screen swapping.
 require('lv_obj_set_flex_flow(container,LV_FLEX_FLOW_ROW);' in ui and
         'lv_obj_set_scroll_dir(container,LV_DIR_HOR);' in ui and
@@ -142,7 +142,7 @@ require('lv_obj_set_flex_flow(container,LV_FLEX_FLOW_ROW);' in ui and
         'lv_obj_scroll_to_x(pager_scroll,target_x,LV_ANIM_ON);' in ui and
         'lv_indev_set_scroll_throw(input,95);' in ui and
         'if(abs(movement)>=LF_PAGER_WIDTH/10)' in ui,
-        "Core pager must track finger and snap once with PrintSphere physics")
+        "Core pager must track finger and snap once with Swiper physics")
 require('lv_obj_set_style_translate_x(screen,' not in ui and
         'lv_anim_set_exec_cb(' not in ui and
         'if(pager_root && lv_screen_active()==pager_root' in ui,
@@ -297,3 +297,16 @@ require('lv_canvas_init_layer(ring_canvas,&layer);' in read("main/basic_clock.c"
         'lf_basic_clock_prepare();' in ui and
         'lf_basic_clock_clear();' in read("main/clock_face.c"),
         "Basic ring must be a persistent one-time rasterized snapshot")
+
+# Emergency 0.8.11 touch-recovery gate: first post-reboot frame must not
+# allocate Clock, Home and Settings concurrently. Direct tap/swipe navigation
+# must remain reachable even while the three-page compositor is disabled.
+require('#define LF_SAFE_BOOT_SINGLE_SCREEN 1' in ui and
+        'if(LF_SAFE_BOOT_SINGLE_SCREEN) render_home();' in ui and
+        'if(LF_SAFE_BOOT_SINGLE_SCREEN || !pager_root || lv_screen_active()!=pager_root)' in ui and
+        'if(index==0)render_clock();' in ui and
+        'else if(index==1)render_home();' in ui and
+        'else render_settings();' in ui and
+        'lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, arg);' in ui and
+        'if (target >= 0) queue_swipe(target, animation);' in ui,
+        "Post-reboot single-screen Home and independent tap/swipe fallback missing")
