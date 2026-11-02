@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only structural guards for PrintSphere-inspired, physically smooth paging.
+"""Read-only structural guards for Swiper-inspired, physically smooth paging.
 No firmware build is triggered by this test.
 """
 from pathlib import Path
@@ -19,7 +19,7 @@ assert "pager_render_target=pager_clock;render_clock();" in pager
 assert pager.index("pager_render_target=NULL") < pager.index("lv_screen_load(root)")
 scroll=region("static void pager_scroll_event(lv_event_t *e)\n{","static void pager_build(int index)")
 assert "lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED" in scroll
-assert "if(abs(movement)>=LF_PAGER_WIDTH/5)" in scroll
+assert "if(abs(movement)>=LF_PAGER_WIDTH/10)" in scroll
 assert "lv_obj_scroll_to_x(pager_scroll,target_x,LV_ANIM_ON)" in scroll
 assert "pager_select(nearest)" in scroll
 assert "lv_obj_delete" not in scroll
