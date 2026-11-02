@@ -1607,6 +1607,16 @@ bool lf_ui_start(lf_settings_t *s)
     apply_brightness();
     (void)lf_power_background_start();
     build_home();
+    /* Match PrintSphere's high-scroll-throw / single-snap approach:
+       stop inertial scrolling quickly, then let one LVGL ease-out settle. */
+    lv_indev_t *input=lv_indev_get_next(NULL);
+    while(input) {
+        if(lv_indev_get_type(input)==LV_INDEV_TYPE_POINTER) {
+            lv_indev_set_scroll_throw(input,90);
+            break;
+        }
+        input=lv_indev_get_next(input);
+    }
     lv_timer_create(on_tick, 50, NULL);
     lv_timer_create(on_clock_sweep, 16, NULL);
     esp_lv_adapter_unlock();
