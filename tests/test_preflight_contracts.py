@@ -363,3 +363,13 @@ require('nav_reveal_completions' in network and
         'nav_reveal_last_ms' in network and
         'nav_reveal_completions' in read('main/ui.h'),
         "Missing page reveal timing diagnostics")
+
+# 0.8.21: filmed bright green line on Settings->Clock transition was the
+# 0.8.20 synthetic 6px user-accent bar, NOT the CO5300 panel driver.
+# Never reintroduce that decorative geometry into the QSPI reveal.
+require('nav_transition_edge' not in ui and
+        'lv_obj_set_style_bg_color(nav_transition_edge,' not in ui and
+        'lv_obj_invalidate_area(screen,&region);' in ui and
+        'nav_transition_catcher=lv_obj_create(screen);' in ui and
+        'if(screen && interrupted) lv_obj_invalidate(screen);' in ui,
+        "Page transitions must reveal content without green accent divider")

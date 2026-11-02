@@ -316,7 +316,6 @@ static lv_screen_load_anim_t pending_swipe_direction = LV_SCR_LOAD_ANIM_NONE;
 static lv_screen_load_anim_t nav_transition_hint = LV_SCR_LOAD_ANIM_NONE;
 static lv_timer_t *nav_transition_timer;
 static lv_obj_t *nav_transition_catcher;
-static lv_obj_t *nav_transition_edge;
 static bool nav_transition_active;
 static uint8_t nav_transition_step;
 static int32_t nav_transition_cursor;
@@ -1664,23 +1663,13 @@ static void nav_transition_end(bool interrupted)
     lv_display_t *disp=lv_display_get_default();
     bool enabled=disp && lv_display_is_invalidation_enabled(disp);
     if(enabled) lv_display_enable_invalidation(disp,false);
-    if(nav_transition_edge){lv_obj_delete(nav_transition_edge);nav_transition_edge=NULL;}
     if(nav_transition_catcher){lv_obj_delete(nav_transition_catcher);nav_transition_catcher=NULL;}
     if(enabled) lv_display_enable_invalidation(disp,true);
-    if(screen) {
-        if(interrupted) lv_obj_invalidate(screen);
-        else {
-            /* Erase the final accent edge using a narrow, aligned redraw. */
-            lv_area_t edge={0,0,465,465};
-            switch(nav_transition_dir){
-                case LV_SCR_LOAD_ANIM_OVER_LEFT:edge.x2=7;break;
-                case LV_SCR_LOAD_ANIM_OVER_TOP:edge.y2=7;break;
-                case LV_SCR_LOAD_ANIM_OVER_BOTTOM:edge.y1=458;break;
-                default:edge.x1=458;break;
-            }
-            lv_obj_invalidate_area(screen,&edge);
-        }
-    }
+    /* The 466px reveal already invalidated all incoming pixels. A synthetic
+       accent divider was visibly green and remained distracting during clock
+       loading; no edge object or trailing edge repaint is necessary.
+       Only an interrupted reveal needs a recovery full-screen refresh. */
+    if(screen && interrupted) lv_obj_invalidate(screen);
     atomic_fetch_add(&nav_transition_completed_count,1);
     atomic_store(&nav_transition_last_ms,(uint32_t)(now_ms()-nav_transition_started_ms));
 }
@@ -1712,11 +1701,6 @@ static void nav_transition_tick(lv_timer_t *timer)
     }
     nav_transition_cursor=next;
     lv_obj_invalidate_area(screen,&region);
-    if(nav_transition_edge){
-        int32_t pos=(reverse?LF_NAV_PANEL_SIZE-next:next)-3;
-        if(vertical)lv_obj_set_y(nav_transition_edge,pos);
-        else lv_obj_set_x(nav_transition_edge,pos);
-    }
     if(next==LF_NAV_PANEL_SIZE)nav_transition_end(false);
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
@@ -1743,18 +1727,6 @@ static void nav_transition_begin(lv_screen_load_anim_t direction)
     lv_obj_set_style_radius(nav_transition_catcher,0,0);
     lv_obj_remove_flag(nav_transition_catcher,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(nav_transition_catcher,LV_OBJ_FLAG_CLICKABLE);
-    nav_transition_edge=lv_obj_create(screen);
-    bool vertical=nav_transition_dir==LV_SCR_LOAD_ANIM_OVER_TOP||
-                  nav_transition_dir==LV_SCR_LOAD_ANIM_OVER_BOTTOM;
-    lv_obj_set_size(nav_transition_edge,vertical?466:6,vertical?6:466);
-    lv_obj_set_style_bg_color(nav_transition_edge,lv_color_hex(prefs->accent_color),0);
-    lv_obj_set_style_bg_opa(nav_transition_edge,LV_OPA_60,0);
-    lv_obj_set_style_border_width(nav_transition_edge,0,0);
-    lv_obj_set_style_radius(nav_transition_edge,3,0);
-    lv_obj_remove_flag(nav_transition_edge,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(nav_transition_edge,LV_OBJ_FLAG_SCROLLABLE);
-    if(vertical)lv_obj_set_y(nav_transition_edge,0);
-    else lv_obj_set_x(nav_transition_edge,0);
     lv_display_enable_invalidation(disp,true);
     nav_transition_timer=lv_timer_create(nav_transition_tick,LF_NAV_REVEAL_PERIOD_MS,NULL);
     if(!nav_transition_timer)nav_transition_end(true);
