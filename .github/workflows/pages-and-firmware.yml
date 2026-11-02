@@ -49,7 +49,7 @@ jobs:
         run: |
           cd _site/beta/firmware
           sha256sum lyricflash-full.bin lyricflash-ota.bin > SHA256SUMS.txt
-          printf 'LyricFlash Alpha 0.7 (untested)\nUSB: flash lyricflash-full.bin at offset 0x0 to the Waveshare ESP32-S3 16MB device.\nOTA: use lyricflash-ota.bin only in the local PIN-protected OTA updater; never flash it at 0x0.\nA full-chip erase is NOT necessary and destroys saved settings.\n' > USB-INSTALL.txt
+          printf 'LyricFlash Alpha 0.7 (untested)\nUSB: flash lyricflash-full.bin at offset 0x0 to the Waveshare ESP32-S3 16MB device.\nOTA: use lyricflash-ota.bin only in the local PIN-protected OTA updater; never flash it at 0x0.\nThe merged full image also overwrites NVS and otadata. Re-enter saved Wi-Fi/settings after flashing. No additional full-chip erase needed.\n' > USB-INSTALL.txt
       - name: Upload complete USB and OTA release
         uses: actions/upload-artifact@v4
         with:
