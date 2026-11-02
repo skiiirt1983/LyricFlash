@@ -94,6 +94,10 @@ static void apply_brightness(void) { (void)bsp_display_brightness_set(asleep ? 0
 
 static void save_settings(void)
 {
+    /* On-device Basic changes must not leave Web UI face 6 out of sync. */
+    prefs->face_background[5]=prefs->basic_background;
+    prefs->face_foreground[5]=prefs->basic_foreground;
+    prefs->face_show_date[5]=prefs->basic_show_date;
     esp_err_t r = lf_settings_save(prefs);
     if (r != ESP_OK) ESP_LOGE(TAG, "Could not save settings: %s", esp_err_to_name(r));
     activity();
