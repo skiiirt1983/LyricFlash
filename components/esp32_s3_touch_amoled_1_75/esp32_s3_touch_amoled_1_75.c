@@ -30,7 +30,13 @@
 
 static const char *TAG = "ESP32-S3-Touch-AMOLED-1.75";
 
-#define BSP_LCD_DMA_STAGING_ROWS (4)
+/* A normal LVGL partial buffer is 24 rows. 4-row QSPI staging caused
+   six panel transfers for EACH tile and visible pauses while swiping.
+   Prefer up to one transfer per tile, but preserve a 4-row fallback if
+   available DMA-capable INTERNAL RAM is too constrained for OTA/Wi-Fi. */
+#define BSP_LCD_DMA_STAGING_ROWS (24)
+#define BSP_LCD_DMA_STAGING_ROWS_FALLBACK (4)
+#define BSP_LCD_INTERNAL_RAM_HEADROOM (96 * 1024U)
 static i2c_master_bus_handle_t i2c_handle = NULL; // I2C Handle
 static bool i2c_initialized = false;
 static esp_io_expander_handle_t io_expander = NULL; // IO expander tca9554 handle
@@ -97,9 +103,17 @@ typedef struct {
     size_t rotated_buffer_pixels;
     bool te_sync_mode;
     uint8_t staging_slot;
+    uint8_t staging_rows; /* 24/16/8/4; chosen once before first LVGL flush. */
 } bsp_rotation_panel_t;
 
 static bsp_rotation_panel_t rotation_panel = {0};
+
+/* Readable from HTTP Diagnostics without LVGL lock; stage size is chosen
+   once during display initialization and remains constant thereafter. */
+uint32_t bsp_display_dma_staging_rows(void)
+{
+    return rotation_panel.staging_rows;
+}
 
 static bsp_rotation_panel_t *bsp_rotation_panel_from_base(esp_lcd_panel_t *panel)
 {
@@ -134,7 +148,41 @@ static esp_err_t bsp_rotation_panel_del(esp_lcd_panel_t *panel)
     ctx->rotated_buffer_pixels = 0;
     ctx->te_sync_mode = false;
     ctx->staging_slot = 0;
+    ctx->staging_rows = 0;
     return esp_lcd_panel_del(ctx->target);
+}
+
+/* Allocate both DMA slots ONCE during BSP startup, before any queued
+   transactions. Never resize an active streaming buffer (an SPI transfer
+   might still own the previous slot). The ESP32-S3 has limited internal
+   DMA RAM; leave 96 KiB free when selecting larger batches so TLS/OTA
+   and Wi-Fi startup are not starved. 4 rows remains the proven fallback. */
+static bool bsp_rotation_panel_prepare_staging(bsp_rotation_panel_t *ctx)
+{
+    if (ctx->staging_rows && ctx->rotation_buffer) return true;
+    static const uint8_t options[] = {24, 16, 8, 4};
+    for (size_t i = 0; i < sizeof(options)/sizeof(options[0]); ++i) {
+        const uint8_t rows=options[i];
+        const size_t pixels=(size_t)BSP_LCD_H_RES * rows * 2;
+        const size_t bytes=pixels * sizeof(uint16_t);
+        const size_t free_internal=heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if(rows>BSP_LCD_DMA_STAGING_ROWS_FALLBACK &&
+           free_internal < bytes+BSP_LCD_INTERNAL_RAM_HEADROOM)
+            continue;
+        uint16_t *dma=heap_caps_malloc(bytes,
+                       MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+        if(!dma) continue;
+        ctx->rotation_buffer=dma;
+        ctx->rotation_buffer_pixels=pixels;
+        ctx->staging_rows=rows;
+        ctx->staging_slot=0;
+        ESP_LOGI(TAG,"CO5300 staged QSPI: %u rows/transfer, 2 slots, %u DMA bytes; internal free now %u",
+                 (unsigned)rows,(unsigned)bytes,
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        return true;
+    }
+    ESP_LOGE(TAG,"CO5300: unable to reserve even the 4-row DMA staging fallback");
+    return false;
 }
 
 static bool bsp_rotation_panel_ensure_buffer(bsp_rotation_panel_t *ctx, size_t pixels)
@@ -217,22 +265,19 @@ static esp_err_t bsp_rotation_panel_draw_staged(bsp_rotation_panel_t *ctx, int x
     }
 
     const size_t pixels = (size_t)width * height;
-    // Use the chunked DMA staging path whenever:
-    //   * TE-sync mode is active (need ping-pong slots to overlap CPU/DMA), OR
-    //   * The source bitmap lives in PSRAM (cannot be DMA'd directly, and a
-    //     full-frame rotated buffer is far too large for internal heap).
+    // PSRAM is not DMA-capable. Always use the dedicated preallocated double
+    // staging buffer for it, including short partial flushes. Batch up to
+    // the selected 24/16/8/4 rows without changing QSPI clock or queue depth.
     const bool src_in_psram = src != NULL && esp_ptr_external_ram(src);
-    const bool use_chunked =
-        (ctx->te_sync_mode || src_in_psram) && height > BSP_LCD_DMA_STAGING_ROWS;
+    const bool use_chunked = ctx->te_sync_mode || src_in_psram;
     if (use_chunked)
     {
-        const int max_rows = BSP_LCD_DMA_STAGING_ROWS;
+        if (!bsp_rotation_panel_prepare_staging(ctx)) return ESP_ERR_NO_MEM;
+        const int max_rows = ctx->staging_rows;
         const size_t max_pixels = (size_t)width * max_rows;
-        if (!bsp_rotation_panel_ensure_buffer(ctx, max_pixels * 2))
-        {
-            ESP_LOGE(TAG, "Unable to allocate %" PRIu32 " px DMA staging buffer",
-                     (uint32_t)(max_pixels * 2));
-            return ESP_ERR_NO_MEM;
+        if (ctx->rotation_buffer_pixels < max_pixels * 2) {
+            ESP_LOGE(TAG, "DMA stage width exceeds preallocated 466px limit");
+            return ESP_ERR_INVALID_SIZE;
         }
 
         for (int y = 0; y < height;)
@@ -393,6 +438,8 @@ static esp_lcd_panel_handle_t bsp_rotation_panel_wrap(esp_lcd_panel_handle_t tar
     rotation_panel.rotation = BSP_DISPLAY_ROTATE_0;
     rotation_panel.te_sync_mode = false;
     rotation_panel.staging_slot = 0;
+    rotation_panel.staging_rows = 0;
+    (void)bsp_rotation_panel_prepare_staging(&rotation_panel);
     return &rotation_panel.base;
 }
 
@@ -886,7 +933,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
              tear_mode,
              requested_tear_mode,
              (use_psram && !use_te_sync) ? "yes" : "no",
-             BSP_LCD_DMA_STAGING_ROWS);
+             rotation_panel.staging_rows);
 
     ESP_LOGD(TAG, "Add LCD screen");
     esp_lv_adapter_display_config_t disp_cfg = {
