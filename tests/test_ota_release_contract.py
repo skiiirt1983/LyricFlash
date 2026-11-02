@@ -20,12 +20,13 @@ for token in (
 
 for token in ("XMLHttpRequest", "xhr.upload.onprogress", "xhr.onerror",
               "xhr.ontimeout", "xhr.onload", "/api/install",
-              "https://api.github.com/repos/skiiirt1983/LyricFlash/releases"):
+              "https://skiiirt1983.github.io/LyricFlash/beta/catalog.json"):
     assert token in ui, f"Missing Web UI firmware update flow: {token}"
 assert "pin_matches" not in net and "X-LyricFlash-PIN" not in net
 assert "esp_https_ota_begin" in net and "esp_https_ota_finish" in net
 assert "OTA_SIZE_UNKNOWN" not in net
 assert "LyricFlash-Alpha-0.8.4-FULL-USB-and-OTA-UNTESTED" in workflow
+assert "tools/publish_build_catalog.py _site" in workflow
 assert "_site/beta/firmware/" in workflow
 assert "lyricflash-full.bin" in workflow and "lyricflash-ota.bin" in workflow
 assert "tools/validate_full_image.py" in workflow
