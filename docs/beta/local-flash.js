@@ -82,7 +82,13 @@
     report("Checking selected firmware...");
     try {
       await valid(file);
-      await customElements.whenDefined("esp-web-install-button");
+      await Promise.race([
+        customElements.whenDefined("esp-web-install-button"),
+        new Promise((_, reject) => setTimeout(
+          () => reject(Error("USB installer unavailable. Check the network or try ESPHome Web.")),
+          12000
+        )),
+      ]);
       if (request !== generation) return;
 
       /* Both paths are absolute blob URLs, so they work regardless of the
@@ -104,7 +110,7 @@
       install.manifest = manifestURL;
       install.classList.remove("hidden");
       note.classList.remove("hidden");
-      report("Validated " + file.name + " (" + (file.size / 1048576).toFixed(2) +
+      report("USB image structure checked: " + file.name + " (" + (file.size / 1048576).toFixed(2) +
         " MiB). Ready for USB installation; select your device's serial port below.");
     } catch (error) {
       if (request === generation) {
