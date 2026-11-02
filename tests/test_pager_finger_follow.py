@@ -23,6 +23,9 @@ assert "if(abs(movement)>=LF_PAGER_WIDTH/5)" in scroll
 assert "lv_obj_scroll_to_x(pager_scroll,target_x,LV_ANIM_ON)" in scroll
 assert "pager_select(nearest)" in scroll
 assert "lv_obj_delete" not in scroll
+weather=region("static void build_weather_details(void)\\n{","static void build_weather_location(void)")
+assert weather.index("lv_screen_load(handoff)") < weather.index("lv_obj_delete(cached)") < weather.index("lf_weather_visual_build(screen)")
+assert "if(pager_root && lv_screen_active()==pager_root)" in weather
 assert "lv_screen_load" not in scroll
 intent=region("static void swipe_intent(lv_dir_t direction)\n{","static void observe_touch_position(void)")
 assert "lv_screen_active()==pager_root" in intent

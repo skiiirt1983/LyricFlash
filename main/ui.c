@@ -1435,6 +1435,22 @@ static void build_debug(void)
 
 static void build_weather_details(void)
 {
+    /* Weather is heavy and deliberately NOT in the scrolling pager.
+       This function runs from commit_swipe after pointer release. Free the
+       inactive three-page scene first, rather than allocating both trees
+       simultaneously. The handoff is the active root until make_base loads
+       the standalone Weather scene; it cannot expose an old page underneath. */
+    if(pager_root && lv_screen_active()==pager_root) {
+        lv_obj_t *cached=lv_screen_active();
+        lv_obj_t *handoff=lv_obj_create(NULL);
+        lv_obj_set_style_bg_color(handoff,lv_color_hex(prefs->background_color),0);
+        lv_obj_set_style_bg_opa(handoff,LV_OPA_COVER,0);
+        lv_screen_load(handoff);
+        lf_clock_clear();
+        lv_obj_delete(cached);
+        pager_root=NULL;
+        pager_scroll=NULL;
+    }
     page = 11;
     make_base();
     lf_clock_clear();
