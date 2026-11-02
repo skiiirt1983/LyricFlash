@@ -10,3 +10,4 @@
    Hardware visibility, swipes and memory stability must be tested. */
 #define LF_VERSION "0.8.25-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.25"
+/* 0.8.25 black Clock recovery compile checkpoint: tests and diff audit passed. */
