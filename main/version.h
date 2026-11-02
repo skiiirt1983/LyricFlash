@@ -8,3 +8,4 @@
    Requires physical smoothness, stability, and memory-pressure testing. */
 #define LF_VERSION "0.8.24-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.24"
+/* 0.8.24 adaptive DMA compile checkpoint: source checks and diff audit passed. */
