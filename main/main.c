@@ -51,7 +51,7 @@ void app_main(void)
         lf_diag_error("weather", "Background weather service unavailable");
         ESP_LOGW(TAG, "Background weather service unavailable");
     }
-    // Confirm only after display, settings, and local update server initialize.
-    // This guards early boot failures, NOT future Wi-Fi/touch failures.
-    lf_ota_guard_confirm_startup();
+    /* Arm a delayed confirmation: the LVGL timer must stay responsive
+       after the local update server starts before a pending OTA is accepted. */
+    lf_ui_mark_services_ready();
 }

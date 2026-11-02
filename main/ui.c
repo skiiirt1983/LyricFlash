@@ -3,16 +3,22 @@
 #include "esp_lv_adapter.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_sleep.h"
+#include "driver/gpio.h"
 #include "power.h"
 #include "network.h"
 #include "diagnostics.h"
 #include "version.h"
 #include "clock_face.h"
+#include "basic_clock.h"
 #include "weather.h"
 #include "weather_visual.h"
 #include "char_wheel.h"
 #include "lvgl.h"
 #include <stdbool.h>
+#include <stdatomic.h>
+#include "ota_guard.h"
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -23,12 +29,37 @@ static uint64_t last_scroll_ms;
 static float scroll_y;
 static bool paused;
 static bool asleep;
+static atomic_bool ota_services_ready;
+static uint64_t ota_services_ready_at_ms;
+static bool ota_verification_done;
+static lv_obj_t *sleep_overlay; /* Touch-capture cover, leaves current page intact. */
 static lv_obj_t *scroll_panel;
 static lv_obj_t *lyrics_label;
 static lv_obj_t *speed_text;
 static lv_obj_t *brightness_text;
 static lv_obj_t *timeout_text;
 static lv_obj_t *screen;
+/* Swiper touch-synchronous pager, isolated to the three core pages.
+   All submenus (including Weather) remain standalone and release the pager. */
+#define LF_PAGER_WIDTH 466
+/* Recovery gate for the startup/touch lockup in 0.8.10. Keep exactly one
+   live full-screen tree until the multi-page compositor passes hardware tests.
+   The normal touch gesture navigation and explicit buttons remain available. */
+#define LF_SAFE_BOOT_SINGLE_SCREEN 1
+static lv_obj_t *pager_root;
+static lv_obj_t *pager_scroll;
+static lv_obj_t *pager_clock;
+static lv_obj_t *pager_home;
+static lv_obj_t *pager_settings;
+static lv_obj_t *pager_render_target;
+static lv_obj_t *pager_home_battery;
+static lv_obj_t *pager_home_network;
+static bool pager_scrolling;
+static int pager_index;
+static int pager_origin_index;
+static int pager_requested_index=-1;
+static bool pager_rebuild_requested;
+static bool pager_request_queued;
 static lv_obj_t *battery_status;
 static lv_obj_t *network_status;
 static lv_obj_t *network_password;
@@ -93,6 +124,10 @@ static void apply_brightness(void) { (void)bsp_display_brightness_set(asleep ? 0
 
 static void save_settings(void)
 {
+    /* On-device Basic changes must not leave Web UI face 6 out of sync. */
+    prefs->face_background[5]=prefs->basic_background;
+    prefs->face_foreground[5]=prefs->basic_foreground;
+    prefs->face_show_date[5]=prefs->basic_show_date;
     esp_err_t r = lf_settings_save(prefs);
     if (r != ESP_OK) ESP_LOGE(TAG, "Could not save settings: %s", esp_err_to_name(r));
     activity();
@@ -107,6 +142,8 @@ static lv_obj_t *label(lv_obj_t *parent, const char *text, int y,
     lv_obj_set_style_text_font(o, (font == &lv_font_montserrat_12 || font == &lv_font_montserrat_16 || font == &lv_font_montserrat_18) ? system_font() : font, 0);
     lv_obj_set_width(o, 360);
     lv_obj_set_style_text_align(o, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_flag(o, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(o, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_align(o, LV_ALIGN_TOP_MID, 0, y);
     return o;
 }
@@ -130,6 +167,7 @@ static void on_gesture_press(lv_event_t *e);
 static void on_touch_pressing(lv_event_t *e);
 static void on_touch_release(lv_event_t *e);
 static void on_touch_cancel(lv_event_t *e);
+static void on_lvgl_gesture(lv_event_t *e);
 
 static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int height,
                         int x, int y, uint32_t bg, lv_event_cb_t cb, void *arg)
@@ -142,11 +180,15 @@ static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int heigh
     lv_obj_set_size(b, width, height);
     lv_obj_align(b, LV_ALIGN_CENTER, x, y);
     style_button(b, bg);
+    /* Let LVGL's horizontal pager see drag gestures starting on buttons. */
+    lv_obj_add_flag(b, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(b, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, arg);
     lv_obj_add_event_cb(b, on_gesture_press, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(b, on_touch_pressing, LV_EVENT_PRESSING, NULL);
     lv_obj_add_event_cb(b, on_touch_release, LV_EVENT_RELEASED, NULL);
     lv_obj_add_event_cb(b, on_touch_cancel, LV_EVENT_PRESS_LOST, NULL);
+    lv_obj_add_event_cb(b, on_lvgl_gesture, LV_EVENT_GESTURE, NULL);
     lv_obj_t *l = lv_label_create(b);
     lv_label_set_text(l, text);
     lv_obj_set_width(l, width - 16);
@@ -177,7 +219,6 @@ static void build_weather_location(void);
 static void build_lyrics_settings(void);
 static void build_device_settings(void);
 static void build_weather_details(void);
-static void on_arm_ota(lv_event_t *e);
 static void on_clock_options(lv_event_t *e);
 static void on_clock_back(lv_event_t *e);
 static void on_home(lv_event_t *e)
@@ -192,21 +233,32 @@ static void on_settings(lv_event_t *e)
 {
     (void)e; activity(); build_settings();
 }
-/* Phone-style touch semantics: pause moving content immediately, allow an
-   easy swipe, and navigate only once the finger leaves the glass. Building
-   screens inside a touch event previously caused a crash/jank regression. */
+/* Press lost does not mean the finger was lifted: LVGL sends it when a
+   swipe exits a button. Track the pointer device itself until its reported
+   input state is RELEASED; use LVGL's gesture detection as a second path.
+   Screen construction remains deferred, AFTER physical finger release. */
 #define LF_SWIPE_MIN_PX 38
 #define LF_CLOCK_SETTINGS_HOLD_MS 2000ULL
 #define LF_HOLD_MOVE_CANCEL_PX 20
 static lv_point_t gesture_origin;
+static lv_indev_t *gesture_indev;
 static bool gesture_origin_valid;
 static bool touch_held;
+/* An active slider drag owns the pointer until physical release. */
+static bool slider_touch_active;
+static lv_indev_t *slider_touch_indev;
 static uint64_t touch_pressed_at_ms;
 static int pending_swipe_page = -1;
-static lv_screen_load_anim_t next_screen_animation = LV_SCR_LOAD_ANIM_NONE;
+static lv_screen_load_anim_t pending_swipe_direction = LV_SCR_LOAD_ANIM_NONE;
+/* No dual-screen animation: 0.8.3 left old/new UI trees overlapping
+   during navigation and made the touch target inconsistent. */
 static uint64_t screen_animation_until_ms;
 static uint64_t next_swipe_allowed_ms;
 static lv_obj_t *clock_settings_popup;
+
+/* One candidate per physical gesture; no screen swap until the finger lifts. */
+static int swipe_candidate_page = -1;
+static lv_screen_load_anim_t swipe_candidate_animation = LV_SCR_LOAD_ANIM_NONE;
 
 static void build_home(void);
 static void build_settings(void);
@@ -214,18 +266,45 @@ static void build_clock(void);
 static void build_weather_details(void);
 static void build_debug(void);
 static void build_clock_settings(void);
+static void render_home(void);
+static void render_settings(void);
+static void render_clock(void);
+static void pager_build(int index);
+static void pager_select(int index);
+static void pager_show(int index, lv_anim_enable_t animation);
+static void pager_request(int index, bool rebuild);
 
+static bool is_swipe_page(void)
+{
+    return page == 0 || page == 1 || page == 2 || page == 4 ||
+           page == 5 || page == 6 || page == 7 || page == 8 ||
+           page == 9 || page == 10 || page == 11 || page == 12 ||
+           page == 13 || page == 14 || page == 15;
+}
+
+/* Swap screens after gesture release, without animations. */
 static void commit_swipe(void *arg)
 {
     (void)arg;
     const int target = pending_swipe_page;
     pending_swipe_page = -1;
+    pending_swipe_direction = LV_SCR_LOAD_ANIM_NONE;
     switch(target) {
     case 0: build_home(); break;
     case 2: build_settings(); break;
     case 6: build_clock(); break;
     case 11: build_weather_details(); break;
     case 14: build_debug(); break;
+    case 1: build_preview(); break;
+    case 4: build_wifi(); break;
+    case 5: build_wifi_password(); break;
+    case 7: build_clock_settings(); break;
+    case 8: build_weather_location(); break;
+    case 9: build_lyrics_settings(); break;
+    case 10: build_device_settings(); break;
+    case 12: build_basic_settings(); break;
+    case 13: build_basic_colour(); break;
+    case 15: build_connection_help(); break;
     default: break;
     }
 }
@@ -235,71 +314,161 @@ static void queue_swipe(int target, lv_screen_load_anim_t animation)
     if (clock_settings_popup || pending_swipe_page >= 0 ||
         current < next_swipe_allowed_ms) return;
     pending_swipe_page = target;
-    next_screen_animation = animation;
+    pending_swipe_direction = animation;
     next_swipe_allowed_ms = current + 250;
     lv_async_call(commit_swipe, NULL);
 }
+
+static void swipe_intent(lv_dir_t direction)
+{
+    if (clock_settings_popup || swipe_candidate_page >= 0) return;
+    /* The LVGL pager itself owns horizontal main-page gestures.
+       Never enqueue a competing screen replacement while it scrolls. */
+    if(pager_root && lv_screen_active()==pager_root &&
+       (direction==LV_DIR_LEFT || direction==LV_DIR_RIGHT)) return;
+    if (page == 0) {
+        if (direction == LV_DIR_LEFT) {
+            swipe_candidate_page = 2;
+            swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_LEFT;
+        } else if (direction == LV_DIR_RIGHT) {
+            swipe_candidate_page = 6;
+            swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
+        } else if (direction == LV_DIR_BOTTOM) {
+            swipe_candidate_page = 14;
+            swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_BOTTOM;
+        }
+    } else if (page == 2) {
+        /* Settings is a navigation destination, never a dead end.
+           Return Home with either horizontal swipe; a short accidental
+           gesture still cannot activate because the threshold is 38 px. */
+        if (direction == LV_DIR_LEFT || direction == LV_DIR_RIGHT) {
+            swipe_candidate_page = 0;
+            swipe_candidate_animation = direction == LV_DIR_LEFT
+                ? LV_SCR_LOAD_ANIM_OVER_LEFT : LV_SCR_LOAD_ANIM_OVER_RIGHT;
+        }
+    } else if (page == 6) {
+        if (direction == LV_DIR_LEFT) {
+            swipe_candidate_page = 0;
+            swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_LEFT;
+        } else if (direction == LV_DIR_TOP) {
+            swipe_candidate_page = 11;
+            swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_TOP;
+        }
+    } else if (page == 14 && (direction == LV_DIR_TOP || direction == LV_DIR_RIGHT)) {
+        swipe_candidate_page = 0;
+        swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
+    } else if (page == 11) {
+        /* Weather swipe left returns Home; right/down returns Clock. */
+        if(direction == LV_DIR_LEFT)swipe_candidate_page=0;
+        else if(direction == LV_DIR_BOTTOM || direction == LV_DIR_RIGHT)
+            swipe_candidate_page=6;
+        swipe_candidate_animation=LV_SCR_LOAD_ANIM_NONE;
+    } else if (direction == LV_DIR_RIGHT || direction == LV_DIR_LEFT) {
+        /* Consistent exit for all settings submenus, either horizontal
+           direction. Clock and weather paths keep their parent structure. */
+        switch(page) {
+        case 1: case 2: case 15: swipe_candidate_page=0; break;
+        case 4: case 9: case 10: swipe_candidate_page=2; break;
+        case 5: swipe_candidate_page=4; break;
+        case 7: swipe_candidate_page=6; break;
+        case 8: case 12: swipe_candidate_page=7; break;
+        case 13: swipe_candidate_page=12; break;
+        default: break;
+        }
+        swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
+    }
+    if (swipe_candidate_page >= 0)
+        touch_pressed_at_ms = 0; /* Never treat a swipe as a settings hold. */
+}
+
+static void observe_touch_position(void)
+{
+    if (slider_touch_active || !touch_held || !gesture_origin_valid || !gesture_indev) return;
+    lv_point_t current={0};
+    lv_indev_get_point(gesture_indev, &current);
+    int dx=current.x-gesture_origin.x;
+    int dy=current.y-gesture_origin.y;
+    int distance_sq=dx*dx+dy*dy;
+    if (page == 6 && distance_sq > LF_HOLD_MOVE_CANCEL_PX*LF_HOLD_MOVE_CANCEL_PX)
+        touch_pressed_at_ms=0;
+    if (distance_sq < LF_SWIPE_MIN_PX*LF_SWIPE_MIN_PX) return;
+    if(abs(dx)>abs(dy)) {
+        if(pager_root && lv_screen_active()==pager_root){
+            touch_pressed_at_ms=0; /* A horizontal page drag is not a long hold. */
+            return; /* Native LVGL pager follows the finger. */
+        }
+        swipe_intent(dx<0?LV_DIR_LEFT:LV_DIR_RIGHT);
+    } else swipe_intent(dy<0?LV_DIR_TOP:LV_DIR_BOTTOM);
+
+}
+
+static void finish_touch(void)
+{
+    if (!touch_held || slider_touch_active) return;
+    observe_touch_position();
+    const int target=swipe_candidate_page;
+    const lv_screen_load_anim_t animation=swipe_candidate_animation;
+    touch_held=false;
+    gesture_origin_valid=false;
+    gesture_indev=NULL;
+    touch_pressed_at_ms=0;
+    swipe_candidate_page=-1;
+    swipe_candidate_animation=LV_SCR_LOAD_ANIM_NONE;
+    if (target >= 0) queue_swipe(target, animation);
+    activity();
+}
+
 static void on_gesture_press(lv_event_t *e)
 {
     (void)e;
-    if (page != 0 && page != 6 && page != 11 && page != 14) return;
-    lv_indev_t *indev = lv_indev_active();
-    gesture_origin_valid = indev != NULL;
-    if (indev) {
-        lv_indev_get_point(indev, &gesture_origin);
-        touch_held = true;
-        touch_pressed_at_ms = now_ms();
-    }
+    if (!is_swipe_page() || slider_touch_active || clock_settings_popup || touch_held) return;
+    lv_indev_t *indev=lv_indev_active();
+    if (!indev || lv_indev_get_type(indev)!=LV_INDEV_TYPE_POINTER) return;
+    gesture_indev=indev;
+    gesture_origin_valid=true;
+    lv_indev_get_point(indev, &gesture_origin);
+    touch_held=true;
+    touch_pressed_at_ms=now_ms();
+    swipe_candidate_page=-1;
+    swipe_candidate_animation=LV_SCR_LOAD_ANIM_NONE;
     activity();
 }
 static void on_touch_pressing(lv_event_t *e)
 {
     (void)e;
-    if (!touch_held || !gesture_origin_valid) return;
-    lv_indev_t *indev = lv_indev_active();
-    if (!indev) return;
-    lv_point_t now={0};
-    lv_indev_get_point(indev, &now);
-    int dx=now.x-gesture_origin.x, dy=now.y-gesture_origin.y;
-    if (page == 6 && dx*dx + dy*dy > LF_HOLD_MOVE_CANCEL_PX*LF_HOLD_MOVE_CANCEL_PX)
-        touch_pressed_at_ms = 0; /* Swiping never opens clock settings. */
+    observe_touch_position();
+}
+static void on_lvgl_gesture(lv_event_t *e)
+{
+    (void)e;
+    if (slider_touch_active || !touch_held || !gesture_origin_valid || clock_settings_popup) return;
+    lv_indev_t *indev=lv_indev_active();
+    if (!indev || indev!=gesture_indev) return;
+    /* LVGL's gesture event may fire at the input-device scroll limit,
+       which is shorter than our intentional page-swipe threshold. Do not
+       convert a slightly moved button tap into a page transition. */
+    lv_point_t at={0};
+    lv_indev_get_point(indev,&at);
+    int dx=at.x-gesture_origin.x;
+    int dy=at.y-gesture_origin.y;
+    if(dx*dx+dy*dy < LF_SWIPE_MIN_PX*LF_SWIPE_MIN_PX) return;
+    observe_touch_position();
+    /* LVGL's direction is only a fallback when physical displacement did
+       not select a page; never enqueue two changes for the same finger. */
+    if(swipe_candidate_page < 0)
+        swipe_intent(lv_indev_get_gesture_dir(indev));
 }
 static void on_touch_release(lv_event_t *e)
 {
     (void)e;
-    if (!touch_held || !gesture_origin_valid) return;
-    touch_held = false;
-    uint64_t held_since=touch_pressed_at_ms;
-    touch_pressed_at_ms = 0;
-    lv_indev_t *indev=lv_indev_active();
-    if (!indev || clock_settings_popup) {gesture_origin_valid=false;return;}
-    lv_point_t end={0};
-    lv_indev_get_point(indev,&end);
-    const int dx=end.x-gesture_origin.x, dy=end.y-gesture_origin.y;
-    gesture_origin_valid=false;
-    if (dx*dx+dy*dy < LF_SWIPE_MIN_PX*LF_SWIPE_MIN_PX) {
-        /* Simple taps do not navigate or open clock settings. */
-        (void)held_since;
-        return;
-    }
-    if (abs(dx) > abs(dy)) {
-        if (page==0 && dx<0) queue_swipe(2, LV_SCR_LOAD_ANIM_OVER_LEFT);
-        else if (page==0 && dx>0) queue_swipe(6, LV_SCR_LOAD_ANIM_OVER_RIGHT);
-        else if (page==6 && dx<0) queue_swipe(0, LV_SCR_LOAD_ANIM_OVER_LEFT);
-    } else {
-        if (page==0 && dy>0) queue_swipe(14, LV_SCR_LOAD_ANIM_OVER_BOTTOM);
-        else if (page==14 && dy<0) queue_swipe(0, LV_SCR_LOAD_ANIM_OVER_TOP);
-        else if (page==6 && dy<0) queue_swipe(11, LV_SCR_LOAD_ANIM_OVER_TOP);
-        else if (page==11 && dy>0) queue_swipe(6, LV_SCR_LOAD_ANIM_OVER_BOTTOM);
-    }
-    activity();
+    finish_touch();
 }
 static void on_touch_cancel(lv_event_t *e)
 {
     (void)e;
-    touch_held=false;
-    gesture_origin_valid=false;
-    touch_pressed_at_ms=0;
+    /* LV_EVENT_PRESS_LOST means the finger left the original widget.
+       Do NOT clear gesture state: release may be sent elsewhere or nowhere. */
+    observe_touch_position();
 }
 static void on_popup_cancel(lv_event_t *e)
 {
@@ -348,67 +517,86 @@ static void show_clock_settings_popup(void)
     lv_obj_set_style_text_font(sub,&lv_font_montserrat_16,0);
     lv_obj_set_style_text_color(sub,lv_color_hex(0xBDD4E8),0);
     lv_obj_align(sub,LV_ALIGN_TOP_MID,0,60);
-    button(panel,"CANCEL",125,50,-72,68,0xB4C7DB,on_popup_cancel,NULL);
-    button(panel,"SETTINGS",125,50,72,68,0x82C8FF,on_popup_settings,NULL);
+    lv_obj_t *cancel = button(panel,"CANCEL",125,50,-72,68,0xB4C7DB,on_popup_cancel,NULL);
+    lv_obj_t *settings = button(panel,"SETTINGS",125,50,72,68,0x82C8FF,on_popup_settings,NULL);
+    /* Fixed action font so the longer SETTINGS label never wraps at 24pt. */
+    lv_obj_t *c_text=lv_obj_get_child(cancel,0);
+    lv_obj_t *s_text=lv_obj_get_child(settings,0);
+    if(c_text) {
+        lv_obj_set_style_text_font(c_text,&lv_font_montserrat_16,0);
+        lv_label_set_long_mode(c_text,LV_LABEL_LONG_CLIP);
+    }
+    if(s_text) {
+        lv_obj_set_style_text_font(s_text,&lv_font_montserrat_16,0);
+        lv_label_set_long_mode(s_text,LV_LABEL_LONG_CLIP);
+    }
 }
-/* Heavy full-screen slide animations caused jitter with complex faces.
-   Swap atomically to minimize extra redraw and memory pressure. */
+/* Atomically swap a single full-screen root. Old screen cleanup is deferred
+   until LVGL finishes processing the callback that initiated navigation. */
 static void make_base(void)
 {
-    lv_obj_t *old_screen = lv_screen_active();
-    lf_weather_visual_clear();
-    lf_clock_clear();
-    screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(screen, lv_color_hex(prefs->background_color), 0);
-    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
-    lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(screen, on_gesture_press, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(screen, on_touch_pressing, LV_EVENT_PRESSING, NULL);
-    lv_obj_add_event_cb(screen, on_touch_release, LV_EVENT_RELEASED, NULL);
-    lv_obj_add_event_cb(screen, on_touch_cancel, LV_EVENT_PRESS_LOST, NULL);
-    /* A gesture/click callback may still be dispatching against old_screen.
-       Deleting it synchronously invalidates the event target / input-device
-       references and can reboot ESP32-S3. Keep the instant screen swap, but
-       free the old LVGL tree on the next timer-handler pass. */
-    if (old_screen != screen && next_screen_animation != LV_SCR_LOAD_ANIM_NONE) {
-        /* Only the incoming screen slides; the old clock stays visually frozen. */
-        lv_screen_load_anim(screen, next_screen_animation, 160, 0, true);
-        screen_animation_until_ms = now_ms() + 190;
-        next_screen_animation = LV_SCR_LOAD_ANIM_NONE;
-    } else {
-        lv_screen_load(screen);
-        if (old_screen != screen) lv_obj_delete_async(old_screen);
+    lv_obj_t *old_screen=pager_render_target ? NULL : lv_screen_active();
+    if(!pager_render_target) {
+        /* Disarm pending animation callbacks before leaving the core pager. */
+        if(pager_scroll && old_screen==pager_root)
+            lv_anim_delete(pager_scroll,NULL);
+        lf_weather_visual_clear();
+        lf_clock_clear();
     }
+    if(pager_render_target) {
+        /* Build a cached core page without ever loading another screen. */
+        screen=pager_render_target;
+    } else {
+        /* All standalone pages own a unique root; drop cached pager refs. */
+        pager_root=NULL;
+        pager_scroll=NULL;
+        pager_clock=NULL;
+        pager_home=NULL;
+        pager_settings=NULL;
+        pager_home_battery=NULL;
+        pager_home_network=NULL;
+        pager_scrolling=false;
+        screen=lv_obj_create(NULL);
+    }
+    lv_obj_set_style_bg_color(screen,lv_color_hex(prefs->background_color),0);
+    lv_obj_set_style_bg_opa(screen,LV_OPA_COVER,0);
+    lv_obj_set_style_border_width(screen,0,0);
+    lv_obj_set_style_radius(screen,0,0);
+    lv_obj_set_style_pad_all(screen,0,0);
+    lv_obj_remove_flag(screen,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(screen,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(screen,on_gesture_press,LV_EVENT_PRESSED,NULL);
+    lv_obj_add_event_cb(screen,on_touch_pressing,LV_EVENT_PRESSING,NULL);
+    lv_obj_add_event_cb(screen,on_touch_release,LV_EVENT_RELEASED,NULL);
+    lv_obj_add_event_cb(screen,on_touch_cancel,LV_EVENT_PRESS_LOST,NULL);
+    lv_obj_add_event_cb(screen,on_lvgl_gesture,LV_EVENT_GESTURE,NULL);
+    if(!pager_render_target) {
+        lv_screen_load(screen);
+        if(old_screen && old_screen!=screen)lv_obj_delete_async(old_screen);
+    }
+    screen_animation_until_ms=0;
     touch_held=false;
     gesture_origin_valid=false;
+    gesture_indev=NULL;
+    swipe_candidate_page=-1;
+    swipe_candidate_animation=LV_SCR_LOAD_ANIM_NONE;
     touch_pressed_at_ms=0;
     clock_settings_popup=NULL;
-    debug_text = NULL;
-    scroll_panel = NULL;
-    lyrics_label = NULL;
-    battery_status = NULL;
-    network_status = NULL;
-    network_password = NULL;
-    network_url = NULL;
-    ota_status = NULL;
-    wifi_list = NULL;
-    wifi_status = NULL;
-    wifi_password_status = NULL;
-    pause_button = NULL;
+    debug_text=NULL;
+    scroll_panel=NULL;
+    lyrics_label=NULL;
+    battery_status=NULL;
+    network_status=NULL;
+    network_password=NULL;
+    network_url=NULL;
+    ota_status=NULL;
+    wifi_list=NULL;
+    wifi_status=NULL;
+    wifi_password_status=NULL;
+    pause_button=NULL;
+    sleep_overlay=NULL;
 }
 
-static void on_arm_ota(lv_event_t *e)
-{
-    (void)e;
-    lf_network_arm_ota();
-    activity();
-    if(ota_status) {
-        char text[60];
-        snprintf(text,sizeof text,"OTA PIN: %s  (2 min)",lf_network_ota_pin());
-        lv_label_set_text(ota_status,text);
-    }
-}
 static void on_wifi(lv_event_t *e)
 {
     (void)e; activity(); build_wifi();
@@ -419,36 +607,41 @@ static void on_connection_help(lv_event_t *e)
 }
 static void build_connection_help(void)
 {
-    /* A non-gesture route to Wi-Fi provisioning and OTA authorization,
-       including the AP password and exact web address. */
+    /* Local connection portal: no PIN or touch authorization required. */
     page = 15;
     make_base();
     label(screen, "CONNECT / UPDATE", 37, &lv_font_montserrat_24, prefs->text_color);
     network_status = label(screen, "Checking Wi-Fi...", 92, &lv_font_montserrat_16, 0xE4EDF3);
     network_password = label(screen, "", 126, &lv_font_montserrat_16, 0xDDE9FB);
     network_url = label(screen, "", 161, &lv_font_montserrat_16, 0x8BCCFF);
-    ota_status = label(screen, "Tap ARM OTA for a two-minute PIN", 210,
+    ota_status = label(screen, "Web settings and OTA: no PIN required", 215,
                        &lv_font_montserrat_16, 0x8BCCFF);
-    button(screen, "ARM OTA", 190, 51, 0, 78, 0xA8D6FF, on_arm_ota, NULL);
     button(screen, "HOME", 154, 49, 0, 172, 0xB2C6D3, on_home, NULL);
     last_power_refresh_ms = 0; /* Refresh the network details immediately. */
 }
 
-static void build_home(void)
+static void render_home(void)
 {
     page = 0;
     make_base();
     lf_clock_clear();
-    label(screen, "LYRICFLASH", 56, &lv_font_montserrat_24, prefs->text_color);
-    label(screen, LF_VERSION_LABEL, 103, &lv_font_montserrat_20, 0xB7C7D7);
-    battery_status = label(screen, "BATTERY", 151, &lv_font_montserrat_20, 0xDCE8F0);
-    button(screen, "LYRICS", 242, 82, 0, 0, 0xA8D6FF, on_preview, NULL);
-    /* Physical OTA arming must remain reachable even if navigation breaks.
-       No browser/remote endpoint can arm updates without touching the device. */
-    button(screen, "CONNECT / OTA", 206, 49, 0, 83, 0xA8D6FF, on_connection_help, NULL);
-    network_status = label(screen, "Wi-Fi starting...", 354, &lv_font_montserrat_16, 0xB9CADB);
-    label(screen, "SWIPE LEFT / RIGHT", 394, &lv_font_montserrat_16, 0x6E8CAC);
+    label(screen, "LYRICFLASH", 36, &lv_font_montserrat_24, prefs->text_color);
+    label(screen, LF_VERSION_LABEL, 82, &lv_font_montserrat_20, 0xB7C7D7);
+    battery_status = label(screen, "BATTERY", 129, &lv_font_montserrat_20, 0xDCE8F0);
+    /* Recovery fallback: visible Clock and Settings buttons must work even
+       if physical swipe recognition fails. Keep all controls on one screen. */
+    button(screen, "CLOCK", 132, 48, -80, -43, 0xA8D6FF, on_clock_back, NULL);
+    button(screen, "SETTINGS", 132, 48, 80, -43, 0xA8D6FF, on_settings, NULL);
+    button(screen, "LYRICS", 242, 55, 0, 28, 0xA8D6FF, on_preview, NULL);
+    /* Connection and browser settings remain reachable without a PIN. */
+    button(screen, "CONNECT / OTA", 206, 49, 0, 100, 0xA8D6FF, on_connection_help, NULL);
+    network_status = label(screen, "Wi-Fi starting...", 371, &lv_font_montserrat_16, 0xB9CADB);
+    label(screen, "SWIPE FOR NAVIGATION", 406, &lv_font_montserrat_16, 0x6E8CAC);
     last_power_refresh_ms = 0;
+}
+static void build_home(void)
+{
+    pager_request(1,false);
 }
 
 static void on_toggle_pause(lv_event_t *e)
@@ -693,11 +886,42 @@ static void on_color(lv_event_t *e)
     save_settings();
     build_lyrics_settings();
 }
+/* Protect value adjustment from the ancestor screen's swipe callbacks. */
+static void slider_touch_event(lv_event_t *e)
+{
+    lv_event_code_t code=lv_event_get_code(e);
+    if(code==LV_EVENT_PRESSED) {
+        slider_touch_active=true;
+        slider_touch_indev=lv_indev_active();
+        touch_held=false;
+        gesture_origin_valid=false;
+        gesture_indev=NULL;
+        swipe_candidate_page=-1;
+        touch_pressed_at_ms=0;
+        if(pager_scroll && lv_screen_active()==pager_root)
+            lv_obj_set_scroll_dir(pager_scroll,LV_DIR_NONE);
+    } else if(code==LV_EVENT_RELEASED) {
+        slider_touch_active=false;
+        slider_touch_indev=NULL;
+        if(pager_scroll && lv_screen_active()==pager_root)
+            lv_obj_set_scroll_dir(pager_scroll,LV_DIR_HOR);
+        activity();
+    }
+    /* Do not clear ownership at PRESS_LOST; the finger can leave the track. */
+}
+static void protect_slider(lv_obj_t *s)
+{
+    lv_obj_remove_flag(s,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_remove_flag(s,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(s,slider_touch_event,LV_EVENT_PRESSED,NULL);
+    lv_obj_add_event_cb(s,slider_touch_event,LV_EVENT_RELEASED,NULL);
+}
 static void add_slider(lv_obj_t *parent, int y, int value,
                        int min, int max, lv_event_cb_t cb)
 {
     lv_obj_t *s = lv_slider_create(parent);
-    lv_obj_set_size(s, 262, 11);
+    protect_slider(s);
+    lv_obj_set_size(s, 262, 21);
     lv_obj_align(s, LV_ALIGN_TOP_MID, 0, y);
     lv_slider_set_range(s, min, max);
     lv_slider_set_value(s, value, LV_ANIM_OFF);
@@ -712,7 +936,7 @@ static void on_device_settings(lv_event_t *e)
 {
     (void)e; activity(); build_device_settings();
 }
-static void build_settings(void)
+static void render_settings(void)
 {
     page = 2;
     make_base();
@@ -722,6 +946,10 @@ static void build_settings(void)
     button(screen, "DEVICE", 250, 54, 0, 33, 0xB2C6D3, on_device_settings, NULL);
     button(screen, "WI-FI", 250, 54, 0, 99, 0xB2C6D3, on_wifi, NULL);
     button(screen, "HOME", 153, 44, 0, 175, prefs->text_color, on_home, NULL);
+}
+static void build_settings(void)
+{
+    pager_request(2,false);
 }
 static void on_lyric_font(lv_event_t *e)
 {
@@ -741,7 +969,7 @@ static void build_lyrics_settings(void)
     button(screen, text, 270, 50, 0, -103, 0xB2C6D3, on_lyric_font, NULL);
     snprintf(text, sizeof text, "Scroll speed: %u%%", prefs->scroll_speed);
     speed_text = label(screen, text, 168, system_font(), 0xE4EDF3);
-    add_slider(screen, 205, prefs->scroll_speed, 10, 100, on_speed);
+    add_slider(screen, 205, prefs->scroll_speed, 0, 100, on_speed);
     label(screen, "Lyric colour", 249, system_font(), 0xE4EDF3);
     for (unsigned i = 0; i < sizeof(PALETTE) / sizeof(PALETTE[0]); i++) {
         lv_obj_t *dot = lv_button_create(screen);
@@ -778,8 +1006,8 @@ static void build_device_settings(void)
     timeout_text = label(screen, text, 259, system_font(), 0xE4EDF3);
     lv_obj_add_flag(timeout_text, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(timeout_text, on_timeout, LV_EVENT_CLICKED, NULL);
-    button(screen, "ARM WEB / OTA", 208, 46, 0, 91, 0xB2C6D3, on_arm_ota, NULL);
-    ota_status = label(screen, "", 342, system_font(), 0x8BCCFF);
+    ota_status = label(screen, "Web settings and updates: no PIN required", 325,
+                       &lv_font_montserrat_16, 0x8BCCFF);
     button(screen, "BACK", 152, 45, 0, 178, prefs->text_color, on_settings, NULL);
 }
 
@@ -794,21 +1022,214 @@ static void clock_children_input_transparent(lv_obj_t *parent)
         clock_children_input_transparent(child);
     }
 }
-static void build_clock(void)
+static void render_clock(void)
 {
     page = 6;
     make_base();
     lf_clock_build(screen, prefs->clock_face, prefs);
     clock_children_input_transparent(screen);
+    if(!pager_render_target) lf_basic_clock_prepare();
     /* A deliberate 2-second hold produces a confirmation popup.
        The global LVGL short-long-press event no longer opens settings. */
     lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
     clock_last_refresh = 0;
     activity();
 }
+static void build_clock(void)
+{
+    pager_request(0,false);
+}
+
+/* The three main pages remain mounted together, so LVGL scrolls the
+   departing and arriving pages simultaneously under the finger. This is
+   NOT a screen-load animation and never runs alongside a swipe callback. */
+static lv_obj_t *pager_page(int index)
+{
+    return index==0 ? pager_clock : index==1 ? pager_home : pager_settings;
+}
+static void pager_select(int index)
+{
+    if(index<0)index=0;
+    if(index>2)index=2;
+    pager_index=index;
+    pager_origin_index=index;
+    screen=pager_page(index);
+    page=index==0 ? 6 : index==1 ? 0 : 2;
+    battery_status=index==1 ? pager_home_battery : NULL;
+    network_status=index==1 ? pager_home_network : NULL;
+    pager_scrolling=false;
+    clock_last_refresh=0;
+    last_power_refresh_ms=0;
+    activity();
+}
+static void pager_show(int index, lv_anim_enable_t animation)
+{
+    if(!pager_scroll || index<0 || index>2)return;
+    lv_obj_update_layout(pager_scroll);
+    lv_obj_scroll_to_x(pager_scroll,lv_obj_get_x(pager_page(index)),animation);
+    if(animation==LV_ANIM_OFF)pager_select(index);
+}
+static void pager_scroll_event(lv_event_t *e)
+{
+    if(lv_event_get_target(e)!=pager_scroll)return;
+    lv_event_code_t event=lv_event_get_code(e);
+    if(event==LV_EVENT_SCROLL_BEGIN) {
+        if(asleep)return;
+        pager_scrolling=true;
+        lv_indev_t *indev=lv_indev_active();
+        if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED) {
+            pager_origin_index=pager_index;
+            touch_pressed_at_ms=0;
+        }
+        return;
+    }
+    if(event!=LV_EVENT_SCROLL_END || !pager_scroll || asleep)return;
+    lv_indev_t *indev=lv_indev_active();
+    if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)
+        return; /* Let the physical drag finish before snapping. */
+    lv_obj_update_layout(pager_scroll);
+    int pos=lv_obj_get_scroll_x(pager_scroll);
+    if(pos<0)pos=-pos;
+    int nearest=0;
+    int min_delta=INT32_MAX;
+    for(int i=0;i<3;i++) {
+        int d=abs(pos-lv_obj_get_x(pager_page(i)));
+        if(d<min_delta){min_delta=d;nearest=i;}
+    }
+    /* 20% drag advances one page, even when the nearest page is the origin. */
+    if(nearest==pager_origin_index) {
+        int movement=pos-lv_obj_get_x(pager_page(pager_origin_index));
+        if(abs(movement)>=LF_PAGER_WIDTH/10) {
+            nearest=pager_origin_index+(movement>0?1:-1);
+            if(nearest<0)nearest=0;
+            if(nearest>2)nearest=2;
+        }
+    }
+    int target_x=lv_obj_get_x(pager_page(nearest));
+    if(abs(pos-target_x)>1) {
+        lv_obj_scroll_to_x(pager_scroll,target_x,LV_ANIM_ON);
+        return;
+    }
+    pager_select(nearest);
+}
+static void pager_build(int index)
+{
+    /* Must execute outside an LVGL input callback. Drop the outgoing
+       Weather/menu view before constructing THREE new page trees, avoiding
+       the overlapping lifetime that blacked the screen in 0.8.8. */
+    lv_obj_t *old=lv_screen_active();
+    lv_obj_t *handoff=lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(handoff,lv_color_hex(prefs->background_color),0);
+    lv_obj_set_style_bg_opa(handoff,LV_OPA_COVER,0);
+    lv_screen_load(handoff);
+    lf_weather_visual_clear();
+    lf_clock_clear();
+    if(old && old!=handoff)lv_obj_delete(old);
+    pager_root=NULL;
+    pager_scroll=NULL;
+    pager_home=NULL;
+    pager_settings=NULL;
+    pager_clock=NULL;
+    pager_scrolling=false;
+    lv_obj_t *root=lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(root,lv_color_hex(prefs->background_color),0);
+    lv_obj_set_style_bg_opa(root,LV_OPA_COVER,0);
+    lv_obj_remove_flag(root,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *container=lv_obj_create(root);
+    lv_obj_set_size(container,LF_PAGER_WIDTH,LF_PAGER_WIDTH);
+    lv_obj_center(container);
+    lv_obj_set_style_bg_opa(container,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(container,0,0);
+    lv_obj_set_style_radius(container,0,0);
+    lv_obj_set_style_pad_all(container,0,0);
+    lv_obj_set_style_pad_row(container,0,0);
+    lv_obj_set_style_pad_column(container,0,0);
+    lv_obj_set_flex_flow(container,LV_FLEX_FLOW_ROW);
+    lv_obj_set_scroll_dir(container,LV_DIR_HOR);
+    lv_obj_set_scroll_snap_x(container,LV_SCROLL_SNAP_NONE);
+    lv_obj_set_scrollbar_mode(container,LV_SCROLLBAR_MODE_OFF);
+    lv_obj_add_flag(container,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(container,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(container,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(container,pager_scroll_event,LV_EVENT_ALL,NULL);
+    pager_scroll=container;
+    pager_clock=lv_obj_create(container);
+    pager_home=lv_obj_create(container);
+    pager_settings=lv_obj_create(container);
+    lv_obj_t *pages[3]={pager_clock,pager_home,pager_settings};
+    for(int i=0;i<3;i++) {
+        lv_obj_set_size(pages[i],LF_PAGER_WIDTH,LF_PAGER_WIDTH);
+        lv_obj_set_style_bg_color(pages[i],lv_color_hex(prefs->background_color),0);
+        lv_obj_set_style_bg_opa(pages[i],LV_OPA_COVER,0);
+        lv_obj_set_style_border_width(pages[i],0,0);
+        lv_obj_set_style_radius(pages[i],0,0);
+        lv_obj_set_style_pad_all(pages[i],0,0);
+        lv_obj_remove_flag(pages[i],LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(pages[i],LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_add_flag(pages[i],LV_OBJ_FLAG_GESTURE_BUBBLE);
+    }
+    pager_render_target=pager_settings;render_settings();
+    pager_render_target=pager_home;render_home();
+    pager_home_battery=battery_status;
+    pager_home_network=network_status;
+    pager_render_target=pager_clock;render_clock();
+    pager_render_target=NULL;
+    pager_root=root;
+    pager_index=1;
+    pager_origin_index=1;
+    lv_screen_load(root);
+    lv_obj_delete_async(handoff);
+    /* Finish the one-time ring snapshot only after LVGL has a display. */
+    lf_basic_clock_prepare();
+    lv_obj_update_layout(container);
+    pager_show(index,LV_ANIM_OFF);
+}
+static void pager_request_async(void *arg)
+{
+    (void)arg;
+    pager_request_queued=false;
+    int index=pager_requested_index;
+    bool rebuild=pager_rebuild_requested;
+    pager_requested_index=-1;
+    pager_rebuild_requested=false;
+    if(index<0 || index>2)return;
+    /* A single-screen recovery path prevents a costly Clock + Home + Settings
+       allocation from blocking touchscreen input on boot or button presses.
+       Rebuild requests continue to work; each operation owns one root. */
+    if(LF_SAFE_BOOT_SINGLE_SCREEN || !pager_root || lv_screen_active()!=pager_root) {
+        if(index==0)render_clock();
+        else if(index==1)render_home();
+        else render_settings();
+        return;
+    }
+    if(!rebuild) pager_show(index,LV_ANIM_ON);
+    else pager_build(index);
+}
+static void pager_request(int index, bool rebuild)
+{
+    if(index<0 || index>2)return;
+    /* Defer button navigation until the LVGL input callback is finished. */
+    pager_requested_index=index;
+    pager_rebuild_requested|=rebuild;
+    if(!pager_request_queued) {
+        pager_request_queued=true;
+        lv_async_call(pager_request_async,NULL);
+    }
+}
+
+/* Weather's BACK button fires from within its own LVGL input callback.
+   Defer destruction of the Weather scene until after that callback returns.
+   Weather swipe exits already dispatch via commit_swipe asynchronously. */
+static void weather_back_deferred(void *arg)
+{
+    (void)arg;
+    if(page==11)build_clock();
+}
 static void on_clock_back(lv_event_t *e)
 {
-    (void)e; activity(); build_clock();
+    (void)e; activity();
+    if(page==11)lv_async_call(weather_back_deferred,NULL);
+    else build_clock();
 }
 static void on_clock_options(lv_event_t *e)
 {
@@ -1002,7 +1423,8 @@ static void build_basic_settings(void)
     lv_obj_set_style_text_font(basic_font_size_label, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(basic_font_size_label, lv_color_hex(0xD2E7FD), 0);
     lv_obj_t *slider=lv_slider_create(list);
-    lv_obj_set_size(slider, 249, 14);
+    protect_slider(slider);
+    lv_obj_set_size(slider, 249, 21);
     lv_slider_set_range(slider, 0, 100);
     lv_slider_set_value(slider, prefs->basic_font_size, LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_VALUE_CHANGED, NULL);
@@ -1084,6 +1506,23 @@ static void build_debug(void)
 
 static void build_weather_details(void)
 {
+    /* Weather is heavy and deliberately NOT in the scrolling pager.
+       This function runs from commit_swipe after pointer release. Free the
+       inactive three-page scene first, rather than allocating both trees
+       simultaneously. The handoff is the active root until make_base loads
+       the standalone Weather scene; it cannot expose an old page underneath. */
+    if(pager_root && lv_screen_active()==pager_root) {
+        lv_anim_delete(pager_scroll,NULL);
+        lv_obj_t *cached=lv_screen_active();
+        lv_obj_t *handoff=lv_obj_create(NULL);
+        lv_obj_set_style_bg_color(handoff,lv_color_hex(prefs->background_color),0);
+        lv_obj_set_style_bg_opa(handoff,LV_OPA_COVER,0);
+        lv_screen_load(handoff);
+        lf_clock_clear();
+        lv_obj_delete(cached);
+        pager_root=NULL;
+        pager_scroll=NULL;
+    }
     page = 11;
     make_base();
     lf_clock_clear();
@@ -1093,8 +1532,10 @@ static void build_weather_details(void)
     lf_weather_get_view(&weather);
     lf_weather_visual_update(&weather);
     weather_detail_refresh = now_ms();
-    button(screen, "BACK TO CLOCK", 188, 50, 0, 173,
+    button(screen, "CLOCK", 134, 50, -75, 173,
            0x9ACBF1, on_clock_back, NULL);
+    button(screen, "HOME", 134, 50, 75, 173,
+           0xA8D6FF, on_home, NULL);
 }
 static void build_weather_location(void)
 {
@@ -1110,20 +1551,64 @@ static void build_weather_location(void)
 static void on_wake(lv_event_t *e)
 {
     (void)e;
-    asleep = false;
+    if(!asleep) return;
+    asleep=false;
     activity();
     apply_brightness();
-    build_home();
+    /* Restore the exact page that was showing before dimming. Do not
+       rebuild a heavy Clock or Weather scene from an input callback. */
+    lv_obj_t *cover=sleep_overlay;
+    sleep_overlay=NULL;
+    if(cover) lv_obj_delete_async(cover);
+    touch_held=false;
+    gesture_origin_valid=false;
+    gesture_indev=NULL;
+    swipe_candidate_page=-1;
+    touch_pressed_at_ms=0;
+}
+/* Optional hardware-level deep sleep. GPIO11 is CST9217 TP_INT on the
+   Waveshare 1.75-in board (RTC GPIO). Requires physical wake testing: an
+   asserted low INT at sleep entry would immediately wake, so guard it.
+   Timer wake is a recovery fallback in case the touch controller will not
+   generate an interrupt while the SoC sleeps. Default remains OFF. */
+static void sleep_deep(void)
+{
+    if (gpio_get_level(GPIO_NUM_11) != 1) {
+        ESP_LOGW(TAG,"Touch INT is low; rejecting deep sleep to avoid wake loop");
+        return;
+    }
+    esp_err_t wake_err=esp_sleep_enable_ext0_wakeup(GPIO_NUM_11,0);
+    if(wake_err!=ESP_OK){
+        ESP_LOGW(TAG,"Cannot arm touch wake: %s",esp_err_to_name(wake_err));
+        return;
+    }
+    (void)esp_sleep_enable_timer_wakeup(12ULL*60ULL*60ULL*1000000ULL);
+    (void)bsp_display_brightness_set(0);
+    ESP_LOGI(TAG,"Entering optional deep sleep; touch GPIO11 or timer will reboot device");
+    esp_deep_sleep_start();
 }
 static void sleep_display(void)
 {
-    asleep = true;
-    page = 3;
-    make_base();
-    // CPU and touch controller remain running in alpha 0.1.
-    // We avoid promising unverified deep-sleep wake behavior.
-    lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(screen, on_wake, LV_EVENT_PRESSED, NULL);
+    if(asleep) return;
+    /* A screen timeout is not a page transition: leave the active page
+       and all its UI pointers alive. The cover absorbs the wake tap so
+       it cannot inadvertently click a hidden button. */
+    /* Protect the entire active root, not just the visible pager child. */
+    asleep=true;
+    if(pager_scroll && lv_screen_active()==pager_root) {
+        lv_anim_delete(pager_scroll,NULL);
+        pager_show(pager_index,LV_ANIM_OFF);
+    }
+    sleep_overlay=lv_obj_create(lv_screen_active());
+    lv_obj_set_size(sleep_overlay,LF_PAGER_WIDTH,LF_PAGER_WIDTH);
+    lv_obj_center(sleep_overlay);
+    lv_obj_set_style_radius(sleep_overlay,0,0);
+    lv_obj_set_style_border_width(sleep_overlay,0,0);
+    lv_obj_set_style_bg_color(sleep_overlay,lv_color_black(),0);
+    lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_COVER,0);
+    lv_obj_remove_flag(sleep_overlay,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(sleep_overlay,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(sleep_overlay,on_wake,LV_EVENT_PRESSED,NULL);
     apply_brightness();
 }
 static void on_tick(lv_timer_t *timer)
@@ -1135,6 +1620,61 @@ static void on_tick(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
+    /* A new OTA app must actually run its LVGL timer for 15 seconds AFTER
+       Wi-Fi/OTA services start before it can mark itself valid. If the UI
+       stalls or reboots first, the bootloader may roll the pending app back. */
+    if(!ota_verification_done && atomic_load(&ota_services_ready) &&
+       current>=ota_services_ready_at_ms+15000ULL &&
+       max_ui_tick_gap_ms<2000) {
+        ota_verification_done=true;
+        lf_ota_guard_confirm_startup();
+    }
+    /* Touch polling is a wake fallback even if the off-screen overlay
+       misses LVGL's PRESSED event; it does not navigate while asleep. */
+    if(asleep) {
+        lv_indev_t *wake_ptr=lv_indev_get_next(NULL);
+        while(wake_ptr) {
+            if(lv_indev_get_type(wake_ptr)==LV_INDEV_TYPE_POINTER &&
+               lv_indev_get_state(wake_ptr)==LV_INDEV_STATE_PRESSED) {
+                on_wake(NULL);
+                return;
+            }
+            wake_ptr=lv_indev_get_next(wake_ptr);
+        }
+    }
+    /* Release the gesture lock even if LVGL does not send RELEASED. */
+    if(slider_touch_active && slider_touch_indev &&
+       lv_indev_get_state(slider_touch_indev)==LV_INDEV_STATE_RELEASED) {
+        slider_touch_active=false;
+        slider_touch_indev=NULL;
+        if(pager_scroll && lv_screen_active()==pager_root)
+            lv_obj_set_scroll_dir(pager_scroll,LV_DIR_HOR);
+    }
+    /* Collect gestures starting over forecast panels without stealing
+       touches currently owned by a value slider. */
+    if (!asleep && !slider_touch_active && !touch_held && is_swipe_page() && !clock_settings_popup) {
+        lv_indev_t *ptr=lv_indev_get_next(NULL);
+        while(ptr) {
+            if(lv_indev_get_type(ptr)==LV_INDEV_TYPE_POINTER &&
+               lv_indev_get_state(ptr)==LV_INDEV_STATE_PRESSED) {
+                gesture_indev=ptr;
+                lv_indev_get_point(ptr,&gesture_origin);
+                gesture_origin_valid=true;
+                touch_held=true;
+                touch_pressed_at_ms=current;
+                swipe_candidate_page=-1;
+                swipe_candidate_animation=LV_SCR_LOAD_ANIM_NONE;
+                break;
+            }
+            ptr=lv_indev_get_next(ptr);
+        }
+    }
+    if (touch_held && gesture_indev) {
+        if (lv_indev_get_state(gesture_indev) == LV_INDEV_STATE_RELEASED)
+            finish_touch();
+        else
+            observe_touch_position();
+    }
     if (page == 6 && touch_held && touch_pressed_at_ms &&
         current - touch_pressed_at_ms >= LF_CLOCK_SETTINGS_HOLD_MS)
         show_clock_settings_popup();
@@ -1171,7 +1711,7 @@ static void on_tick(lv_timer_t *timer)
             else snprintf(value,sizeof value,"%s  BATTERY",LV_SYMBOL_BATTERY_FULL);
             if (success) {
                 lv_label_set_text(battery_status,value);
-                lv_obj_set_style_text_color(battery_status,lv_color_hex(lf_power_color(&st)),0);
+                lv_obj_set_style_text_color(battery_status,lv_color_hex(st.usb_connected ? prefs->charging_color : lf_power_color(&st)),0);
             }
         }
         if (network_status) {
@@ -1196,8 +1736,18 @@ static void on_tick(lv_timer_t *timer)
             snprintf(url_text, sizeof url_text, "Open browser to http://%s/", lf_network_address());
             lv_label_set_text(network_url, url_text);
         }
-        if (ota_status && !lf_network_ota_armed()) 
-            lv_label_set_text(ota_status, "Tap ARM OTA for a two-minute PIN");
+    }
+    /* Check deep-sleep deadline even after the screen has already turned off.
+       Never deep sleep during diagnostics, onboarding, or active lyric play. */
+    static uint64_t deep_sleep_retry_after_ms;
+    if (prefs->deep_sleep_minutes && !(page == 1 && !paused) &&
+        page != 14 && page != 15 &&
+        current-last_activity_ms >= (uint64_t)prefs->deep_sleep_minutes*60000ULL &&
+        current >= deep_sleep_retry_after_ms) {
+        /* If touch INT is held low or wake setup fails, remain safely in
+           screen-off mode and retry once per minute, not every 50 ms. */
+        deep_sleep_retry_after_ms=current+60000ULL;
+        sleep_deep();
     }
     if (asleep) return;
     if (page == 11 && !touch_held && current >= screen_animation_until_ms && current - weather_detail_refresh >= 4000) {
@@ -1206,11 +1756,13 @@ static void on_tick(lv_timer_t *timer)
         lf_weather_get_view(&weather);
         lf_weather_visual_update(&weather);
     }
-    if (page == 6 && !touch_held && !clock_settings_popup && current >= screen_animation_until_ms && current - clock_last_refresh >= 950) {
+    if (page == 6 && !pager_scrolling && !touch_held && !clock_settings_popup && current >= screen_animation_until_ms && current - clock_last_refresh >= 950) {
         clock_last_refresh = current;
         lf_clock_update();
     }
-    if (prefs->sleep_seconds && !(page == 1 && !paused) && page != 14 && page != 15 && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
+    if (prefs->sleep_seconds && !pager_scrolling && !touch_held &&
+        !(page == 1 && !paused) && page != 14 && page != 15 &&
+        current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
         sleep_display();
         return;
     }
@@ -1236,9 +1788,14 @@ static void on_tick(lv_timer_t *timer)
     scroll_at_end_ms = 0;
     /* Accumulate subpixel motion. Reading back integer Y every tick would
        truncate the fractional step to zero and stop automatic scrolling. */
-    /* 10-100% maps to ~31-148 px/s; default 45% is ~77 px/s.
-       Old formula only moved ~22 px/s at 45%. */
-    scroll_y += (float)dt * (0.018f + prefs->scroll_speed * 0.0013f);
+    /* User-calibrated: new 100% matches the previous 35% (~63.5 px/s).
+       Subpixel float accumulation keeps motion smooth at low speeds. */
+    /* Preserve the tuned 30..100% speeds. Open a much slower, controllable
+       0..29% range without changing the existing high-end calibration. */
+    const float px_sec=prefs->scroll_speed>=30 ?
+        3.0f+0.605f*(float)prefs->scroll_speed :
+        0.5f+(20.65f/900.0f)*(float)prefs->scroll_speed*(float)prefs->scroll_speed;
+    scroll_y += (float)dt * (px_sec/1000.0f);
     lv_obj_scroll_to_y(scroll_panel, (int32_t)scroll_y, LV_ANIM_OFF);
 }
 
@@ -1247,7 +1804,13 @@ static void on_tick(lv_timer_t *timer)
 static void on_clock_sweep(lv_timer_t *timer)
 {
     (void)timer;
-    if (page == 6 && !asleep && !touch_held && !clock_settings_popup && now_ms() >= screen_animation_until_ms) lf_clock_animate();
+    if (page == 6 && !pager_scrolling && !asleep && !touch_held && !clock_settings_popup && now_ms() >= screen_animation_until_ms) lf_clock_animate();
+}
+
+void lf_ui_mark_services_ready(void)
+{
+    ota_services_ready_at_ms=now_ms();
+    atomic_store(&ota_services_ready,true);
 }
 
 bool lf_ui_start(lf_settings_t *s)
@@ -1261,7 +1824,19 @@ bool lf_ui_start(lf_settings_t *s)
     }
     apply_brightness();
     (void)lf_power_background_start();
-    build_home();
+    /* Do not construct all three core pages before the first usable frame.
+       The 0.8.10 three-tree startup could overwhelm LVGL input handling. */
+    if(LF_SAFE_BOOT_SINGLE_SCREEN) render_home();
+    else pager_build(1);
+    lv_indev_t *input=lv_indev_get_next(NULL);
+    while(input) {
+        if(lv_indev_get_type(input)==LV_INDEV_TYPE_POINTER){
+            lv_indev_set_scroll_throw(input,95);
+            lv_indev_set_scroll_limit(input,18);
+            break;
+        }
+        input=lv_indev_get_next(input);
+    }
     lv_timer_create(on_tick, 50, NULL);
     lv_timer_create(on_clock_sweep, 16, NULL);
     esp_lv_adapter_unlock();
@@ -1285,9 +1860,16 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
     prefs->basic_ring_a = basic->basic_ring_a;
     prefs->basic_ring_b = basic->basic_ring_b;
     prefs->basic_ring_c = basic->basic_ring_c;
+    memcpy(prefs->face_background,basic->face_background,sizeof(prefs->face_background));
+    memcpy(prefs->face_foreground,basic->face_foreground,sizeof(prefs->face_foreground));
+    memcpy(prefs->face_accent,basic->face_accent,sizeof(prefs->face_accent));
+    memcpy(prefs->face_show_date,basic->face_show_date,sizeof(prefs->face_show_date));
+    memcpy(prefs->face_show_seconds,basic->face_show_seconds,sizeof(prefs->face_show_seconds));
+    memcpy(prefs->face_show_battery,basic->face_show_battery,sizeof(prefs->face_show_battery));
+    memcpy(prefs->face_24h,basic->face_24h,sizeof(prefs->face_24h));
     err = lf_settings_save(prefs);
     if (err == ESP_OK) {
-        if (page == 6) build_clock();
+        if (page == 6) pager_request(0,true); /* Refresh the cached Clock face. */
     } else {
         *prefs = previous;
         lf_diag_error("settings", "Basic settings NVS save failed");
@@ -1299,4 +1881,31 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
 uint32_t lf_ui_max_tick_gap_ms(void)
 {
     return max_ui_tick_gap_ms;
+}
+
+/* The ESP32 Web UI must apply preferences on the LVGL task lock, not on the
+   HTTP server thread. Preserve every setting not explicitly editable here. */
+esp_err_t lf_ui_apply_device_settings(const lf_settings_t *requested)
+{
+    if(!prefs||!requested)return ESP_ERR_INVALID_ARG;
+    esp_err_t err=esp_lv_adapter_lock(2000);
+    if(err!=ESP_OK)return err;
+    lf_settings_t old=*prefs;
+    prefs->brightness=requested->brightness;
+    prefs->scroll_speed=requested->scroll_speed;
+    prefs->font_size=requested->font_size;
+    prefs->system_font_size=requested->system_font_size;
+    prefs->sleep_seconds=requested->sleep_seconds;
+    prefs->deep_sleep_minutes=requested->deep_sleep_minutes;
+    prefs->charging_color=requested->charging_color;
+    err=lf_settings_save(prefs);
+    if(err==ESP_OK){
+        apply_brightness();
+        if(page==0)pager_request(1,true);
+        else if(page==1)build_preview();
+        else if(page==2)pager_request(2,true);
+        else if(page==6)pager_request(0,true);
+    }else *prefs=old;
+    esp_lv_adapter_unlock();
+    return err;
 }
