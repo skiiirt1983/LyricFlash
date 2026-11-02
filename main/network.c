@@ -676,6 +676,18 @@ static bool allowed_github_ota_url(const char *url)
     const char *releases = "https://github.com/skiiirt1983/LyricFlash/releases/download/";
     if (!url || strlen(url) >= sizeof(((lf_github_request_t *)0)->url)) return false;
     if (strcmp(url, beta) == 0) return true;
+    const char *history="https://skiiirt1983.github.io/LyricFlash/beta/firmware/releases/";
+    if(strncmp(url,history,strlen(history))==0){
+        const char *path=url+strlen(history);
+        const char *separator=strchr(path,'/');
+        if(!separator || separator==path ||
+           strcmp(separator,"/lyricflash-ota.bin")!=0 ||
+           (size_t)(separator-path)>64) return false;
+        for(const char *c=path;c<separator;c++)
+            if(!((*c>='0'&&*c<='9')||(*c>='A'&&*c<='Z')||
+                 (*c>='a'&&*c<='z')||*c=='.'||*c=='-'||*c=='_')) return false;
+        return path[0]!='.';
+    }
     if (strncmp(url, releases, strlen(releases)) != 0) return false;
     const char *path=url+strlen(releases);
     if (!*path || strstr(path,"..") || strchr(path,'?') || strchr(path,'#') ||
