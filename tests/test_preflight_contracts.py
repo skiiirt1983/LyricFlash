@@ -171,7 +171,7 @@ require('if(!asleep && !touch_held' not in ui and
         'sleep_overlay=lv_obj_create(screen);' in ui and
         'lv_indev_get_state(wake_ptr)==LV_INDEV_STATE_PRESSED' in ui,
         "Sleep restoration must not rebuild screens and must accept touch wake")
-require('if (!asleep && !touch_held && is_swipe_page() && !clock_settings_popup)' in ui and
+require('if (!asleep && !slider_touch_active && !touch_held && is_swipe_page() && !clock_settings_popup)' in ui and
         'lv_indev_get_state(ptr)==LV_INDEV_STATE_PRESSED' in ui and
         'lv_indev_get_state(gesture_indev) == LV_INDEV_STATE_RELEASED' in ui and
         'lv_obj_add_flag(scrollbox,LV_OBJ_FLAG_EVENT_BUBBLE);' in read("main/weather_visual.c"),
@@ -238,8 +238,9 @@ require("strlcpy(ap_pass, \"lyricflash\", sizeof ap_pass);" in network,
         "Simple fixed setup AP credential not configured")
 require("lv_draw_line_dsc_init" in read("main/clock_face.c"),
         "Analog ticks still create 60 separate LVGL objects")
-require("segment_count" in read("main/basic_clock.c"),
-        "Basic ring still creates 60 individual LVGL objects")
+require("lv_draw_arc_dsc_init" in read("main/basic_clock.c") and
+        "lv_arc_create(parent)" not in read("main/basic_clock.c"),
+        "Basic ring must use one draw widget rather than 30 arc objects")
 require("charging_color" in read("main/settings.h") and
         "charging_color" in pages["settings"],
         "Configurable charging indicator absent")
