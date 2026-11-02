@@ -146,7 +146,8 @@ require('static void pager_build(' not in ui and
 require('static void build_home(void) { nav_schedule(build_home_now); }' in ui and
         'static void build_settings(void) { nav_schedule(build_settings_now); }' in ui and
         'static void build_clock(void) { nav_schedule(build_clock_now); }' in ui and
-        'if(target)target();' in ui and
+        'if(target) {' in ui and
+        'target();' in ui and
         'lv_async_call(nav_drain,NULL)' in ui,
         "Every main-screen navigation must be deferred until after touch dispatch")
 require('lv_screen_load(screen);' in ui and
@@ -244,7 +245,8 @@ on_wake=ui.split('static void on_wake(lv_event_t *e)\n{',1)[1].split('static voi
 sleep=ui.split('static void sleep_display(void)\n{',1)[1].split('static void on_tick',1)[0]
 require('build_home();' not in on_wake and 'make_base();' not in sleep and
         'sleep_overlay=lv_obj_create(screen);' in sleep and
-        'lv_obj_delete_async(cover);' in on_wake and
+        'lv_async_call(wake_finish_async,NULL);' in on_wake and
+        'if(cover)lv_obj_delete(cover);' in ui and
         'if(asleep) {' in ui,
         "Wake must preserve the current page, not destroy the touch target")
 
