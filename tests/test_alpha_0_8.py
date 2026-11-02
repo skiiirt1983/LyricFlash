@@ -8,7 +8,11 @@ net=(p/'main/network.c').read_text()
 web=(p/'main/web_basic_html.h').read_text()
 diag=(p/'main/diagnostics.c').read_text()
 workflow=(p/'.github/workflows/pages-and-firmware.yml').read_text()
-assert 'lv_screen_load_anim(' not in ui
+assert 'lv_screen_load_anim(screen, next_screen_animation, 160, 0, true);' in ui
+assert 'LF_SWIPE_MIN_PX 38' in ui
+assert 'LF_CLOCK_SETTINGS_HOLD_MS 2000ULL' in ui
+assert 'show_clock_settings_popup' in ui
+assert 'touch_held' in ui and 'on_touch_release' in ui
 assert 'lv_screen_load(screen);' in ui
 assert 'lv_obj_delete_async(old_screen);' in ui
 assert 'button(screen, "CONNECT / OTA"' in ui
@@ -29,8 +33,12 @@ for key in ['font_style','font_size','ring_mode','show_date','weather','backgrou
     assert key in web and key in net, key
 assert 'microphone' in net and 'recent_errors' in net
 assert 'uxTaskGetNumberOfTasks' in diag
-assert '0.8.2-alpha' in (p/'main/version.h').read_text()
-assert 'set(PROJECT_VER "0.8.2-alpha")' in (p/'CMakeLists.txt').read_text()
+assert '0.8.3-alpha' in (p/'main/version.h').read_text()
+assert 'set(PROJECT_VER "0.8.3-alpha")' in (p/'CMakeLists.txt').read_text()
 assert 'ESP-IDF image descriptor version' in (p/'tools/check_build.py').read_text()
-assert 'LyricFlash-Alpha-0.8.2-FULL-USB-and-OTA-UNTESTED' in workflow
+assert 'LyricFlash-Alpha-0.8.3-FULL-USB-and-OTA-UNTESTED' in workflow
 print('PASS: Alpha 0.8 diagnostics, local settings auth and navigation gates')
+
+assert 'clock_face' in net and 'weather_enabled' in net
+assert 'clock_face' in web and 'weather_enabled' in web
+assert 'prefs->clock_face = basic->clock_face' in ui
