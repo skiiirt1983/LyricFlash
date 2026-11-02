@@ -145,8 +145,15 @@ require('static void pager_build(' not in ui and
         "Recovery must not restore the broken multi-screen pager or root animations")
 require('static void build_home(void)\n{\n    render_home();\n}' in ui and
         'static void build_settings(void)\n{\n    render_settings();\n}' in ui and
-        'static void build_clock(void)\n{\n    render_clock();\n}' in ui,
+        'static void build_clock(void)\n{\n    if(page==11)' in ui and
+        'if(forecast && forecast!=handoff) lv_obj_delete(forecast);' in ui and
+        '    render_clock();' in ui,
         "Main navigation must use direct single-screen renderers")
+require('if(page==11) {' in ui and
+        'lv_screen_load(handoff);' in ui and
+        'lv_obj_delete(forecast);' in ui and
+        'lv_async_call(weather_back_deferred,NULL)' in ui,
+        "Weather must be released before allocating Clock, outside input callback")
 require('lv_screen_load(screen);' in ui and
         'lv_obj_delete_async(old_screen);' in ui and
         'lv_obj_delete(old_screen)' not in ui and

@@ -931,6 +931,21 @@ static void render_clock(void)
 }
 static void build_clock(void)
 {
+    if(page==11) {
+        /* Only enter here after LVGL finishes the physical touch event:
+           Weather BACK queues weather_back_deferred; Weather swipe queues
+           commit_swipe. Free the entire forecast before allocating the
+           heavy Clock face to avoid transient double-scene heap pressure.
+           No three-page pager or sliding animation is constructed. */
+        lv_obj_t *forecast=lv_screen_active();
+        lv_obj_t *handoff=lv_obj_create(NULL);
+        lv_obj_set_style_bg_color(handoff,lv_color_hex(prefs->background_color),0);
+        lv_obj_set_style_bg_opa(handoff,LV_OPA_COVER,0);
+        lv_screen_load(handoff);
+        lf_weather_visual_clear();
+        if(forecast && forecast!=handoff) lv_obj_delete(forecast);
+        ESP_LOGI(TAG,"Weather view released before Clock construction");
+    }
     render_clock();
 }
 
