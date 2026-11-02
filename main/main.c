@@ -29,7 +29,17 @@ void app_main(void)
         lf_ota_guard_failure("Settings read failed");
         return;
     }
-    if (bsp_display_start() == NULL) {
+    /* On-device AMOLED reference: TE-synchronized CO5300 QSPI panel,
+       staged DMA writes and LVGL isolated from Wi-Fi on CPU 1.
+       Never enable TE sync without the matched display driver. */
+    bsp_display_cfg_t display_cfg = {
+        .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
+        .rotation = ESP_LV_ADAPTER_ROTATE_0,
+        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC,
+        .touch_flags = { .swap_xy = 0, .mirror_x = 1, .mirror_y = 1 },
+    };
+    display_cfg.lv_adapter_cfg.task_core_id = 1;
+    if (bsp_display_start_with_config(&display_cfg) == NULL) {
         ESP_LOGE(TAG, "Display initialization failed");
         lf_diag_error("boot", "Display start failed");
         lf_ota_guard_failure("Display start failed");
