@@ -9,7 +9,8 @@ assert 'local-flash.js' in html
 assert 'id="localBin"' in html
 assert 'id="local-install"' in html
 assert "customElements.whenDefined" in script
-assert "URL.createObjectURL(file)" in script
+assert "URL.createObjectURL(appImage)" in script
+assert "file.slice(APP_OFFSET)" in script
 assert "URL.createObjectURL(new Blob(" in script
 assert 'file.slice(' in script
 assert 'partInfo(table)' in script

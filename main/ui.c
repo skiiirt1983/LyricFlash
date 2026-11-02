@@ -26,6 +26,7 @@ static uint64_t last_scroll_ms;
 static float scroll_y;
 static bool paused;
 static bool asleep;
+static lv_obj_t *sleep_overlay; /* Touch-capture cover, leaves current page intact. */
 static lv_obj_t *scroll_panel;
 static lv_obj_t *lyrics_label;
 static lv_obj_t *speed_text;
@@ -519,6 +520,7 @@ static void make_base(void)
     wifi_status=NULL;
     wifi_password_status=NULL;
     pause_button=NULL;
+    sleep_overlay=NULL;
 }
 
 static void on_wifi(lv_event_t *e)
@@ -1246,10 +1248,15 @@ static void build_weather_location(void)
 static void on_wake(lv_event_t *e)
 {
     (void)e;
-    asleep = false;
+    if(!asleep) return;
+    asleep=false;
     activity();
     apply_brightness();
-    build_home();
+    /* Restore the exact page that was showing before dimming. Do not
+       rebuild a heavy Clock or Weather scene from an input callback. */
+    lv_obj_t *cover=sleep_overlay;
+    sleep_overlay=NULL;
+    if(cover) lv_obj_delete_async(cover);
 }
 /* Optional hardware-level deep sleep. GPIO11 is CST9217 TP_INT on the
    Waveshare 1.75-in board (RTC GPIO). Requires physical wake testing: an
@@ -1274,13 +1281,21 @@ static void sleep_deep(void)
 }
 static void sleep_display(void)
 {
-    asleep = true;
-    page = 3;
-    make_base();
-    // CPU and touch controller remain running in alpha 0.1.
-    // We avoid promising unverified deep-sleep wake behavior.
-    lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(screen, on_wake, LV_EVENT_PRESSED, NULL);
+    if(asleep) return;
+    /* A screen timeout is not a page transition: leave the active page
+       and all its UI pointers alive. The cover absorbs the wake tap so
+       it cannot inadvertently click a hidden button. */
+    sleep_overlay=lv_obj_create(screen);
+    lv_obj_set_size(sleep_overlay,466,466);
+    lv_obj_center(sleep_overlay);
+    lv_obj_set_style_radius(sleep_overlay,0,0);
+    lv_obj_set_style_border_width(sleep_overlay,0,0);
+    lv_obj_set_style_bg_color(sleep_overlay,lv_color_black(),0);
+    lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_COVER,0);
+    lv_obj_remove_flag(sleep_overlay,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(sleep_overlay,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(sleep_overlay,on_wake,LV_EVENT_PRESSED,NULL);
+    asleep=true;
     apply_brightness();
 }
 static void on_tick(lv_timer_t *timer)
@@ -1292,9 +1307,22 @@ static void on_tick(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
+    /* Touch polling is a wake fallback even if the off-screen overlay
+       misses LVGL's PRESSED event; it does not navigate while asleep. */
+    if(asleep) {
+        lv_indev_t *wake_ptr=lv_indev_get_next(NULL);
+        while(wake_ptr) {
+            if(lv_indev_get_type(wake_ptr)==LV_INDEV_TYPE_POINTER &&
+               lv_indev_get_state(wake_ptr)==LV_INDEV_STATE_PRESSED) {
+                on_wake(NULL);
+                return;
+            }
+            wake_ptr=lv_indev_get_next(wake_ptr);
+        }
+    }
     /* Collect touch directly from the hardware input device, including
        gestures beginning over Weather's scrolling forecast children. */
-    if (!touch_held && is_swipe_page() && !clock_settings_popup) {
+    if (!asleep && !touch_held && is_swipe_page() && !clock_settings_popup) {
         lv_indev_t *ptr=lv_indev_get_next(NULL);
         while(ptr) {
             if(lv_indev_get_type(ptr)==LV_INDEV_TYPE_POINTER &&
