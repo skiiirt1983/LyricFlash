@@ -14,6 +14,12 @@
 
   let generation = 0;
   const expectedProject = "lyricflash";
+  /* Existing-device updates must NEVER write a merged full image at 0x0.
+     Extract only the validated application partition from that image. */
+  const APP_OFFSET = 0x110000;
+  const APP_SIZE = 0x500000;
+  const OTA_DATA_OFFSET = 0x109000;
+  const OTA_DATA_SIZE = 0x2000;
 
   const report = (message, bad = false) => {
     status.textContent = message;
@@ -58,6 +64,8 @@
         !parts.ota_1 || parts.ota_1.offset !== 0x610000 || parts.ota_1.size !== 0x500000)
       throw Error("The partition table does not match the expected 16 MB LyricFlash layout.");
 
+    if (file.size - APP_OFFSET > APP_SIZE)
+      throw Error("App section exceeds its 5 MB partition. Stop; do not erase flash.");
     if (app[0] !== 0xE9 || app[12] !== 9 || app[13] !== 0 ||
         app[0x20] !== 0x32 || app[0x21] !== 0x54 ||
         app[0x22] !== 0xCD || app[0x23] !== 0xAB)
@@ -91,17 +99,25 @@
       ]);
       if (request !== generation) return;
 
-      /* Both paths are absolute blob URLs, so they work regardless of the
-         Pages manifest base directory. Do not revoke while flashing. */
-      const binaryURL = URL.createObjectURL(file);
+      /* The local source is a full image, but the actual installer writes
+         ONLY the application + OTA-selection metadata. It never overwrites
+         bootloader, partition table, NVS, or the other application slot. */
+      const appImage = file.slice(APP_OFFSET);
+      const appURL = URL.createObjectURL(appImage);
+      const otaResetURL = URL.createObjectURL(new Blob([
+        new Uint8Array(OTA_DATA_SIZE).fill(0xff),
+      ], { type: "application/octet-stream" }));
       const manifest = {
-        name: "LyricFlash Alpha/Beta — selected local USB firmware",
-        version: "local-full-image",
-        new_install_prompt_erase: false,
+        name: "LyricFlash EXISTING DEVICE — KEEP SETTINGS",
+        version: "local-preserve-settings",
+        new_install_prompt_erase: true,
         builds: [{
           chipFamily: "ESP32-S3",
           improv: false,
-          parts: [{ path: binaryURL, offset: 0 }],
+          parts: [
+            { path: appURL, offset: APP_OFFSET },
+            { path: otaResetURL, offset: OTA_DATA_OFFSET },
+          ],
         }],
       };
       const manifestURL = URL.createObjectURL(new Blob(
@@ -110,8 +126,7 @@
       install.manifest = manifestURL;
       install.classList.remove("hidden");
       note.classList.remove("hidden");
-      report("USB image structure checked: " + file.name + " (" + (file.size / 1048576).toFixed(2) +
-        " MiB). Ready for USB installation; select your device's serial port below.");
+      report("Application verified in " + file.name + ". This installer writes only the app and OTA selector. KEEP DATA if prompted; cancel if you cannot keep settings.");
     } catch (error) {
       if (request === generation) {
         report(error.message || "Firmware file could not be checked.", true);
