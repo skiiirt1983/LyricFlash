@@ -90,6 +90,11 @@ jobs:
           if-no-files-found: error
       - name: Verify complete USB+OTA release again before deployment
         run: python3 tools/package_release.py --verify _site
+      - name: Publish and verify direct HTTPS alpha OTA image
+        if: github.ref == 'refs/heads/work/webui-first-no-pins' && github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin
       - name: Publish validated development OTA as an alpha prerelease (never stable)
         if: github.ref == 'refs/heads/work/webui-first-no-pins' && github.event_name == 'push'
         env:
@@ -101,6 +106,7 @@ jobs:
           gh release create "$TAG" _site/beta/firmware/lyricflash-ota.bin \
             --target "$GITHUB_SHA" --title "LyricFlash $VERSION · Alpha ${GITHUB_SHA:0:8} (untested)" \
             --notes "LyricFlash-OTA-Version: $VERSION
+          LyricFlash-OTA-Direct: https://raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/$TAG/lyricflash-ota.bin
           Automated validated ESP32-S3 application-only development build. Hardware untested. Experimental alpha channel; not an official stable release." \
             --prerelease --latest=false
       - uses: actions/configure-pages@v5
