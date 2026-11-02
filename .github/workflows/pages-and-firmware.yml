@@ -98,10 +98,10 @@ jobs:
           VERSION=$(awk '/^#define LF_VERSION /{gsub(/"/,"",$3);print $3}' main/version.h)
           test -n "$VERSION"
           TAG="alpha-build-${GITHUB_SHA:0:12}"
-          gh release create "$TAG" _site/beta/firmware/lyricflash-ota.bin \\
-            --target "$GITHUB_SHA" --title "LyricFlash $VERSION · Alpha ${GITHUB_SHA:0:8} (untested)" \\
+          gh release create "$TAG" _site/beta/firmware/lyricflash-ota.bin \
+            --target "$GITHUB_SHA" --title "LyricFlash $VERSION · Alpha ${GITHUB_SHA:0:8} (untested)" \
             --notes "LyricFlash-OTA-Version: $VERSION
-          Automated validated ESP32-S3 application-only development build. Hardware untested. Experimental alpha channel; not an official stable release." \\
+          Automated validated ESP32-S3 application-only development build. Hardware untested. Experimental alpha channel; not an official stable release." \
             --prerelease --latest=false
       - uses: actions/configure-pages@v5
         if: github.ref == 'refs/heads/main'
