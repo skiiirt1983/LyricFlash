@@ -4,3 +4,4 @@
    queue depth 1 and core-1 LVGL. No change to OTA, settings or partitions. */
 #define LF_VERSION "0.8.18-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.18"
+/* 0.8.18 clock redraw compile checkpoint: source-only tests passed. */
