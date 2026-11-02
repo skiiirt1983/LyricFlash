@@ -168,7 +168,7 @@ require('pager_home_battery=battery_status;' in ui and
         'pager_render_target=NULL;' in ui,
         "Preserve active clock object cache and cached Home telemetry")
 require('if(!asleep && !touch_held' not in ui and
-        'sleep_overlay=lv_obj_create(screen);' in ui and
+        'sleep_overlay=lv_obj_create(lv_screen_active());' in ui and
         'lv_indev_get_state(wake_ptr)==LV_INDEV_STATE_PRESSED' in ui,
         "Sleep restoration must not rebuild screens and must accept touch wake")
 require('if (!asleep && !slider_touch_active && !touch_held && is_swipe_page() && !clock_settings_popup)' in ui and
