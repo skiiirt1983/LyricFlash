@@ -208,7 +208,8 @@ static bool gesture_origin_valid;
 static bool touch_held;
 static uint64_t touch_pressed_at_ms;
 static int pending_swipe_page = -1;
-static lv_screen_load_anim_t next_screen_animation = LV_SCR_LOAD_ANIM_NONE;
+/* No dual-screen animation: 0.8.3 left old/new UI trees overlapping
+   during navigation and made the touch target inconsistent. */
 static uint64_t screen_animation_until_ms;
 static uint64_t next_swipe_allowed_ms;
 static lv_obj_t *clock_settings_popup;
@@ -249,7 +250,7 @@ static void queue_swipe(int target, lv_screen_load_anim_t animation)
     if (clock_settings_popup || pending_swipe_page >= 0 ||
         current < next_swipe_allowed_ms) return;
     pending_swipe_page = target;
-    next_screen_animation = animation;
+    (void)animation; /* Keep direction metadata without animating screens. */
     next_swipe_allowed_ms = current + 250;
     lv_async_call(commit_swipe, NULL);
 }
@@ -430,19 +431,11 @@ static void make_base(void)
     lv_obj_add_event_cb(screen, on_touch_release, LV_EVENT_RELEASED, NULL);
     lv_obj_add_event_cb(screen, on_touch_cancel, LV_EVENT_PRESS_LOST, NULL);
     lv_obj_add_event_cb(screen, on_lvgl_gesture, LV_EVENT_GESTURE, NULL);
-    /* A gesture/click callback may still be dispatching against old_screen.
-       Deleting it synchronously invalidates the event target / input-device
-       references and can reboot ESP32-S3. Keep the instant screen swap, but
-       free the old LVGL tree on the next timer-handler pass. */
-    if (old_screen != screen && next_screen_animation != LV_SCR_LOAD_ANIM_NONE) {
-        /* Only the incoming screen slides; the old clock stays visually frozen. */
-        lv_screen_load_anim(screen, next_screen_animation, 160, 0, true);
-        screen_animation_until_ms = now_ms() + 190;
-        next_screen_animation = LV_SCR_LOAD_ANIM_NONE;
-    } else {
-        lv_screen_load(screen);
-        if (old_screen != screen) lv_obj_delete_async(old_screen);
-    }
+    /* Replace active screen atomically. Defer old-screen destruction until
+       LVGL exits its event/timer dispatch. Never display two LVGL screens. */
+    lv_screen_load(screen);
+    if (old_screen != screen) lv_obj_delete_async(old_screen);
+    screen_animation_until_ms = 0;
     touch_held=false;
     gesture_origin_valid=false;
     gesture_indev=NULL;
