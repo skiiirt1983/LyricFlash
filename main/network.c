@@ -1,4 +1,10 @@
 #include "network.h"
+#include "ui.h"
+#include "settings.h"
+#include "weather.h"
+#include "diagnostics.h"
+#include "version.h"
+#include "web_basic_html.h"
 #include "cJSON.h"
 #include "image_policy.h"
 #include "esp_log.h"
@@ -19,6 +25,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <stdlib.h>
 
 static const char *TAG="LFNetwork";
 static EventGroupHandle_t connected_event;
@@ -216,6 +223,7 @@ static const char home_page[] =
 "section{background:#101824;border:1px solid #293b58;border-radius:19px;padding:23px;margin:20px 0}"
 "#msg{color:#a8d7ff;overflow-wrap:anywhere}</style>"
 "<h1>LYRICFLASH</h1><p>ESP32-S3 / Local device manager</p>"
+"<p><a href='/settings' style='color:#8ec9ff'>Open Basic clock studio and diagnostics</a></p>"
 "<section><h2>Wi-Fi setup</h2><p id='wifi-state'>Checking current network...</p><p>Scan for 2.4 GHz Wi-Fi or enter its name.</p>"
 "<button onclick='scan()'>Scan nearby Wi-Fi</button><select id='networks' onchange='pick()'>"
 "<option value=''>Choose a network</option></select><input id='ssid' placeholder='Wi-Fi name'>"
@@ -269,6 +277,199 @@ static esp_err_t handle_home(httpd_req_t *req)
     httpd_resp_set_type(req,"text/html; charset=utf-8");
     return httpd_resp_send(req,home_page,HTTPD_RESP_USE_STRLEN);
 }
+
+static esp_err_t send_json(httpd_req_t *req, cJSON *root)
+{
+    if (!root) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
+    char *body = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!body) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    esp_err_t result = httpd_resp_sendstr(req, body);
+    free(body);
+    return result;
+}
+
+static esp_err_t handle_settings_page(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, lf_basic_settings_html, HTTPD_RESP_USE_STRLEN);
+}
+
+static bool number_in_range(const cJSON *root, const char *name,
+                            int minimum, int maximum, int *out)
+{
+    const cJSON *node = cJSON_GetObjectItemCaseSensitive(root, name);
+    if (!cJSON_IsNumber(node) || node->valuedouble != (double)node->valueint ||
+        node->valueint < minimum || node->valueint > maximum) return false;
+    *out = node->valueint;
+    return true;
+}
+
+static bool boolean_value(const cJSON *root, const char *name, uint8_t *out)
+{
+    const cJSON *node = cJSON_GetObjectItemCaseSensitive(root, name);
+    if (!cJSON_IsBool(node)) return false;
+    *out = cJSON_IsTrue(node) ? 1 : 0;
+    return true;
+}
+
+/* Public read-only state; no PIN, Wi-Fi password or cloud credentials. */
+static esp_err_t handle_basic_get(httpd_req_t *req)
+{
+    lf_settings_t s;
+    if (lf_settings_load(&s) != ESP_OK)
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Could not read settings");
+    lf_weather_config_t weather;
+    lf_weather_get_config(&weather);
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
+    cJSON_AddNumberToObject(root, "font_style", s.basic_font_style);
+    cJSON_AddNumberToObject(root, "font_size", s.basic_font_size);
+    cJSON_AddNumberToObject(root, "ring_mode", s.basic_ring_mode);
+    cJSON_AddBoolToObject(root, "show_date", s.basic_show_date != 0);
+    cJSON_AddBoolToObject(root, "weather", s.basic_weather != 0);
+    cJSON_AddNumberToObject(root, "background", s.basic_background);
+    cJSON_AddNumberToObject(root, "foreground", s.basic_foreground);
+    cJSON_AddNumberToObject(root, "ring_a", s.basic_ring_a);
+    cJSON_AddNumberToObject(root, "ring_b", s.basic_ring_b);
+    cJSON_AddNumberToObject(root, "ring_c", s.basic_ring_c);
+    cJSON_AddStringToObject(root, "city", weather.city);
+    cJSON_AddNumberToObject(root, "interval_minutes", weather.interval_minutes);
+    return send_json(req, root);
+}
+
+static esp_err_t handle_basic_post(httpd_req_t *req)
+{
+    if (!pin_matches(req)) {
+        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "Arm WEB/OTA on device and enter correct PIN");
+        return ESP_FAIL;
+    }
+    ota_expiry = 0; /* Web configuration authorization is single-use. */
+    if (req->content_len < 2 || req->content_len > 1250) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid request length");
+        return ESP_FAIL;
+    }
+    char json[1251];
+    int received = 0, retries = 0;
+    while (received < req->content_len) {
+        int n = httpd_req_recv(req, json + received, req->content_len - received);
+        if (n == HTTPD_SOCK_ERR_TIMEOUT && ++retries < 4) continue;
+        if (n <= 0) {
+            lf_diag_error("settings", "Web request receive timeout/disconnect");
+            httpd_resp_send_err(req, HTTPD_408_REQ_TIMEOUT, "Settings request timed out");
+            return ESP_FAIL;
+        }
+        retries = 0;
+        received += n;
+    }
+    json[received] = 0;
+    cJSON *root = cJSON_Parse(json);
+    lf_settings_t current;
+    lf_weather_config_t weather;
+    lf_weather_get_config(&weather);
+    if (!root || !cJSON_IsObject(root) || lf_settings_load(&current) != ESP_OK) {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid settings JSON");
+        return ESP_FAIL;
+    }
+    int font_style, font_size, ring_mode, bg, fg, a, b, c, interval;
+    uint8_t show_date, basic_weather;
+    const cJSON *city = cJSON_GetObjectItemCaseSensitive(root, "city");
+    bool valid =
+        number_in_range(root, "font_style", 0, 4, &font_style) &&
+        number_in_range(root, "font_size", 0, 100, &font_size) &&
+        number_in_range(root, "ring_mode", 0, 2, &ring_mode) &&
+        boolean_value(root, "show_date", &show_date) &&
+        boolean_value(root, "weather", &basic_weather) &&
+        number_in_range(root, "background", 0, 0xFFFFFF, &bg) &&
+        number_in_range(root, "foreground", 0, 0xFFFFFF, &fg) &&
+        number_in_range(root, "ring_a", 0, 0xFFFFFF, &a) &&
+        number_in_range(root, "ring_b", 0, 0xFFFFFF, &b) &&
+        number_in_range(root, "ring_c", 0, 0xFFFFFF, &c) &&
+        number_in_range(root, "interval_minutes", 15, 120, &interval) &&
+        (interval == 15 || interval == 30 || interval == 60 || interval == 120) &&
+        cJSON_IsString(city) && city->valuestring &&
+        strlen(city->valuestring) <= LF_WEATHER_CITY_MAX;
+    if (valid) {
+        const char *p = city->valuestring;
+        for (; *p; p++) if ((unsigned char)*p < 32) { valid = false; break; }
+    }
+    if (!valid) {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid Basic clock settings");
+        return ESP_FAIL;
+    }
+    current.basic_font_style = (uint8_t)font_style;
+    current.basic_font_size = (uint8_t)font_size;
+    current.basic_ring_mode = (uint8_t)ring_mode;
+    current.basic_show_date = show_date;
+    current.basic_weather = basic_weather;
+    current.basic_background = (uint32_t)bg;
+    current.basic_foreground = (uint32_t)fg;
+    current.basic_ring_a = (uint32_t)a;
+    current.basic_ring_b = (uint32_t)b;
+    current.basic_ring_c = (uint32_t)c;
+    strlcpy(weather.city, city->valuestring, sizeof weather.city);
+    weather.interval_minutes = (uint16_t)interval;
+    if (basic_weather) weather.enabled = true;
+    cJSON_Delete(root);
+
+    if (!lf_weather_save_config(&weather)) {
+        lf_diag_error("settings", "Weather NVS save failed");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot save weather settings");
+        return ESP_FAIL;
+    }
+    esp_err_t err = lf_ui_apply_basic_settings(&current);
+    if (err != ESP_OK) {
+        lf_diag_error("settings", "UI lock or NVS save failed");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot save Basic clock settings");
+        return ESP_FAIL;
+    }
+    cJSON *reply = cJSON_CreateObject();
+    if (!reply) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
+    cJSON_AddBoolToObject(reply, "saved", true);
+    return send_json(req, reply);
+}
+
+static esp_err_t handle_diagnostics(httpd_req_t *req)
+{
+    lf_diag_snapshot_t d;
+    lf_diag_snapshot(&d);
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
+    cJSON_AddStringToObject(root, "version", LF_VERSION);
+    cJSON_AddStringToObject(root, "ip", d.ip_address);
+    cJSON_AddBoolToObject(root, "wifi_connected", d.wifi_connected);
+    cJSON_AddStringToObject(root, "wifi_ssid", d.wifi_ssid);
+    if (d.wifi_rssi_dbm != 0) cJSON_AddNumberToObject(root, "wifi_rssi_dbm", d.wifi_rssi_dbm);
+    cJSON_AddNumberToObject(root, "uptime_seconds", d.uptime_seconds);
+    cJSON_AddNumberToObject(root, "free_heap_bytes", d.heap_free_bytes);
+    cJSON_AddNumberToObject(root, "min_free_heap_bytes", d.heap_min_bytes);
+    cJSON_AddNumberToObject(root, "free_psram_bytes", d.psram_free_bytes);
+    cJSON_AddBoolToObject(root, "battery_valid", d.battery_valid);
+    if (d.battery_valid) {
+        cJSON_AddNumberToObject(root, "battery_percent", d.battery.percentage);
+        cJSON_AddBoolToObject(root, "usb_connected", d.battery.usb_connected);
+        cJSON_AddBoolToObject(root, "charging", d.battery.charging);
+    }
+    cJSON_AddStringToObject(root, "microphone", "disabled (not initialized)");
+    cJSON_AddStringToObject(root, "ota_result", ota_result);
+    cJSON_AddNumberToObject(root, "ota_received", ota_received);
+    cJSON_AddNumberToObject(root, "ota_total", ota_total);
+    cJSON_AddNumberToObject(root, "max_ui_tick_gap_ms", lf_ui_max_tick_gap_ms());
+    lf_weather_config_t weather;
+    lf_weather_get_config(&weather);
+    cJSON_AddStringToObject(root, "weather_city", weather.city);
+    cJSON *errors = cJSON_AddArrayToObject(root, "recent_errors");
+    if (errors)
+        for (size_t i = 0; i < 3; i++)
+            if (d.errors[i][0]) cJSON_AddItemToArray(errors, cJSON_CreateString(d.errors[i]));
+    return send_json(req, root);
+}
+
 static esp_err_t handle_info(httpd_req_t *req)
 {
     char ssid[33] = {0};
@@ -283,7 +484,7 @@ static esp_err_t handle_info(httpd_req_t *req)
     cJSON *root = cJSON_CreateObject();
     if (!root) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
     cJSON_AddStringToObject(root, "app", "LyricFlash");
-    cJSON_AddStringToObject(root, "version", "0.7.0-alpha");
+    cJSON_AddStringToObject(root, "version", LF_VERSION);
     cJSON_AddStringToObject(root, "mode", in_ap ? "ap" : "station");
     cJSON_AddStringToObject(root, "address", address);
     cJSON_AddBoolToObject(root, "ota_armed", lf_network_ota_armed());
@@ -306,7 +507,7 @@ static esp_err_t handle_device(httpd_req_t *req)
     esp_wifi_get_mac(in_ap?WIFI_IF_AP:WIFI_IF_STA,mac);
     char response[220];
     snprintf(response,sizeof(response),
-        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.7.0-alpha\","
+        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.8.0-alpha\","
         "\"device_id\":\"LF-%02X%02X%02X\",\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\"}",
         mac[3],mac[4],mac[5],mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
     httpd_resp_set_type(req,"application/json");
@@ -410,13 +611,13 @@ static esp_err_t handle_update(httpd_req_t *req)
         ota_result="writing";
     }
     ota_expiry=0; // disarm after a single attempt, whether successful or not
-    if(!ok){if(started) esp_ota_abort(handle);ESP_LOGE(TAG,"OTA incomplete at %u/%u",ota_received,ota_total);
+    if(!ok){lf_diag_error("ota",ota_result);if(started) esp_ota_abort(handle);ESP_LOGE(TAG,"OTA incomplete at %u/%u",ota_received,ota_total);
         httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Upload failed, device remains on current firmware");return ESP_FAIL;}
     ota_result="verifying";
     esp_err_t finish_err=esp_ota_end(handle);
-    if(finish_err!=ESP_OK){ota_result="checksum_failed";ESP_LOGE(TAG,"OTA end: %s",esp_err_to_name(finish_err));httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Firmware checksum / image validation failed");return ESP_FAIL;}
+    if(finish_err!=ESP_OK){ota_result="checksum_failed";lf_diag_error("ota",ota_result);ESP_LOGE(TAG,"OTA end: %s",esp_err_to_name(finish_err));httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Firmware checksum / image validation failed");return ESP_FAIL;}
     esp_err_t boot_err=esp_ota_set_boot_partition(part);
-    if(boot_err!=ESP_OK){ota_result="activation_failed";ESP_LOGE(TAG,"OTA activate: %s",esp_err_to_name(boot_err));httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot activate new firmware");return ESP_FAIL;}
+    if(boot_err!=ESP_OK){ota_result="activation_failed";lf_diag_error("ota",ota_result);ESP_LOGE(TAG,"OTA activate: %s",esp_err_to_name(boot_err));httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot activate new firmware");return ESP_FAIL;}
     ota_result="verified_rebooting";
     httpd_resp_sendstr(req,"Firmware verified. Rebooting into new application.");
     xTaskCreate(reboot_task,"lf_reboot",2048,NULL,3,NULL);
@@ -431,6 +632,10 @@ static bool serve(void)
     const httpd_uri_t routes[]={
         {.uri="/",.method=HTTP_GET,.handler=handle_home},
         {.uri="/api/info",.method=HTTP_GET,.handler=handle_info},
+        {.uri="/settings",.method=HTTP_GET,.handler=handle_settings_page},
+        {.uri="/api/basic",.method=HTTP_GET,.handler=handle_basic_get},
+        {.uri="/api/basic",.method=HTTP_POST,.handler=handle_basic_post},
+        {.uri="/api/diagnostics",.method=HTTP_GET,.handler=handle_diagnostics},
         {.uri="/api/device",.method=HTTP_GET,.handler=handle_device},
         {.uri="/wifi",.method=HTTP_POST,.handler=handle_wifi},
         {.uri="/api/wifi-scan",.method=HTTP_GET,.handler=handle_scan},
@@ -441,6 +646,9 @@ static bool serve(void)
     return true;
 }
 const char *lf_network_address(void){return address;}
+const char *lf_network_ota_result(void){return ota_result;}
+uint32_t lf_network_ota_received(void){return ota_received;}
+uint32_t lf_network_ota_total(void){return ota_total;}
 const char *lf_network_ap_ssid(void){return ap_ssid;}
 const char *lf_network_ap_password(void){return ap_pass;}
 const char *lf_network_ota_pin(void){return ota_pin;}
