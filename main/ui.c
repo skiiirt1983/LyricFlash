@@ -549,14 +549,18 @@ static void render_home(void)
     page = 0;
     make_base();
     lf_clock_clear();
-    label(screen, "LYRICFLASH", 56, &lv_font_montserrat_24, prefs->text_color);
-    label(screen, LF_VERSION_LABEL, 103, &lv_font_montserrat_20, 0xB7C7D7);
-    battery_status = label(screen, "BATTERY", 151, &lv_font_montserrat_20, 0xDCE8F0);
-    button(screen, "LYRICS", 242, 82, 0, 0, 0xA8D6FF, on_preview, NULL);
-    /* Connection and browser settings are always reachable without a PIN. */
-    button(screen, "CONNECT / OTA", 206, 49, 0, 83, 0xA8D6FF, on_connection_help, NULL);
-    network_status = label(screen, "Wi-Fi starting...", 354, &lv_font_montserrat_16, 0xB9CADB);
-    label(screen, "SWIPE LEFT / RIGHT", 394, &lv_font_montserrat_16, 0x6E8CAC);
+    label(screen, "LYRICFLASH", 36, &lv_font_montserrat_24, prefs->text_color);
+    label(screen, LF_VERSION_LABEL, 82, &lv_font_montserrat_20, 0xB7C7D7);
+    battery_status = label(screen, "BATTERY", 129, &lv_font_montserrat_20, 0xDCE8F0);
+    /* Recovery fallback: visible Clock and Settings buttons must work even
+       if physical swipe recognition fails. Keep all controls on one screen. */
+    button(screen, "CLOCK", 132, 48, -80, -43, 0xA8D6FF, on_clock_back, NULL);
+    button(screen, "SETTINGS", 132, 48, 80, -43, 0xA8D6FF, on_settings, NULL);
+    button(screen, "LYRICS", 242, 55, 0, 28, 0xA8D6FF, on_preview, NULL);
+    /* Connection and browser settings remain reachable without a PIN. */
+    button(screen, "CONNECT / OTA", 206, 49, 0, 100, 0xA8D6FF, on_connection_help, NULL);
+    network_status = label(screen, "Wi-Fi starting...", 371, &lv_font_montserrat_16, 0xB9CADB);
+    label(screen, "SWIPE FOR NAVIGATION", 406, &lv_font_montserrat_16, 0x6E8CAC);
     last_power_refresh_ms = 0;
 }
 static void build_home(void)
