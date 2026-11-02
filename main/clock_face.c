@@ -391,7 +391,8 @@ void lf_clock_update(void)
         else
             snprintf(text, sizeof(text), "%s", state.charging ? "CHARGING" : "BATTERY");
         lv_label_set_text(battery_label, text);
-        lv_obj_set_style_text_color(battery_label, lv_color_hex(lf_power_color(&state)), 0);
+        lv_obj_set_style_text_color(battery_label,
+            lv_color_hex(state.usb_connected ? clock_settings->charging_color : lf_power_color(&state)), 0);
     }
     if (weather_label) {
         int temperature=0, condition=0;
