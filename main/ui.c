@@ -130,6 +130,7 @@ static void on_gesture_press(lv_event_t *e);
 static void on_touch_pressing(lv_event_t *e);
 static void on_touch_release(lv_event_t *e);
 static void on_touch_cancel(lv_event_t *e);
+static void on_lvgl_gesture(lv_event_t *e);
 
 static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int height,
                         int x, int y, uint32_t bg, lv_event_cb_t cb, void *arg)
@@ -147,6 +148,7 @@ static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int heigh
     lv_obj_add_event_cb(b, on_touch_pressing, LV_EVENT_PRESSING, NULL);
     lv_obj_add_event_cb(b, on_touch_release, LV_EVENT_RELEASED, NULL);
     lv_obj_add_event_cb(b, on_touch_cancel, LV_EVENT_PRESS_LOST, NULL);
+    lv_obj_add_event_cb(b, on_lvgl_gesture, LV_EVENT_GESTURE, NULL);
     lv_obj_t *l = lv_label_create(b);
     lv_label_set_text(l, text);
     lv_obj_set_width(l, width - 16);
@@ -192,13 +194,15 @@ static void on_settings(lv_event_t *e)
 {
     (void)e; activity(); build_settings();
 }
-/* Phone-style touch semantics: pause moving content immediately, allow an
-   easy swipe, and navigate only once the finger leaves the glass. Building
-   screens inside a touch event previously caused a crash/jank regression. */
+/* Press lost does not mean the finger was lifted: LVGL sends it when a
+   swipe exits a button. Track the pointer device itself until its reported
+   input state is RELEASED; use LVGL's gesture detection as a second path.
+   Screen construction remains deferred, AFTER physical finger release. */
 #define LF_SWIPE_MIN_PX 38
 #define LF_CLOCK_SETTINGS_HOLD_MS 2000ULL
 #define LF_HOLD_MOVE_CANCEL_PX 20
 static lv_point_t gesture_origin;
+static lv_indev_t *gesture_indev;
 static bool gesture_origin_valid;
 static bool touch_held;
 static uint64_t touch_pressed_at_ms;
@@ -208,12 +212,21 @@ static uint64_t screen_animation_until_ms;
 static uint64_t next_swipe_allowed_ms;
 static lv_obj_t *clock_settings_popup;
 
+/* One candidate per physical gesture; no screen swap until the finger lifts. */
+static int swipe_candidate_page = -1;
+static lv_screen_load_anim_t swipe_candidate_animation = LV_SCR_LOAD_ANIM_NONE;
+
 static void build_home(void);
 static void build_settings(void);
 static void build_clock(void);
 static void build_weather_details(void);
 static void build_debug(void);
 static void build_clock_settings(void);
+
+static bool is_swipe_page(void)
+{
+    return page == 0 || page == 6 || page == 11 || page == 14;
+}
 
 static void commit_swipe(void *arg)
 {
@@ -239,67 +252,115 @@ static void queue_swipe(int target, lv_screen_load_anim_t animation)
     next_swipe_allowed_ms = current + 250;
     lv_async_call(commit_swipe, NULL);
 }
+
+static void swipe_intent(lv_dir_t direction)
+{
+    if (clock_settings_popup || swipe_candidate_page >= 0) return;
+    if (page == 0) {
+        if (direction == LV_DIR_LEFT) {
+            swipe_candidate_page = 2;
+            swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_LEFT;
+        } else if (direction == LV_DIR_RIGHT) {
+            swipe_candidate_page = 6;
+            swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
+        } else if (direction == LV_DIR_BOTTOM) {
+            swipe_candidate_page = 14;
+            swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_BOTTOM;
+        }
+    } else if (page == 6) {
+        if (direction == LV_DIR_LEFT) {
+            swipe_candidate_page = 0;
+            swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_LEFT;
+        } else if (direction == LV_DIR_TOP) {
+            swipe_candidate_page = 11;
+            swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_TOP;
+        }
+    } else if (page == 14 && direction == LV_DIR_TOP) {
+        swipe_candidate_page = 0;
+        swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_TOP;
+    } else if (page == 11 && direction == LV_DIR_BOTTOM) {
+        swipe_candidate_page = 6;
+        swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_BOTTOM;
+    }
+    if (swipe_candidate_page >= 0)
+        touch_pressed_at_ms = 0; /* Never treat a swipe as a settings hold. */
+}
+
+static void observe_touch_position(void)
+{
+    if (!touch_held || !gesture_origin_valid || !gesture_indev) return;
+    lv_point_t current={0};
+    lv_indev_get_point(gesture_indev, &current);
+    int dx=current.x-gesture_origin.x;
+    int dy=current.y-gesture_origin.y;
+    int distance_sq=dx*dx+dy*dy;
+    if (page == 6 && distance_sq > LF_HOLD_MOVE_CANCEL_PX*LF_HOLD_MOVE_CANCEL_PX)
+        touch_pressed_at_ms=0;
+    if (distance_sq < LF_SWIPE_MIN_PX*LF_SWIPE_MIN_PX) return;
+    if (abs(dx) > abs(dy))
+        swipe_intent(dx < 0 ? LV_DIR_LEFT : LV_DIR_RIGHT);
+    else
+        swipe_intent(dy < 0 ? LV_DIR_TOP : LV_DIR_BOTTOM);
+}
+
+static void finish_touch(void)
+{
+    if (!touch_held) return;
+    observe_touch_position();
+    const int target=swipe_candidate_page;
+    const lv_screen_load_anim_t animation=swipe_candidate_animation;
+    touch_held=false;
+    gesture_origin_valid=false;
+    gesture_indev=NULL;
+    touch_pressed_at_ms=0;
+    swipe_candidate_page=-1;
+    swipe_candidate_animation=LV_SCR_LOAD_ANIM_NONE;
+    if (target >= 0) queue_swipe(target, animation);
+    activity();
+}
+
 static void on_gesture_press(lv_event_t *e)
 {
     (void)e;
-    if (page != 0 && page != 6 && page != 11 && page != 14) return;
-    lv_indev_t *indev = lv_indev_active();
-    gesture_origin_valid = indev != NULL;
-    if (indev) {
-        lv_indev_get_point(indev, &gesture_origin);
-        touch_held = true;
-        touch_pressed_at_ms = now_ms();
-    }
+    if (!is_swipe_page() || clock_settings_popup || touch_held) return;
+    lv_indev_t *indev=lv_indev_active();
+    if (!indev || lv_indev_get_type(indev)!=LV_INDEV_TYPE_POINTER) return;
+    gesture_indev=indev;
+    gesture_origin_valid=true;
+    lv_indev_get_point(indev, &gesture_origin);
+    touch_held=true;
+    touch_pressed_at_ms=now_ms();
+    swipe_candidate_page=-1;
+    swipe_candidate_animation=LV_SCR_LOAD_ANIM_NONE;
     activity();
 }
 static void on_touch_pressing(lv_event_t *e)
 {
     (void)e;
-    if (!touch_held || !gesture_origin_valid) return;
-    lv_indev_t *indev = lv_indev_active();
-    if (!indev) return;
-    lv_point_t now={0};
-    lv_indev_get_point(indev, &now);
-    int dx=now.x-gesture_origin.x, dy=now.y-gesture_origin.y;
-    if (page == 6 && dx*dx + dy*dy > LF_HOLD_MOVE_CANCEL_PX*LF_HOLD_MOVE_CANCEL_PX)
-        touch_pressed_at_ms = 0; /* Swiping never opens clock settings. */
+    observe_touch_position();
+}
+static void on_lvgl_gesture(lv_event_t *e)
+{
+    (void)e;
+    if (!touch_held || !gesture_origin_valid || clock_settings_popup) return;
+    lv_indev_t *indev=lv_indev_active();
+    if (!indev || indev!=gesture_indev) return;
+    /* LVGL recognizes quick swipes even if the release arrives at a new
+       widget. We also independently recognize slow drags by distance. */
+    swipe_intent(lv_indev_get_gesture_dir(indev));
+    observe_touch_position();
 }
 static void on_touch_release(lv_event_t *e)
 {
     (void)e;
-    if (!touch_held || !gesture_origin_valid) return;
-    touch_held = false;
-    uint64_t held_since=touch_pressed_at_ms;
-    touch_pressed_at_ms = 0;
-    lv_indev_t *indev=lv_indev_active();
-    if (!indev || clock_settings_popup) {gesture_origin_valid=false;return;}
-    lv_point_t end={0};
-    lv_indev_get_point(indev,&end);
-    const int dx=end.x-gesture_origin.x, dy=end.y-gesture_origin.y;
-    gesture_origin_valid=false;
-    if (dx*dx+dy*dy < LF_SWIPE_MIN_PX*LF_SWIPE_MIN_PX) {
-        /* Simple taps do not navigate or open clock settings. */
-        (void)held_since;
-        return;
-    }
-    if (abs(dx) > abs(dy)) {
-        if (page==0 && dx<0) queue_swipe(2, LV_SCR_LOAD_ANIM_OVER_LEFT);
-        else if (page==0 && dx>0) queue_swipe(6, LV_SCR_LOAD_ANIM_OVER_RIGHT);
-        else if (page==6 && dx<0) queue_swipe(0, LV_SCR_LOAD_ANIM_OVER_LEFT);
-    } else {
-        if (page==0 && dy>0) queue_swipe(14, LV_SCR_LOAD_ANIM_OVER_BOTTOM);
-        else if (page==14 && dy<0) queue_swipe(0, LV_SCR_LOAD_ANIM_OVER_TOP);
-        else if (page==6 && dy<0) queue_swipe(11, LV_SCR_LOAD_ANIM_OVER_TOP);
-        else if (page==11 && dy>0) queue_swipe(6, LV_SCR_LOAD_ANIM_OVER_BOTTOM);
-    }
-    activity();
+    finish_touch();
 }
 static void on_touch_cancel(lv_event_t *e)
 {
     (void)e;
-    touch_held=false;
-    gesture_origin_valid=false;
-    touch_pressed_at_ms=0;
+    /* LV_EVENT_PRESS_LOST means the finger left the original widget.
+       Do NOT clear gesture state: release may be sent elsewhere or nowhere. */
+    observe_touch_position();
 }
 static void on_popup_cancel(lv_event_t *e)
 {
@@ -367,6 +428,7 @@ static void make_base(void)
     lv_obj_add_event_cb(screen, on_touch_pressing, LV_EVENT_PRESSING, NULL);
     lv_obj_add_event_cb(screen, on_touch_release, LV_EVENT_RELEASED, NULL);
     lv_obj_add_event_cb(screen, on_touch_cancel, LV_EVENT_PRESS_LOST, NULL);
+    lv_obj_add_event_cb(screen, on_lvgl_gesture, LV_EVENT_GESTURE, NULL);
     /* A gesture/click callback may still be dispatching against old_screen.
        Deleting it synchronously invalidates the event target / input-device
        references and can reboot ESP32-S3. Keep the instant screen swap, but
@@ -382,6 +444,9 @@ static void make_base(void)
     }
     touch_held=false;
     gesture_origin_valid=false;
+    gesture_indev=NULL;
+    swipe_candidate_page=-1;
+    swipe_candidate_animation=LV_SCR_LOAD_ANIM_NONE;
     touch_pressed_at_ms=0;
     clock_settings_popup=NULL;
     debug_text = NULL;
@@ -1135,6 +1200,14 @@ static void on_tick(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
+    /* A drag can leave the original LVGL widget and never send RELEASED to
+       it. The pointer driver's state is authoritative, not that callback. */
+    if (touch_held && gesture_indev) {
+        if (lv_indev_get_state(gesture_indev) == LV_INDEV_STATE_RELEASED)
+            finish_touch();
+        else
+            observe_touch_position();
+    }
     if (page == 6 && touch_held && touch_pressed_at_ms &&
         current - touch_pressed_at_ms >= LF_CLOCK_SETTINGS_HOLD_MS)
         show_clock_settings_popup();
