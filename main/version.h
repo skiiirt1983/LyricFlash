@@ -5,3 +5,5 @@
 /* Build gate: expanded slow scroll, Clock Studio preview, safe opt-in sleep and alpha OTA feed. */
 
 /* Recovery candidate: restore native finger-following navigation and protect page opacity. */
+
+/* Single intentional hardware-candidate compile after successful navigation preflight. */
