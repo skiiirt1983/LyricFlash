@@ -153,6 +153,7 @@ static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int heigh
 
 static void build_home(void);
 static void build_debug(void);
+static void build_connection_help(void);
 static void refresh_debug(void);
 static void build_preview(void);
 static void build_settings(void);
@@ -190,6 +191,32 @@ static void on_gesture_press(lv_event_t *e)
     gesture_origin_valid = indev != NULL;
     if(indev) lv_indev_get_point(indev,&gesture_origin);
 }
+/* Decouple expensive UI construction from the touchscreen input event.
+   Only one gesture may be queued while the old screen is still in use. */
+static int pending_swipe_page = -1;
+static uint64_t next_swipe_allowed_ms;
+static void commit_swipe(void *arg)
+{
+    (void)arg;
+    int target = pending_swipe_page;
+    pending_swipe_page = -1;
+    switch(target) {
+    case 0: build_home(); break;
+    case 2: build_settings(); break;
+    case 6: build_clock(); break;
+    case 11: build_weather_details(); break;
+    case 14: build_debug(); break;
+    default: break;
+    }
+}
+static void queue_swipe(int target)
+{
+    uint64_t current=now_ms();
+    if (pending_swipe_page >= 0 || current < next_swipe_allowed_ms) return;
+    pending_swipe_page=target;
+    next_swipe_allowed_ms=current+250;
+    lv_async_call(commit_swipe,NULL);
+}
 static void on_swipe(lv_event_t *e)
 {
     (void)e;
@@ -208,16 +235,16 @@ static void on_swipe(lv_event_t *e)
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
     activity();
     if (page == 0) {
-        if (dir == LV_DIR_LEFT) build_settings();
-        else if (dir == LV_DIR_RIGHT) build_clock();
-        else if (dir == LV_DIR_BOTTOM) build_debug();
+        if (dir == LV_DIR_LEFT) queue_swipe(2);
+        else if (dir == LV_DIR_RIGHT) queue_swipe(6);
+        else if (dir == LV_DIR_BOTTOM) queue_swipe(14);
     } else if (page == 14 && dir == LV_DIR_TOP) {
-        build_home();
+        queue_swipe(0);
     } else if (page == 6) {
-        if (dir == LV_DIR_LEFT) build_home();
-        else if (dir == LV_DIR_TOP) build_weather_details();
+        if (dir == LV_DIR_LEFT) queue_swipe(0);
+        else if (dir == LV_DIR_TOP) queue_swipe(11);
     } else if (page == 11 && dir == LV_DIR_BOTTOM) {
-        build_clock();
+        queue_swipe(6);
     }
 }
 static void on_clock_long_press(lv_event_t *e)
@@ -277,6 +304,26 @@ static void on_wifi(lv_event_t *e)
 {
     (void)e; activity(); build_wifi();
 }
+static void on_connection_help(lv_event_t *e)
+{
+    (void)e; activity(); build_connection_help();
+}
+static void build_connection_help(void)
+{
+    /* A non-gesture route to Wi-Fi provisioning and OTA authorization,
+       including the AP password and exact web address. */
+    page = 15;
+    make_base();
+    label(screen, "CONNECT / UPDATE", 37, &lv_font_montserrat_24, prefs->text_color);
+    network_status = label(screen, "Checking Wi-Fi...", 92, &lv_font_montserrat_16, 0xE4EDF3);
+    network_password = label(screen, "", 126, &lv_font_montserrat_16, 0xDDE9FB);
+    network_url = label(screen, "", 161, &lv_font_montserrat_16, 0x8BCCFF);
+    ota_status = label(screen, "Tap ARM OTA for a two-minute PIN", 210,
+                       &lv_font_montserrat_16, 0x8BCCFF);
+    button(screen, "ARM OTA", 190, 51, 0, 78, 0xA8D6FF, on_arm_ota, NULL);
+    button(screen, "HOME", 154, 49, 0, 172, 0xB2C6D3, on_home, NULL);
+    last_power_refresh_ms = 0; /* Refresh the network details immediately. */
+}
 
 static void build_home(void)
 {
@@ -289,9 +336,10 @@ static void build_home(void)
     button(screen, "LYRICS", 242, 82, 0, 0, 0xA8D6FF, on_preview, NULL);
     /* Physical OTA arming must remain reachable even if navigation breaks.
        No browser/remote endpoint can arm updates without touching the device. */
-    button(screen, "ARM OTA", 170, 46, 0, 83, 0xA8D6FF, on_arm_ota, NULL);
-    ota_status = label(screen, "CLOCK  <          >  SETTINGS", 344, &lv_font_montserrat_18, 0xB9CADB);
-    label(screen, "SWIPE DOWN FOR DEBUG", 398, &lv_font_montserrat_16, 0x6E8CAC);
+    button(screen, "CONNECT / OTA", 206, 49, 0, 83, 0xA8D6FF, on_connection_help, NULL);
+    network_status = label(screen, "Wi-Fi starting...", 354, &lv_font_montserrat_16, 0xB9CADB);
+    label(screen, "SWIPE LEFT / RIGHT", 394, &lv_font_montserrat_16, 0x6E8CAC);
+    last_power_refresh_ms = 0;
 }
 
 static void on_toggle_pause(lv_event_t *e)
@@ -981,7 +1029,7 @@ static void on_tick(lv_timer_t *timer)
             if (scan_state < 0 && wifi_status) lv_label_set_text(wifi_status, "Scan failed. Tap SCAN.");
         }
     }
-    if ((page == 0 || page == 10) && !asleep && current - last_power_refresh_ms >= 4000) {
+    if ((page == 0 || page == 10 || page == 15) && !asleep && current - last_power_refresh_ms >= 1500) {
         last_power_refresh_ms = current;
         lf_power_state_t st;
         bool success=lf_power_cached(&st);
@@ -1024,9 +1072,8 @@ static void on_tick(lv_timer_t *timer)
             snprintf(url_text, sizeof url_text, "Open browser to http://%s/", lf_network_address());
             lv_label_set_text(network_url, url_text);
         }
-        if (ota_status && !lf_network_ota_armed())
-            lv_label_set_text(ota_status, page == 0
-                ? "CLOCK  <          >  SETTINGS" : "");
+        if (ota_status && !lf_network_ota_armed()) 
+            lv_label_set_text(ota_status, "Tap ARM OTA for a two-minute PIN");
     }
     if (asleep) return;
     if (page == 11 && current - weather_detail_refresh >= 4000) {
@@ -1039,7 +1086,7 @@ static void on_tick(lv_timer_t *timer)
         clock_last_refresh = current;
         lf_clock_update();
     }
-    if (prefs->sleep_seconds && !(page == 1 && !paused) && page != 14 && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
+    if (prefs->sleep_seconds && !(page == 1 && !paused) && page != 14 && page != 15 && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
         sleep_display();
         return;
     }
