@@ -1,7 +1,7 @@
 #pragma once
 /* Development-only validation: finger-tracking native pager; hardware test required. */
-#define LF_VERSION "0.8.8-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.8"
+#define LF_VERSION "0.8.9-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.9"
 /* Build gate: expanded slow scroll, Clock Studio preview, safe opt-in sleep and alpha OTA feed. */
 
 /* Device-tested 0.8.6 main pager retained; weather exit, PCT clock and OTA diagnostics under test. */
@@ -10,4 +10,4 @@
 
 /* One targeted production-toolchain validation after green OTA/weather/time preflight. */
 
-/* Build 0.8.8 direct HTTPS alpha OTA and safe Weather -> pager handoff after passing source tests. */
+/* Build 0.8.9 direct HTTPS alpha OTA and safe Weather -> pager handoff after passing source tests. */
