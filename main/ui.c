@@ -1569,9 +1569,14 @@ static void on_tick(lv_timer_t *timer)
     }
     /* Check deep-sleep deadline even after the screen has already turned off.
        Never deep sleep during diagnostics, onboarding, or active lyric play. */
+    static uint64_t deep_sleep_retry_after_ms;
     if (prefs->deep_sleep_minutes && !(page == 1 && !paused) &&
         page != 14 && page != 15 &&
-        current-last_activity_ms >= (uint64_t)prefs->deep_sleep_minutes*60000ULL) {
+        current-last_activity_ms >= (uint64_t)prefs->deep_sleep_minutes*60000ULL &&
+        current >= deep_sleep_retry_after_ms) {
+        /* If touch INT is held low or wake setup fails, remain safely in
+           screen-off mode and retry once per minute, not every 50 ms. */
+        deep_sleep_retry_after_ms=current+60000ULL;
         sleep_deep();
     }
     if (asleep) return;

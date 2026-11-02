@@ -169,6 +169,10 @@ require('id="refresh-builds"' in pages["firmware"] and 'loadBuilds(true)' in pag
         and 'entries.sort((a,b)=>versionCompare' in pages["firmware"]
         and 'OLDER THAN INSTALLED' in pages["firmware"] and ' — NEW' not in pages["firmware"],
         "Firmware picker must support refresh and correctly order versions")
+require("esp_sleep_enable_ext0_wakeup(GPIO_NUM_11,0)" in ui and
+        "deep_sleep_retry_after_ms=current+60000ULL" in ui and
+        "esp_deep_sleep_start();" in ui,
+        "Safe opt-in CST9217 GPIO11 deep sleep and wake timeout missing")
 require('id="pref-deep_sleep_minutes"' in pages["settings"] and
         'id="pref-scroll_speed" min="0"' in pages["settings"] and
         'margin-top:34px!important' in pages["settings"],
