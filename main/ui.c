@@ -193,6 +193,8 @@ static bool gesture_origin_valid;
 static bool touch_held;
 static uint64_t touch_pressed_at_ms;
 static int pending_swipe_page = -1;
+static lv_screen_load_anim_t next_screen_animation = LV_SCR_LOAD_ANIM_NONE;
+static uint64_t screen_animation_until_ms;
 static uint64_t next_swipe_allowed_ms;
 static lv_obj_t *clock_settings_popup;
 
@@ -217,13 +219,14 @@ static void commit_swipe(void *arg)
     default: break;
     }
 }
-static void queue_swipe(int target)
+static void queue_swipe(int target, lv_screen_load_anim_t animation)
 {
     uint64_t current = now_ms();
     if (clock_settings_popup || pending_swipe_page >= 0 ||
         current < next_swipe_allowed_ms) return;
     pending_swipe_page = target;
-    next_swipe_allowed_ms = current + 220;
+    next_screen_animation = animation;
+    next_swipe_allowed_ms = current + 250;
     lv_async_call(commit_swipe, NULL);
 }
 static void on_gesture_press(lv_event_t *e)
@@ -269,14 +272,14 @@ static void on_touch_release(lv_event_t *e)
         return;
     }
     if (abs(dx) > abs(dy)) {
-        if (page==0 && dx<0) queue_swipe(2);
-        else if (page==0 && dx>0) queue_swipe(6);
-        else if (page==6 && dx<0) queue_swipe(0);
+        if (page==0 && dx<0) queue_swipe(2, LV_SCR_LOAD_ANIM_OVER_LEFT);
+        else if (page==0 && dx>0) queue_swipe(6, LV_SCR_LOAD_ANIM_OVER_RIGHT);
+        else if (page==6 && dx<0) queue_swipe(0, LV_SCR_LOAD_ANIM_OVER_LEFT);
     } else {
-        if (page==0 && dy>0) queue_swipe(14);
-        else if (page==14 && dy<0) queue_swipe(0);
-        else if (page==6 && dy<0) queue_swipe(11);
-        else if (page==11 && dy>0) queue_swipe(6);
+        if (page==0 && dy>0) queue_swipe(14, LV_SCR_LOAD_ANIM_OVER_BOTTOM);
+        else if (page==14 && dy<0) queue_swipe(0, LV_SCR_LOAD_ANIM_OVER_TOP);
+        else if (page==6 && dy<0) queue_swipe(11, LV_SCR_LOAD_ANIM_OVER_TOP);
+        else if (page==11 && dy>0) queue_swipe(6, LV_SCR_LOAD_ANIM_OVER_BOTTOM);
     }
     activity();
 }
@@ -357,8 +360,15 @@ static void make_base(void)
        Deleting it synchronously invalidates the event target / input-device
        references and can reboot ESP32-S3. Keep the instant screen swap, but
        free the old LVGL tree on the next timer-handler pass. */
-    lv_screen_load(screen);
-    if (old_screen != screen) lv_obj_delete_async(old_screen);
+    if (old_screen != screen && next_screen_animation != LV_SCR_LOAD_ANIM_NONE) {
+        /* Only the incoming screen slides; the old clock stays visually frozen. */
+        lv_screen_load_anim(screen, next_screen_animation, 160, 0, true);
+        screen_animation_until_ms = now_ms() + 190;
+        next_screen_animation = LV_SCR_LOAD_ANIM_NONE;
+    } else {
+        lv_screen_load(screen);
+        if (old_screen != screen) lv_obj_delete_async(old_screen);
+    }
     touch_held=false;
     gesture_origin_valid=false;
     touch_pressed_at_ms=0;
@@ -1167,13 +1177,13 @@ static void on_tick(lv_timer_t *timer)
             lv_label_set_text(ota_status, "Tap ARM OTA for a two-minute PIN");
     }
     if (asleep) return;
-    if (page == 11 && !touch_held && current - weather_detail_refresh >= 4000) {
+    if (page == 11 && !touch_held && current >= screen_animation_until_ms && current - weather_detail_refresh >= 4000) {
         weather_detail_refresh = current;
         lf_weather_view_t weather;
         lf_weather_get_view(&weather);
         lf_weather_visual_update(&weather);
     }
-    if (page == 6 && !touch_held && !clock_settings_popup && current - clock_last_refresh >= 950) {
+    if (page == 6 && !touch_held && !clock_settings_popup && current >= screen_animation_until_ms && current - clock_last_refresh >= 950) {
         clock_last_refresh = current;
         lf_clock_update();
     }
@@ -1214,7 +1224,7 @@ static void on_tick(lv_timer_t *timer)
 static void on_clock_sweep(lv_timer_t *timer)
 {
     (void)timer;
-    if (page == 6 && !asleep && !touch_held && !clock_settings_popup) lf_clock_animate();
+    if (page == 6 && !asleep && !touch_held && !clock_settings_popup && now_ms() >= screen_animation_until_ms) lf_clock_animate();
 }
 
 bool lf_ui_start(lf_settings_t *s)
