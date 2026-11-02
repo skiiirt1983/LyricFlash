@@ -134,32 +134,43 @@ require(abs(old_top-new_top) < 0.00001,
         "New 100% lyric scroll cap does not equal old 35%")
 require("lv_label_set_long_mode(s_text,LV_LABEL_LONG_CLIP)" in ui,
         "Clock settings dialog long label not protected")
-# Recovery release: the previous native three-screen pager repeatedly
-# left the Waveshare display black/overlapping and touch unresponsive.
-# Enforce one LVGL screen and prohibit all root-slide effects.
-require('static void pager_build(' not in ui and
-        'lv_obj_set_flex_flow(p,LV_FLEX_FLOW_ROW);' not in ui and
-        'lv_obj_scroll_to_x(pager_scroll' not in ui and
-        'lv_obj_set_style_translate_x(screen,' not in ui and
-        'lv_anim_set_exec_cb(' not in ui,
-        "Recovery must not restore the broken multi-screen pager or root animations")
-require('static void build_home(void)\n{\n    render_home();\n}' in ui and
-        'static void build_settings(void)\n{\n    render_settings();\n}' in ui and
-        'static void build_clock(void)\n{\n    if(page==11)' in ui and
-        'if(forecast && forecast!=handoff) lv_obj_delete(forecast);' in ui and
-        '    render_clock();' in ui,
-        "Main navigation must use direct single-screen renderers")
-require('if(page==11) {' in ui and
-        'lv_screen_load(handoff);' in ui and
-        'lv_obj_delete(forecast);' in ui and
-        'lv_async_call(weather_back_deferred,NULL)' in ui,
-        "Weather must be released before allocating Clock, outside input callback")
-require('lv_screen_load(screen);' in ui and
-        'lv_obj_delete_async(old_screen);' in ui and
-        'lv_obj_delete(old_screen)' not in ui and
-        'lv_async_call(commit_swipe, NULL)' in ui and
-        'lv_async_call(weather_back_deferred,NULL)' in ui,
-        "No synchronous screen delete within LVGL click/gesture callbacks")
+# PrintSphere-style finger-following pager on MAIN pages only:
+# scrolling must be native LVGL, not root translation or screen swapping.
+require('lv_obj_set_flex_flow(container,LV_FLEX_FLOW_ROW);' in ui and
+        'lv_obj_set_scroll_dir(container,LV_DIR_HOR);' in ui and
+        'lv_obj_set_scroll_snap_x(container,LV_SCROLL_SNAP_NONE);' in ui and
+        'lv_obj_scroll_to_x(pager_scroll,target_x,LV_ANIM_ON);' in ui and
+        'lv_indev_set_scroll_throw(input,90);' in ui and
+        'if(abs(movement)>=LF_PAGER_WIDTH/5)' in ui,
+        "Core pager must track finger and snap once with PrintSphere physics")
+require('lv_obj_set_style_translate_x(screen,' not in ui and
+        'lv_anim_set_exec_cb(' not in ui and
+        'if(pager_root && lv_screen_active()==pager_root' in ui,
+        "Main navigation must not use competing root animations")
+require('pager_request(1,false);' in ui and
+        'pager_request(2,false);' in ui and
+        'pager_request(0,false);' in ui and
+        'if(!pager_request_queued)' in ui and
+        'lv_async_call(pager_request_async,NULL);' in ui,
+        "Core screen entry must be deferred outside input callbacks")
+require('lv_screen_load(handoff);' in ui and
+        'if(old && old!=handoff)lv_obj_delete(old);' in ui and
+        'lf_weather_visual_clear();' in ui and
+        'if(!pager_render_target)' in ui and
+        'lv_obj_delete_async(old_screen);' in ui,
+        "Weather/submenu scenes must be freed before pager rebuild")
+require('lv_async_call(weather_back_deferred,NULL)' in ui and
+        'lv_async_call(commit_swipe, NULL)' in ui,
+        "Weather exits must stay deferred after touch release")
+require('pager_home_battery=battery_status;' in ui and
+        'pager_home_network=network_status;' in ui and
+        'pager_render_target=pager_clock;render_clock();' in ui and
+        'pager_render_target=NULL;' in ui,
+        "Preserve active clock object cache and cached Home telemetry")
+require('if(!asleep && !touch_held' not in ui and
+        'sleep_overlay=lv_obj_create(screen);' in ui and
+        'lv_indev_get_state(wake_ptr)==LV_INDEV_STATE_PRESSED' in ui,
+        "Sleep restoration must not rebuild screens and must accept touch wake")
 require('if (!asleep && !touch_held && is_swipe_page() && !clock_settings_popup)' in ui and
         'lv_indev_get_state(ptr)==LV_INDEV_STATE_PRESSED' in ui and
         'lv_indev_get_state(gesture_indev) == LV_INDEV_STATE_RELEASED' in ui and

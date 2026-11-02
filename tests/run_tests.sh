@@ -8,6 +8,7 @@ python3 tests/test_ota_release_contract.py
 python3 tests/test_build_catalog.py
 python3 tests/test_release_package.py
 python3 tests/test_alpha_0_8.py
+python3 tests/test_pager_finger_follow.py
 python3 tests/test_web_clock_studio.py
 node tests/test_clock_preview_runtime.js
 node tests/test_firmware_picker_runtime.js

@@ -10,7 +10,10 @@ diag=(p/'main/diagnostics.c').read_text()
 workflow=(p/'.github/workflows/pages-and-firmware.yml').read_text()
 assert 'lv_screen_load_anim(' not in ui
 assert 'nav_settle(' not in ui
-assert 'pager_build(' not in ui
+assert 'static void pager_build(int index)' in ui
+assert 'static void pager_scroll_event(lv_event_t *e)' in ui
+assert 'lv_obj_set_scroll_dir(container,LV_DIR_HOR)' in ui
+assert 'lv_indev_set_scroll_throw(input,90)' in ui
 assert 'lv_obj_set_style_translate_x(' not in ui
 assert 'lv_obj_set_style_translate_y(' not in ui
 assert 'lv_anim_set_exec_cb(' not in ui
