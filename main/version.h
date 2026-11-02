@@ -1,11 +1,12 @@
 #pragma once
-/* 0.8.22 experimental native, finger-following Clock/Home/Settings pager.
-   Three persistent page CHILDREN of ONE LVGL root; no second LVGL screen.
-   Clock scene cache preserved; only the main menu swipes natively;
-   Weather/submenus remain on the established deferred navigation path.
-   CO5300 QSPI DMA-staging driver, TE disabled, transaction queue depth 1,
-   LVGL core 1, OTA and NVS/partitions remain unchanged.
-   Hardware gesture smoothness, battery/wake and no-stacking untested. */
-#define LF_VERSION "0.8.22-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.22"
-/* 0.8.22 finger pager compile checkpoint: source preflight and driver diff audit passed. */
+/* 0.8.23 experimental Clock/Home/Settings pager stabilization.
+   One deterministic LVGL snap with timeout recovery for missed scroll-end
+   events, and an OPTIONAL 16-bit static clock snapshot during page motion
+   to avoid repainting the detailed dial every frame. Snapshot failure keeps
+   original live clock; live scene restored after paging. Retains 0.8.22's
+   single-root touchscreen and the 0.8.19 fast Basic Clock cache.
+   CO5300 QSPI DMA staging, TE off, queue=1, core=1 unchanged.
+   OTA, Wi-Fi, power, settings and partitions unchanged.
+   Hardware performance and input safety still require testing. */
+#define LF_VERSION "0.8.23-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.23"

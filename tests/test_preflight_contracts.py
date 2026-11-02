@@ -384,7 +384,7 @@ require('static lv_obj_t *primary_pager;' in ui and
         'primary_pager_origin' in pager_impl and
         'LV_EVENT_SCROLL_BEGIN' in pager_impl and
         'LV_EVENT_SCROLL_END' in pager_impl and
-        'lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);' in pager_impl and
+        'primary_pager_start_snap(target);' in pager_impl and
         'abs(displacement)>=93' in pager_impl and
         'lv_obj_set_scroll_dir(primary_pager,LV_DIR_HOR);' in pager_scene and
         'LV_SCROLL_SNAP_NONE' in pager_scene and
@@ -402,3 +402,28 @@ require('if(primary_pager && (page==0 || page==2 || page==6)' in ui and
         'lv_indev_set_scroll_throw(touch,90);' in ui and
         'if(nav_transition_active)nav_transition_end(true);' in ui,
         "Native horizontal dragging must exclude duplicate release navigation")
+
+# The 0.8.22 physical test showed mid-page freezes and a laggy clock. Guard
+# against missed LVGL scroll-end events with a one-shot page alignment fallback
+# that NEVER takes ownership while the user is still pressing the display.
+watchdog=ui.split('static void primary_pager_watchdog(uint64_t current)\n{',1)[1].split('static void primary_pager_scroll_event',1)[0]
+require('primary_pager_snap_started_ms' in ui and
+        'current-primary_pager_snap_started_ms>700' in watchdog and
+        'lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_OFF);' in watchdog and
+        'primary_pager_commit(target);' in watchdog and
+        'lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)return;' in watchdog and
+        'if(primary_pager)primary_pager_watchdog(current);' in ui,
+        "Mid-page scroll watchdog / finger ownership regression")
+# RGB565 clock snapshot is optional. The live clock must always be restored
+# after a snap; on memory allocation failure, fall back to full live rendering.
+snapshot=ui.split('static void primary_clock_prepare_snapshot(uint64_t current)\n{',1)[1].split('static void primary_pager_commit',1)[0]
+require('CONFIG_LV_USE_SNAPSHOT=y' in read('sdkconfig.defaults') and
+        'lv_snapshot_take(clock_scene,LV_COLOR_FORMAT_RGB565)' in snapshot and
+        'if(!buffer)' in snapshot and
+        'lv_image_set_src(image,buffer);' in snapshot and
+        'lv_draw_buf_destroy(primary_clock_snapshot);' in ui and
+        'primary_clock_snapshot_reset();' in make_base and
+        'primary_clock_snapshot_visible(false);' in ui and
+        'pager_forced_snaps' in network and
+        'clock_frame_cache_count' in network,
+        "Optional RGB565 clock cache and recovery safety missing")

@@ -43,6 +43,17 @@ static int primary_pager_origin=1;
 static int primary_pager_snap_to=1;
 static bool primary_pager_snapping;
 static bool primary_pager_initializing;
+/* 0.8.23: safe snap watchdog and optional RGB565 PSRAM snapshot of the
+   STATIC Clock face. The live clock is always restored once paging settles. */
+static uint64_t primary_pager_last_move_ms;
+static uint64_t primary_pager_snap_started_ms;
+static lv_draw_buf_t *primary_clock_snapshot;
+static lv_obj_t *primary_clock_image;
+static bool primary_clock_snapshot_pending;
+static uint64_t primary_clock_snapshot_after_ms;
+static atomic_uint pager_forced_snap_count;
+static atomic_uint clock_frame_cache_count;
+static atomic_uint clock_frame_cache_fail_count;
 /* Keep the clock as a hidden child on the one safe LVGL root instead of
    reconstructing 30+ decorative widgets on every visit. Never create a
    second active LVGL screen or swap roots during touch dispatch. */
@@ -88,6 +99,9 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->clock_present_max_ms=atomic_load(&ui_clock_present_max_ms);
     out->nav_reveal_completions=atomic_load(&nav_transition_completed_count);
     out->nav_reveal_last_ms=atomic_load(&nav_transition_last_ms);
+    out->pager_forced_snaps=atomic_load(&pager_forced_snap_count);
+    out->clock_frame_cache_count=atomic_load(&clock_frame_cache_count);
+    out->clock_frame_cache_failures=atomic_load(&clock_frame_cache_fail_count);
 }
 static void display_render_event(lv_event_t *e)
 {
@@ -355,6 +369,10 @@ static void render_home(void);
 static void render_settings(void);
 static void render_clock(void);
 static void primary_pager_enter(int page_index);
+static void primary_pager_watchdog(uint64_t now);
+static void primary_clock_prepare_snapshot(uint64_t now);
+static void primary_clock_snapshot_reset(void);
+static void primary_clock_snapshot_visible(bool visible);
 
 static bool is_swipe_page(void)
 {
@@ -625,6 +643,7 @@ static void make_base(void)
     /* Preserve the cached clock across visits to Weather/settings subpages.
        Reparent before deleting the pager that previously owned it. */
     if(primary_pager) {
+        primary_clock_snapshot_reset();
         if(clock_scene && lv_obj_get_parent(clock_scene)!=screen) {
             lv_obj_set_parent(clock_scene,screen);
             lv_obj_add_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
@@ -1086,10 +1105,72 @@ static void render_clock(void)
    Home and Settings side by side. No secondary screen roots, no invalidation
    suppression, no synthetic divider. LVGL's own scroll inertia and snap
    handle the physical finger's movement, as the original user requested. */
+/* PSRAM snapshot is display-only and optional: on allocation failure,
+   continue with the original live clock rendering and never block navigation.
+   The image is a direct RGB565 LVGL draw-buffer source; no 2nd LVGL root. */
+static void primary_clock_snapshot_visible(bool visible)
+{
+    if(!clock_scene)return;
+    bool use_proxy=visible && primary_clock_image && primary_clock_snapshot;
+    if(use_proxy){
+        lv_obj_add_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(primary_clock_image,LV_OBJ_FLAG_HIDDEN);
+    }else{
+        if(primary_clock_image)lv_obj_add_flag(primary_clock_image,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
+    }
+}
+static void primary_clock_snapshot_reset(void)
+{
+    if(primary_clock_image){
+        lv_image_set_src(primary_clock_image,NULL);
+        lv_obj_delete(primary_clock_image);
+        primary_clock_image=NULL;
+    }
+    if(primary_clock_snapshot){
+        lv_draw_buf_destroy(primary_clock_snapshot);
+        primary_clock_snapshot=NULL;
+    }
+    primary_clock_snapshot_pending=false;
+    primary_clock_snapshot_after_ms=0;
+}
+static void primary_clock_prepare_snapshot(uint64_t current)
+{
+#if LV_USE_SNAPSHOT
+    if(!primary_clock_snapshot_pending || !primary_pager || !clock_scene ||
+       primary_pager_current!=0 || pager_scrolling || primary_pager_snapping ||
+       touch_held || current<primary_clock_snapshot_after_ms) return;
+    primary_clock_snapshot_pending=false; /* At most one attempt per face. */
+    if(primary_clock_snapshot)return;
+    lv_draw_buf_t *buffer=lv_snapshot_take(clock_scene,LV_COLOR_FORMAT_RGB565);
+    if(!buffer){
+        atomic_fetch_add(&clock_frame_cache_fail_count,1);
+        ESP_LOGW(TAG,"Clock scene snapshot unavailable; native rendering retained");
+        return;
+    }
+    lv_obj_t *image=lv_image_create(primary_pager_pages[0]);
+    if(!image){
+        lv_draw_buf_destroy(buffer);
+        atomic_fetch_add(&clock_frame_cache_fail_count,1);
+        return;
+    }
+    lv_image_set_src(image,buffer);
+    lv_obj_center(image);
+    lv_obj_remove_flag(image,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(image,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(image,LV_OBJ_FLAG_HIDDEN);
+    primary_clock_image=image;
+    primary_clock_snapshot=buffer;
+    atomic_fetch_add(&clock_frame_cache_count,1);
+#else
+    (void)current;
+#endif
+}
 static void primary_pager_commit(int index)
 {
     if(index<0)index=0;
     if(index>2)index=2;
+    primary_clock_snapshot_visible(false);
     primary_pager_current=index;
     primary_pager_origin=index;
     primary_pager_snap_to=index;
@@ -1099,47 +1180,105 @@ static void primary_pager_commit(int index)
     last_power_refresh_ms=0;
     clock_last_refresh=0;
     activity();
-    if(index==0)lf_clock_update();
+    if(index==0){
+        lf_clock_update();
+        if(!primary_clock_snapshot){
+            primary_clock_snapshot_pending=true;
+            primary_clock_snapshot_after_ms=now_ms()+320;
+        }
+    }
+}
+/* Start EXACTLY one ease-out snap. A 700ms watchdog handles scroll-end events
+   lost during expensive QSPI redraws, without killing the active finger drag. */
+static void primary_pager_start_snap(int target)
+{
+    if(!primary_pager)return;
+    if(target<0)target=0;
+    if(target>2)target=2;
+    primary_pager_snap_to=target;
+    primary_pager_snap_started_ms=now_ms();
+    primary_pager_snapping=true;
+    pager_scrolling=true;
+    primary_clock_snapshot_visible(true);
+    lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);
+}
+static int primary_pager_target(int32_t x)
+{
+    int target=(x+233)/466;
+    if(target<0)target=0;
+    if(target>2)target=2;
+    int32_t displacement=x-primary_pager_origin*466;
+    if(target==primary_pager_origin && abs(displacement)>=93)
+        target=primary_pager_origin+(displacement>0?1:-1);
+    if(target<0)target=0;
+    if(target>2)target=2;
+    return target;
+}
+static void primary_pager_watchdog(uint64_t current)
+{
+    if(!primary_pager||primary_pager_initializing||asleep)return;
+    /* Never seize page position while the finger remains on the glass. */
+    lv_indev_t *indev=lv_indev_get_next(NULL);
+    while(indev){
+        if(lv_indev_get_type(indev)==LV_INDEV_TYPE_POINTER &&
+           lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)return;
+        indev=lv_indev_get_next(indev);
+    }
+    int32_t x=abs(lv_obj_get_scroll_x(primary_pager));
+    if(primary_pager_snapping){
+        if(abs(x-primary_pager_snap_to*466)<=2){
+            primary_pager_commit(primary_pager_snap_to);
+            return;
+        }
+        if(current-primary_pager_snap_started_ms>700){
+            /* Force a complete, aligned page if panel transfers outrun the
+               LVGL animation. This is preferable to getting stranded midpage. */
+            int target=primary_pager_snap_to;
+            lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_OFF);
+            primary_pager_commit(target);
+            atomic_fetch_add(&pager_forced_snap_count,1);
+        }
+    }else if((pager_scrolling || abs(x-primary_pager_current*466)>4) &&
+             current-primary_pager_last_move_ms>110){
+        int target=primary_pager_target(x);
+        if(abs(x-target*466)<=2)primary_pager_commit(target);
+        else primary_pager_start_snap(target);
+    }
 }
 static void primary_pager_scroll_event(lv_event_t *e)
 {
     if(!primary_pager || primary_pager_initializing) return;
     const lv_event_code_t code=lv_event_get_code(e);
-    if(code==LV_EVENT_SCROLL_BEGIN) {
+    if(code==LV_EVENT_SCROLL_BEGIN){
         pager_scrolling=true;
+        primary_pager_last_move_ms=now_ms();
+        primary_clock_snapshot_visible(true);
         lv_indev_t *indev=lv_indev_active();
-        if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED) {
-            /* An interrupted snap belongs to the finger again. */
-            primary_pager_snapping=false;
+        if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED){
+            primary_pager_snapping=false; /* Finger interrupts existing snap. */
             primary_pager_origin=primary_pager_current;
         }
+        return;
+    }
+    if(code==LV_EVENT_SCROLL){
+        primary_pager_last_move_ms=now_ms();
         return;
     }
     if(code!=LV_EVENT_SCROLL_END)return;
     lv_indev_t *indev=lv_indev_active();
     if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)
-        return; /* Finger still owns the page; never fight its motion. */
+        return; /* Watchdog reconciles the released position if LVGL misses it. */
     const int32_t x=abs(lv_obj_get_scroll_x(primary_pager));
-    if(primary_pager_snapping) {
-        /* Always settle on the final scroll event. A missed exact-pixel
-           alignment must not strand the gesture in 'scrolling' forever. */
-        primary_pager_commit(primary_pager_snap_to);
+    if(primary_pager_snapping){
+        /* Some intermediate scroll-end callbacks fire during a new easing
+           animation. Commit only if the target is actually reached. */
+        if(abs(x-primary_pager_snap_to*466)<=2)
+            primary_pager_commit(primary_pager_snap_to);
         return;
     }
-    int target=(x+233)/466;
-    if(target<0)target=0;
-    if(target>2)target=2;
-    /* 20% deliberate drag changes page even if it covered less than half. */
-    const int32_t displacement=x-primary_pager_origin*466;
-    if(target==primary_pager_origin && abs(displacement)>=93)
-        target=primary_pager_origin+(displacement>0?1:-1);
-    if(target<0)target=0;
-    if(target>2)target=2;
-    primary_pager_snap_to=target;
-    if(abs(x-target*466)>2) {
-        primary_pager_snapping=true;
-        lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);
-    } else primary_pager_commit(target);
+    int target=primary_pager_target(x);
+    if(abs(x-target*466)<=2)primary_pager_commit(target);
+    else primary_pager_start_snap(target);
 }
 static lv_obj_t *primary_page_create(lv_obj_t *pager,int index)
 {
@@ -1161,6 +1300,7 @@ static void primary_pager_build_clock(void)
 {
     if(!primary_pager_pages[0])return;
     if(clock_scene && (clock_scene_stale||clock_scene_style!=prefs->clock_face)){
+        primary_clock_snapshot_reset();
         lf_clock_clear();
         lv_obj_delete(clock_scene);
         clock_scene=NULL;
@@ -1222,6 +1362,7 @@ static void primary_pager_create(int target_index)
     lv_obj_update_layout(primary_pager);
     lv_obj_scroll_to_x(primary_pager,target_index*466,LV_ANIM_OFF);
     primary_pager_initializing=false;
+    primary_pager_last_move_ms=now_ms();
     primary_pager_commit(target_index);
     clock_present_start_us=esp_timer_get_time();
 }
@@ -1238,10 +1379,7 @@ static void primary_pager_enter(int index)
         primary_pager_commit(index);
         return;
     }
-    primary_pager_snap_to=index;
-    primary_pager_snapping=true;
-    pager_scrolling=true;
-    lv_obj_scroll_to_x(primary_pager,index*466,LV_ANIM_ON);
+    primary_pager_start_snap(index);
     activity();
 }
 static void build_clock_now(void)
@@ -1635,6 +1773,7 @@ static void on_tick(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
+    if(primary_pager)primary_pager_watchdog(current);
     if (nav_transition_active) return; /* No UI activity until reveal completes. */
     /* Polling fallback for wake when the cover misses a press. A wake touch
        must never trigger navigation or click the previously shown buttons. */
@@ -1750,6 +1889,7 @@ static void on_tick(lv_timer_t *timer)
         sleep_deep();
     }
     if (asleep) return;
+    primary_clock_prepare_snapshot(current);
     if (page == 11 && !touch_held && current >= screen_animation_until_ms && current - weather_detail_refresh >= 4000) {
         weather_detail_refresh = current;
         lf_weather_view_t weather;
