@@ -1,7 +1,7 @@
 #pragma once
-/* Development-only validation: native three-page LVGL pager and refreshed Firmware Web UI. */
-#define LF_VERSION "0.8.5-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.5"
+/* Development-only validation: finger-tracking native pager; hardware test required. */
+#define LF_VERSION "0.8.6-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.6"
 /* Build gate: expanded slow scroll, Clock Studio preview, safe opt-in sleep and alpha OTA feed. */
 
-/* Recovery candidate: single-screen UI; unified logo/navigation spacing on all three Web UI pages. */
+/* Recovery candidate: restore native finger-following navigation and protect page opacity. */
