@@ -298,7 +298,13 @@ app_main=read('main/main.c')
 sdk=read('sdkconfig.defaults')
 require('esp_ptr_external_ram(color_data)' in bsp and
         'bsp_rotation_panel_draw_staged(' in bsp and
-        'BSP_LCD_DMA_STAGING_ROWS (4)' in bsp and
+        'BSP_LCD_DMA_STAGING_ROWS (24)' in bsp and
+        'BSP_LCD_DMA_STAGING_ROWS_FALLBACK (4)' in bsp and
+        'BSP_LCD_INTERNAL_RAM_HEADROOM (96 * 1024U)' in bsp and
+        'bsp_rotation_panel_prepare_staging(&rotation_panel)' in bsp and
+        'const int max_rows = ctx->staging_rows;' in bsp and
+        'ctx->rotation_buffer_pixels < max_pixels * 2' in bsp and
+        'CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1' in sdk and
         'ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE' in app_main and
         'ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC' not in app_main and
         'BSP_LCD_TE_GPIO' in display_header and
