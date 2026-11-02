@@ -362,6 +362,10 @@ static void worker(void *arg)
                     weather_code = code;
                     weather_numeric_valid = true;
                     view_cache = updated_view;
+                } else {
+                    /* Do not keep displaying a stale reading after errors. */
+                    weather_numeric_valid = false;
+                    view_cache.valid = false;
                 }
                 portEXIT_CRITICAL(&weather_mux);
             }
