@@ -4,3 +4,4 @@
    Saved settings and OTA partition layout are unchanged. */
 #define LF_VERSION "0.8.16-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.16"
+/* 0.8.16 AMOLED build checkpoint: source preflight passed. */
