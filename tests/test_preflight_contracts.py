@@ -143,10 +143,12 @@ require('static void pager_build(' not in ui and
         'lv_obj_set_style_translate_x(screen,' not in ui and
         'lv_anim_set_exec_cb(' not in ui,
         "Recovery must not restore the broken multi-screen pager or root animations")
-require('static void build_home(void)\n{\n    render_home();\n}' in ui and
-        'static void build_settings(void)\n{\n    render_settings();\n}' in ui and
-        'static void build_clock(void)\n{\n    render_clock();\n}' in ui,
-        "Main navigation must use direct single-screen renderers")
+require('static void build_home(void) { nav_schedule(build_home_now); }' in ui and
+        'static void build_settings(void) { nav_schedule(build_settings_now); }' in ui and
+        'static void build_clock(void) { nav_schedule(build_clock_now); }' in ui and
+        'if(target)target();' in ui and
+        'lv_async_call(nav_drain,NULL)' in ui,
+        "Every main-screen navigation must be deferred until after touch dispatch")
 require('lv_screen_load(screen);' in ui and
         'lv_obj_delete_async(old_screen);' in ui and
         'lv_obj_delete(old_screen)' not in ui and
@@ -225,3 +227,23 @@ require(bool(re.search(r'id=["\']clock-preview["\']|<canvas\b',
                        pages["studio"], flags=re.I)),
         "Clock Studio still lacks the agreed live preview")
 print(f"PASS: {tests_passed} source-only LyricFlash preflight assertions")
+
+# First-touch lockup regression: the active LVGL root must remain constant and
+# no scene rebuild may occur inside a CLICKED/PRESSED event handler.
+require('if (!screen) {' in ui and 'lv_obj_clean(screen);' in ui and
+        ui.count('screen=lv_obj_create(NULL);')==1 and
+        ui.count('lv_screen_load(screen);')==1 and
+        'static void nav_drain(void *arg)' in ui and
+        'lv_async_call(nav_drain,NULL);' in ui,
+        "Single-root screen lifetime and deferred navigation missing")
+for name in ('build_home','build_preview','build_settings','build_clock',
+             'build_weather_details','build_wifi','build_clock_settings'):
+    require(f'static void {name}(void) {{ nav_schedule({name}_now); }}' in ui,
+            f'Input callback can still rebuild {name} synchronously')
+on_wake=ui.split('static void on_wake(lv_event_t *e)\\n{',1)[1].split('static void sleep_deep',1)[0]
+sleep=ui.split('static void sleep_display(void)\\n{',1)[1].split('static void on_tick',1)[0]
+require('build_home();' not in on_wake and 'make_base();' not in sleep and
+        'sleep_overlay=lv_obj_create(screen);' in sleep and
+        'lv_obj_delete_async(cover);' in on_wake and
+        'if(asleep) {' in ui,
+        "Wake must preserve the current page, not destroy the touch target")
