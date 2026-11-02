@@ -211,7 +211,7 @@ require('id="refresh-builds"' in pages["firmware"] and 'loadBuilds(true)' in pag
         and 'OLDER THAN INSTALLED' in pages["firmware"] and ' — NEW' not in pages["firmware"],
         "Firmware picker must support refresh and correctly order versions")
 require('page = 3;\n    make_base();' not in ui and
-        'sleep_overlay=lv_obj_create(screen);' in ui and
+        'sleep_overlay=lv_obj_create(lv_screen_active());' in ui and
         'if(cover) lv_obj_delete_async(cover);' in ui and
         'lv_indev_get_state(wake_ptr)==LV_INDEV_STATE_PRESSED' in ui,
         "Display timeout must preserve the current page and accept a physical wake tap")
