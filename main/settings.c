@@ -64,7 +64,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     /* One-time migration: the OLD 35% rate becomes the NEW 100% cap.
        Convert old persisted rate to the closest new equivalent without
        overwriting NVS until the next regular save. */
-    if (schema < 6) {
+    if (schema > 0 && schema < 6) {
         uint8_t old_speed = s->scroll_speed;
         if (old_speed <= 35) {
             float prior_px = 18.0f + 1.3f * (float)old_speed;
