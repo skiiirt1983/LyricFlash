@@ -43,6 +43,10 @@ static const char *ota_result = "idle";
 static uint32_t ota_received;
 static uint32_t ota_total;
 static atomic_bool ota_busy = false;
+/* Explain OTA HTTPS failures to the browser without leaking Wi-Fi credentials. */
+static const char *ota_detail = "";
+static atomic_int ota_error_code = 0;
+static atomic_int ota_http_status = 0;
 /* URL is taken only from the official LyricFlash GitHub Pages beta asset
    or versioned Github Release assets belonging to this repository. */
 typedef struct {
@@ -157,7 +161,9 @@ bool lf_network_is_connected(void)
    as a user setting. NTP needs Wi-Fi but does not require a cloud account. */
 static void start_time_sync(void)
 {
-    setenv("TZ", "PST8PDT,M3.2.0,M11.1.0", 1);
+    /* British Columbia (most regions) has used permanent UTC-7 PCT since 2026.
+       POSIX TZ signs are reversed: PCT7 means UTC minus seven hours. */
+    setenv("TZ", "PCT7", 1);
     tzset();
     if (time_sync_started) return;
     esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
@@ -499,6 +505,9 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     }
     cJSON_AddStringToObject(root, "microphone", "disabled (not initialized)");
     cJSON_AddStringToObject(root, "ota_result", ota_result);
+    cJSON_AddStringToObject(root, "ota_detail", ota_detail);
+    cJSON_AddNumberToObject(root, "ota_error_code", atomic_load(&ota_error_code));
+    cJSON_AddNumberToObject(root, "ota_http_status", atomic_load(&ota_http_status));
     cJSON_AddNumberToObject(root, "ota_received", ota_received);
     cJSON_AddNumberToObject(root, "ota_total", ota_total);
     cJSON_AddNumberToObject(root, "max_ui_tick_gap_ms", lf_ui_max_tick_gap_ms());
@@ -530,6 +539,9 @@ static esp_err_t handle_info(httpd_req_t *req)
     cJSON_AddStringToObject(root, "mode", in_ap ? "ap" : "station");
     cJSON_AddStringToObject(root, "address", address);
     cJSON_AddStringToObject(root, "ota_result", ota_result);
+    cJSON_AddStringToObject(root, "ota_detail", ota_detail);
+    cJSON_AddNumberToObject(root, "ota_error_code", atomic_load(&ota_error_code));
+    cJSON_AddNumberToObject(root, "ota_http_status", atomic_load(&ota_http_status));
     cJSON_AddNumberToObject(root, "ota_received", ota_received);
     cJSON_AddNumberToObject(root, "ota_total", ota_total);
     cJSON_AddStringToObject(root, "connected_ssid", ssid);
@@ -704,18 +716,57 @@ static bool allowed_github_ota_url(const char *url)
     return strstr(filename,"ota") || strstr(filename,"OTA");
 }
 
+/* HTTPS OTA can redirect GitHub release URLs to release-assets hosts.
+   Record the final HTTP status; never disable TLS peer verification. */
+static esp_err_t ota_http_event(esp_http_client_event_t *event)
+{
+    if (event && event->event_id == HTTP_EVENT_ON_HEADER && event->client) {
+        int status=esp_http_client_get_status_code(event->client);
+        if(status>0)atomic_store(&ota_http_status,status);
+    }
+    return ESP_OK;
+}
+
 static void github_ota_worker(void *arg)
 {
     lf_github_request_t *job=(lf_github_request_t *)arg;
     ota_result="connecting";
+    ota_detail="";
+    atomic_store(&ota_error_code,0);
+    atomic_store(&ota_http_status,0);
+    /* Setup AP is local-only. Do not present its lack of Internet as a TLS error. */
+    if (!lf_network_is_connected()) {
+        ota_result="no_internet";
+        ota_detail="Connect LyricFlash to a Wi-Fi network with Internet access.";
+        goto done;
+    }
+    /* HTTPS certificate dates require real UTC, not the local PCT display time. */
+    time_t utc=time(NULL);
+    struct tm calendar={0};
+    gmtime_r(&utc,&calendar);
+    if(calendar.tm_year+1900<2025) {
+        if(!time_sync_started)start_time_sync();
+        ota_result="syncing_time";
+        (void)esp_netif_sntp_sync_wait(pdMS_TO_TICKS(18000));
+        utc=time(NULL);
+        gmtime_r(&utc,&calendar);
+        if(calendar.tm_year+1900<2025){
+            ota_result="time_unsynced";
+            ota_detail="Device clock has not synchronized via NTP; HTTPS certificates cannot be validated.";
+            goto done;
+        }
+    }
+    ota_result="connecting";
     esp_http_client_config_t config = {
         .url=job->url,
         .crt_bundle_attach=esp_crt_bundle_attach,
-        .timeout_ms=15000,
+        .timeout_ms=30000,
         .keep_alive_enable=false,
-        .max_redirection_count=5,
+        .max_redirection_count=10,
         .disable_auto_redirect=false,
-        .buffer_size=2048
+        .event_handler=ota_http_event,
+        .user_agent="LyricFlash-OTA/0.8",
+        .buffer_size=4096
     };
     esp_https_ota_config_t ota_config={.http_config=&config};
     esp_https_ota_handle_t handle=NULL;
@@ -723,6 +774,8 @@ static void github_ota_worker(void *arg)
     if(err!=ESP_OK) {
         ESP_LOGE(TAG,"GitHub OTA connection failed: %s",esp_err_to_name(err));
         ota_result="download_failed";
+        ota_detail="HTTPS connection failed. Check network access, GitHub redirects and TLS trust.";
+        atomic_store(&ota_error_code,(int)err);
         goto done;
     }
     esp_app_desc_t descriptor={0};
@@ -730,6 +783,8 @@ static void github_ota_worker(void *arg)
     if(err!=ESP_OK || strcmp(descriptor.project_name,"lyricflash")!=0 ||
        strcmp(descriptor.version,job->version)!=0) {
         ota_result="bad_version";
+        ota_detail="Downloaded image is not the selected LyricFlash version.";
+        atomic_store(&ota_error_code,(int)err);
         ESP_LOGE(TAG,"GitHub OTA app descriptor differs from selected LyricFlash version");
         esp_https_ota_abort(handle);
         goto done;
@@ -738,6 +793,7 @@ static void github_ota_worker(void *arg)
     const esp_partition_t *slot=esp_ota_get_next_update_partition(NULL);
     if(!slot || (ota_total && ota_total>slot->size)) {
         ota_result="bad_size";
+        ota_detail="OTA image is larger than the available firmware partition.";
         esp_https_ota_abort(handle);
         goto done;
     }
@@ -748,6 +804,8 @@ static void github_ota_worker(void *arg)
     }
     if(err!=ESP_OK || !esp_https_ota_is_complete_data_received(handle)) {
         ota_result="download_failed";
+        ota_detail="HTTPS download interrupted or incomplete.";
+        atomic_store(&ota_error_code,(int)err);
         ESP_LOGE(TAG,"GitHub OTA transfer failed: %s",esp_err_to_name(err));
         esp_https_ota_abort(handle);
         goto done;
@@ -756,10 +814,13 @@ static void github_ota_worker(void *arg)
     err=esp_https_ota_finish(handle);
     if(err!=ESP_OK) {
         ota_result="checksum_failed";
+        ota_detail="Downloaded OTA failed ESP-IDF image verification.";
+        atomic_store(&ota_error_code,(int)err);
         ESP_LOGE(TAG,"GitHub OTA validation failed: %s",esp_err_to_name(err));
         goto done;
     }
     ota_result="verified_rebooting";
+    ota_detail="Firmware verified; rebooting.";
     xTaskCreate(reboot_task,"lf_reboot",2048,NULL,3,NULL);
 done:
     free(job);
@@ -797,7 +858,8 @@ static esp_err_t handle_github_install(httpd_req_t *req)
         httpd_resp_set_status(req,"409 Conflict");
         return httpd_resp_sendstr(req,"Another firmware update is active");
     }
-    ota_received=0;ota_total=0;ota_result="queued";
+    ota_received=0;ota_total=0;ota_result="queued";ota_detail="";
+    atomic_store(&ota_error_code,0);atomic_store(&ota_http_status,0);
     if(xTaskCreate(github_ota_worker,"lf_github_ota",12288,job,tskIDLE_PRIORITY+2,NULL)!=pdPASS){
         atomic_store(&ota_busy,false);free(job);ota_result="download_failed";
         return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot start OTA download");
