@@ -6,3 +6,4 @@
    Hardware rendering/gesture regression tests required. */
 #define LF_VERSION "0.8.20-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.20"
+/* 0.8.20 transition compile checkpoint: source preflight and diff audit passed. */
