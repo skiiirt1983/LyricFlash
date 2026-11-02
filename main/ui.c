@@ -211,6 +211,7 @@ static bool gesture_origin_valid;
 static bool touch_held;
 static uint64_t touch_pressed_at_ms;
 static int pending_swipe_page = -1;
+static lv_screen_load_anim_t pending_swipe_direction = LV_SCR_LOAD_ANIM_NONE;
 /* No dual-screen animation: 0.8.3 left old/new UI trees overlapping
    during navigation and made the touch target inconsistent. */
 static uint64_t screen_animation_until_ms;
@@ -236,11 +237,41 @@ static bool is_swipe_page(void)
            page == 13 || page == 14 || page == 15;
 }
 
+/* Only one active LVGL screen exists during navigation. Gesture motion
+   translates that screen; the new page eases into position AFTER release.
+   Never retain a pair of large clock screen trees during animation. */
+static void nav_translate_x(void *target, int32_t offset)
+{
+    lv_obj_set_style_translate_x((lv_obj_t *)target,offset,0);
+}
+static void nav_translate_y(void *target, int32_t offset)
+{
+    lv_obj_set_style_translate_y((lv_obj_t *)target,offset,0);
+}
+static void nav_settle(lv_screen_load_anim_t direction)
+{
+    if(!screen || direction==LV_SCR_LOAD_ANIM_NONE)return;
+    bool vertical=direction==LV_SCR_LOAD_ANIM_OVER_TOP ||
+                  direction==LV_SCR_LOAD_ANIM_OVER_BOTTOM;
+    int start=(direction==LV_SCR_LOAD_ANIM_OVER_LEFT ||
+               direction==LV_SCR_LOAD_ANIM_OVER_TOP)?86:-86;
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a,screen);
+    lv_anim_set_values(&a,start,0);
+    lv_anim_set_duration(&a,175);
+    lv_anim_set_path_cb(&a,lv_anim_path_ease_out);
+    lv_anim_set_exec_cb(&a,vertical?nav_translate_y:nav_translate_x);
+    lv_anim_start(&a);
+    screen_animation_until_ms=now_ms()+180;
+}
 static void commit_swipe(void *arg)
 {
     (void)arg;
     const int target = pending_swipe_page;
+    const lv_screen_load_anim_t direction = pending_swipe_direction;
     pending_swipe_page = -1;
+    pending_swipe_direction = LV_SCR_LOAD_ANIM_NONE;
     switch(target) {
     case 0: build_home(); break;
     case 2: build_settings(); break;
@@ -259,6 +290,7 @@ static void commit_swipe(void *arg)
     case 15: build_connection_help(); break;
     default: break;
     }
+    if(target >= 0) nav_settle(direction);
 }
 static void queue_swipe(int target, lv_screen_load_anim_t animation)
 {
@@ -266,7 +298,7 @@ static void queue_swipe(int target, lv_screen_load_anim_t animation)
     if (clock_settings_popup || pending_swipe_page >= 0 ||
         current < next_swipe_allowed_ms) return;
     pending_swipe_page = target;
-    (void)animation; /* Keep direction metadata without animating screens. */
+    pending_swipe_direction = animation;
     next_swipe_allowed_ms = current + 250;
     lv_async_call(commit_swipe, NULL);
 }
@@ -341,6 +373,21 @@ static void observe_touch_position(void)
         swipe_intent(dx < 0 ? LV_DIR_LEFT : LV_DIR_RIGHT);
     else
         swipe_intent(dy < 0 ? LV_DIR_TOP : LV_DIR_BOTTOM);
+    if (swipe_candidate_page >= 0 && screen) {
+        /* Finger-tracked movement limited to a lightweight 96px parallax;
+           no second heavy LVGL screen is constructed during a gesture. */
+        int amount=abs(dx)>abs(dy)?dx:dy;
+        amount=amount/2;
+        if(amount>96)amount=96;
+        if(amount< -96)amount= -96;
+        if(abs(dx)>abs(dy)){
+            lv_obj_set_style_translate_x(screen,amount,0);
+            lv_obj_set_style_translate_y(screen,0,0);
+        }else{
+            lv_obj_set_style_translate_y(screen,amount,0);
+            lv_obj_set_style_translate_x(screen,0,0);
+        }
+    }
 }
 
 static void finish_touch(void)
@@ -355,6 +402,12 @@ static void finish_touch(void)
     touch_pressed_at_ms=0;
     swipe_candidate_page=-1;
     swipe_candidate_animation=LV_SCR_LOAD_ANIM_NONE;
+    if (screen) {
+        /* Clear the old screen translation before swapping; the incoming
+           screen animates independently with a fresh single-screen tree. */
+        lv_obj_set_style_translate_x(screen,0,0);
+        lv_obj_set_style_translate_y(screen,0,0);
+    }
     if (target >= 0) queue_swipe(target, animation);
     activity();
 }
@@ -483,7 +536,11 @@ static void make_base(void)
     /* Replace active screen atomically. Defer old-screen destruction until
        LVGL exits its event/timer dispatch. Never display two LVGL screens. */
     lv_screen_load(screen);
-    if (old_screen != screen) lv_obj_delete_async(old_screen);
+    if (old_screen != screen) {
+        lv_anim_delete(old_screen,nav_translate_x);
+        lv_anim_delete(old_screen,nav_translate_y);
+        lv_obj_delete_async(old_screen);
+    }
     screen_animation_until_ms = 0;
     touch_held=false;
     gesture_origin_valid=false;
