@@ -21,7 +21,9 @@ static const char lf_basic_settings_html[] =
 "</style></head>\n"
 "<body><main><a href=\"/\">← Device home</a><h1>CLOCK STUDIO</h1>\n"
 "<p>Control all clock options using your computer. Choose a face, configure weather, and customize Basic. Hold a clock face for two seconds to confirm opening on-device settings.</p>\n"
-"<section><h2>Clock face</h2><div class=\"grid\">\n"\n"<label>Face<select id=\"clock_face\"><option value=\"0\">Rolex Diver</option><option value=\"1\">Midnight Digital</option><option value=\"2\">Classic Analog</option><option value=\"3\">Retro Green LCD</option><option value=\"4\">Sundial</option><option value=\"5\">Basic Custom</option></select></label>\n"\n"</div></section><section><h2>Basic Custom face</h2><p class=\"muted\">Saved even when another face is selected.</p><div class=\"grid\">\n"
+"<section><h2>Clock face</h2><div class=\"grid\">\n"
+"<label>Face<select id=\"clock_face\"><option value=\"0\">Rolex Diver</option><option value=\"1\">Midnight Digital</option><option value=\"2\">Classic Analog</option><option value=\"3\">Retro Green LCD</option><option value=\"4\">Sundial</option><option value=\"5\">Basic Custom</option></select></label>\n"
+"</div></section><section><h2>Basic Custom face</h2><p class=\"muted\">Saved even when another face is selected.</p><div class=\"grid\">\n"
 "<label>Font preset<select id=\"font_style\"><option value=\"0\">Preset 1</option><option value=\"1\">Preset 2</option><option value=\"2\">Preset 3</option><option value=\"3\">Preset 4</option><option value=\"4\">Preset 5</option></select></label>\n"
 "<label>Time size (%)<input id=\"font_size\" type=\"number\" min=\"0\" max=\"100\" step=\"1\"></label>\n"
 "<label>Ring style<select id=\"ring_mode\"><option value=\"0\">Solid</option><option value=\"1\">Two-colour gradient</option><option value=\"2\">Three-colour gradient</option></select></label>\n"
@@ -98,4 +100,5 @@ static const char lf_basic_settings_html[] =
 "document.getElementById('refresh').addEventListener('click',diagnostics);\n"
 "load();diagnostics();\n"
 "</script></body></html>\n"
-"\n";
+"
+";
