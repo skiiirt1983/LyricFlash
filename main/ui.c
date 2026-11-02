@@ -332,8 +332,15 @@ static void swipe_intent(lv_dir_t direction)
 {
     if (clock_settings_popup || swipe_candidate_page >= 0) return;
     /* The native pager owns horizontal gestures on the primary pages. */
-    if (pager_scroll && (direction == LV_DIR_LEFT || direction == LV_DIR_RIGHT))
+    if (pager_scroll && (direction == LV_DIR_LEFT || direction == LV_DIR_RIGHT)) {
+        /* Settings is the right edge. Preserve the legacy opposite-direction
+           escape swipe, even though the natural pager direction is right. */
+        if (page==2 && direction==LV_DIR_LEFT) {
+            swipe_candidate_page=0;
+            swipe_candidate_animation=LV_SCR_LOAD_ANIM_OVER_LEFT;
+        }
         return;
+    }
     if (page == 0) {
         if (direction == LV_DIR_LEFT) {
             swipe_candidate_page = 2;
@@ -400,6 +407,7 @@ static void observe_touch_position(void)
     if (abs(dx) > abs(dy)) {
         if (pager_scroll) {
             touch_pressed_at_ms=0; /* A pager drag cannot open the clock hold dialog. */
+            if(page==2 && dx<0)swipe_intent(LV_DIR_LEFT);
             return; /* LVGL scrolls adjacent pages together with the finger. */
         }
         swipe_intent(dx < 0 ? LV_DIR_LEFT : LV_DIR_RIGHT);

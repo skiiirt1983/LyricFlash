@@ -139,6 +139,8 @@ require("lv_obj_set_flex_flow(p,LV_FLEX_FLOW_ROW);" in ui and
         "LF_PAGER_WIDTH/5" in ui and
         "pager_build_target=pager_clock;" in ui,
         "PrintSphere-style native pager for main screens is missing")
+require("if(page==2 && dx<0)swipe_intent(LV_DIR_LEFT);" in ui,
+        "Settings must also support legacy left-swipe escape")
 require("pager_clock=lv_obj_create(p);\n    pager_home=lv_obj_create(p);\n    pager_settings=lv_obj_create(p);" in ui
         and "return index==0 ? pager_clock : index==1 ? pager_home : pager_settings;" in ui
         and "page=index==0 ? 6 : index==1 ? 0 : 2;" in ui,
