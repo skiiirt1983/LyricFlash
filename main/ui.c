@@ -1973,6 +1973,9 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_style_text_font(timed_sync_value,&lv_font_montserrat_16,0);
     lv_obj_set_style_text_color(timed_sync_value,lv_color_hex(0xFFFFFF),0);
     lv_obj_align(timed_sync_value,LV_ALIGN_CENTER,0,-47);
+    /* Optional half-second taps for finer alignment while a song plays. */
+    button(timed_controls,"-0.5s",62,32,-145,-43,0xA6BED1,timed_adjust,(void *)(intptr_t)-1);
+    button(timed_controls,"+0.5s",62,32,145,-43,0xA6BED1,timed_adjust,(void *)(intptr_t)1);
     lv_obj_t *rate_label=lv_label_create(timed_controls);
     lv_label_set_text(rate_label,"SPEED  - slower      + faster");
     lv_obj_set_style_text_font(rate_label,&lv_font_montserrat_16,0);
