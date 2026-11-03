@@ -809,6 +809,16 @@ static lv_obj_t *home_caption(lv_obj_t *parent,const char *value,int y,
     lv_obj_add_flag(item,LV_OBJ_FLAG_GESTURE_BUBBLE);
     return item;
 }
+static void auto_open_lyrics_deferred(void *unused)
+{
+    (void)unused;
+    lf_recog_snapshot_t latest={0};
+    lf_recog_snapshot(&latest);
+    if(latest.state==LF_RECOG_MATCH && latest.attempts==auto_open_attempt &&
+       latest.lyric_lines>0 && strcmp(latest.lyrics_state,"synced")==0 &&
+       page==0 && !touch_held && !asleep)
+        build_preview();
+}
 static void home_refresh(uint64_t current)
 {
     if(!home_scan_status||!home_song_title||!home_song_artist||
@@ -910,8 +920,9 @@ static void home_refresh(uint64_t current)
     home_last_refresh_ms=current;
     if(song.state==LF_RECOG_MATCH && song.lyric_lines>0 &&
        strcmp(song.lyrics_state,"synced")==0 && song.attempts!=auto_open_attempt){
+        /* Defer rebuilding the LVGL scene until after the current UI tick. */
         auto_open_attempt=song.attempts;
-        build_preview();
+        lv_async_call(auto_open_lyrics_deferred,NULL);
     }
 }
 static void on_home_scan(lv_event_t *e)
