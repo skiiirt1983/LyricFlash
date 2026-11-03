@@ -5,6 +5,7 @@
 #include "diagnostics.h"
 #include "mic_probe.h"
 #include "mic_pcm.h"
+#include "recognition.h"
 #include "version.h"
 #include "web_basic_html.h"
 #include "web_device_html.h"
@@ -503,6 +504,83 @@ static esp_err_t handle_mic_check(httpd_req_t *req)
     return send_json(req,reply);
 }
 
+/* Manual AudD song recognition. The local GET never reveals the stored key.
+ * Each mutation requires an explicit custom header to defeat cross-site POSTs. */
+static bool manual_audio_header(httpd_req_t *req)
+{
+    char marker[8]={0};
+    return httpd_req_get_hdr_value_str(req,"X-LyricFlash-Manual-Test",
+        marker,sizeof marker)==ESP_OK && strcmp(marker,"1")==0;
+}
+static esp_err_t handle_song_status(httpd_req_t *req)
+{
+    lf_recog_snapshot_t s={0};
+    lf_recog_snapshot(&s);
+    cJSON *reply=cJSON_CreateObject();
+    if(!reply)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddStringToObject(reply,"state",lf_recog_state_name(s.state));
+    cJSON_AddBoolToObject(reply,"token_configured",lf_recog_has_token());
+    cJSON_AddStringToObject(reply,"message",s.message);
+    cJSON_AddStringToObject(reply,"title",s.title);
+    cJSON_AddStringToObject(reply,"artist",s.artist);
+    cJSON_AddNumberToObject(reply,"captured_frames",s.captured_frames);
+    cJSON_AddNumberToObject(reply,"capture_seconds",s.capture_seconds);
+    cJSON_AddNumberToObject(reply,"attempts",s.attempts);
+    /* Only a status code, never credentials, audio, file or raw response. */
+    return send_json(req,reply);
+}
+static esp_err_t handle_song_token(httpd_req_t *req)
+{
+    if(!manual_audio_header(req))
+        return httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Manual action required");
+    if(req->content_len<12||req->content_len>300)
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid token request");
+    char body[301]={0};
+    int received=0;
+    while(received<req->content_len){
+        int n=httpd_req_recv(req,body+received,req->content_len-received);
+        if(n<=0){memset(body,0,sizeof body);return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Incomplete request");}
+        received+=n;
+    }
+    cJSON *root=cJSON_Parse(body);
+    memset(body,0,sizeof body);
+    const cJSON *token=root?cJSON_GetObjectItemCaseSensitive(root,"token"):NULL;
+    const bool valid=cJSON_IsString(token)&&token->valuestring;
+    bool saved=false;
+    if(valid) saved=token->valuestring[0]?
+           lf_recog_save_token(token->valuestring):lf_recog_clear_token();
+    cJSON_Delete(root);
+    if(!valid||!saved)
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,
+                                    "Could not save token; check its format or active scan");
+    cJSON *reply=cJSON_CreateObject();
+    if(!reply)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddBoolToObject(reply,"configured",lf_recog_has_token());
+    return send_json(req,reply);
+}
+static esp_err_t handle_song_start(httpd_req_t *req)
+{
+    if(!manual_audio_header(req))
+        return httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Manual action required");
+    if(!lf_recog_has_token())
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Configure an AudD token first");
+    if(!lf_network_is_connected())
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Connect to Wi-Fi first");
+    if(!lf_recog_start()){
+        httpd_resp_set_status(req,"409 Conflict");
+        return httpd_resp_sendstr(req,"Microphone already in use or scan unavailable");
+    }
+    httpd_resp_set_status(req,"202 Accepted");
+    return httpd_resp_sendstr(req,"Manual song recognition started");
+}
+static esp_err_t handle_song_stop(httpd_req_t *req)
+{
+    if(!manual_audio_header(req))
+        return httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Manual action required");
+    lf_recog_stop();
+    return httpd_resp_sendstr(req,"Stop requested");
+}
+
 /* On-demand 3s audio amplitude probe; never sends raw PCM to the browser. */
 static esp_err_t handle_mic_pcm_status(httpd_req_t *req)
 {
@@ -545,6 +623,10 @@ static esp_err_t handle_mic_pcm_status(httpd_req_t *req)
 }
 static esp_err_t handle_mic_pcm_start(httpd_req_t *req)
 {
+    if(lf_recog_busy()){
+        httpd_resp_set_status(req,"409 Conflict");
+        return httpd_resp_sendstr(req,"Song recognition is already using the microphones");
+    }
     /* A non-simple custom header makes cross-origin browser POSTs fail their
        preflight; an unrelated website must never trigger microphone input. */
     char manual[8]={0};
@@ -1038,7 +1120,7 @@ static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
-    cfg.max_uri_handlers=18; /* Web settings/telemetry add routes beyond IDF default. */
+    cfg.max_uri_handlers=22; /* Four additional manual song-recognition routes. */
     cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
@@ -1056,6 +1138,10 @@ static bool serve(void)
         {.uri="/api/hardware/mic-test",.method=HTTP_GET,.handler=handle_mic_pcm_status},
         {.uri="/api/hardware/mic-test/start",.method=HTTP_POST,.handler=handle_mic_pcm_start},
         {.uri="/api/hardware/mic-test/stop",.method=HTTP_POST,.handler=handle_mic_pcm_stop},
+        {.uri="/api/recognize",.method=HTTP_GET,.handler=handle_song_status},
+        {.uri="/api/recognize/token",.method=HTTP_POST,.handler=handle_song_token},
+        {.uri="/api/recognize/start",.method=HTTP_POST,.handler=handle_song_start},
+        {.uri="/api/recognize/stop",.method=HTTP_POST,.handler=handle_song_stop},
         {.uri="/api/device",.method=HTTP_GET,.handler=handle_device},
         {.uri="/wifi",.method=HTTP_POST,.handler=handle_wifi},
         {.uri="/api/wifi-scan",.method=HTTP_GET,.handler=handle_scan},

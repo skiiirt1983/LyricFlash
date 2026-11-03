@@ -499,7 +499,7 @@ require('"/api/hardware/mic-test"' in network and
         'X-LyricFlash-Manual-Test' in network and
         'X-LyricFlash-Manual-Test' in web and
         'audio_uploaded' in network and 'audio_saved' in network and
-        'max_uri_handlers=18' in network,
+        'max_uri_handlers=22' in network,
         "0.8.31 manual-only Web UI test and no raw audio exposure")
 
 # 0.8.32: frame the physical ES7210 correctly; never touch the display path.
@@ -581,3 +581,26 @@ require('mic1_rail_bursts' in network and
         'mic1_rms_below_rail' in web and
         'both_near_rail_frames' in web,
         "0.8.36 microphone rail diagnostics must reach the device Web UI")
+
+# Alpha 0.8.37: music ID must be a deliberate, bounded, protected operation.
+song=read("main/recognition.c")
+scan=read("main/recognition_audio.c")
+require('LF_SCAN_SECONDS' in song and 'LF_SCAN_TDM_FRAMES' in song and
+        'LF_SCAN_RATE 24000U' in read("main/recognition_audio.h") and
+        'lf_scan_tdm_to_stereo' in song and 'esp_codec_dev_close(codec)' in song and
+        'lf_recog_stop(void)' in song and 'LF_RECOG_TOKEN_NS' in song,
+        "0.8.37 bounded/manual song recognition with NVS token")
+require('https://api.audd.io/' in song and
+        'esp_crt_bundle_attach' in song and
+        'clear_secret(wav,LF_SCAN_WAV_BYTES)' in song and
+        'lf_recog_busy()' in network and
+        '/api/recognize/start' in network and
+        '/api/recognize/token' in network and
+        "X-LyricFlash-Manual-Test" in network,
+        "0.8.37 private HTTPS-only, manually authorized audio upload")
+require('id="song-token"' in pages["settings"] and
+        'id="song-start"' in pages["settings"] and
+        'id="song-stop"' in pages["settings"] and
+        'api/recognize/start' in pages["settings"] and
+        'api/recognize/token' in pages["settings"],
+        "0.8.37 one-click manual recognition Web UI")

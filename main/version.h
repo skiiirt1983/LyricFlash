@@ -1,12 +1,14 @@
 #pragma once
-/* Alpha 0.8.36: collect microphone near-rail burst patterns WITHOUT changing
- * the working Waveshare 24kHz four-slot TDM mode or 24dB input gain.
- * Record contiguous near-rail burst count/max duration for MIC1 and MIC2,
- * simultaneous rail frames, half-scale sample counts, and RMS excluding
- * near-rail values. Preserve manual three-second capture and privacy:
- * no raw audio saved, uploaded, or streamed. These metrics diagnose but
- * do NOT yet classify the cause of sporadic full-scale samples.
- * QSPI/LVGL clock/touch, OTA three-row Current reinstall, and NVS unchanged.
- * Physical audio check required before capture can be considered clean. */
-#define LF_VERSION "0.8.36-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.36"
+/* Alpha 0.8.37: First explicit manual AudD song-recognition prototype.
+ * Add an opt-in token in NVS (never returned or logged), Web UI Start/Stop,
+ * bounded 10-second 24kHz 16-bit MIC1/MIC2 stereo WAV capture in PSRAM,
+ * HTTPS-only AudD multipart identification, and status/title/artist response.
+ * Recording is never stored in flash or exposed on a local HTTP endpoint;
+ * capture and external transmission require each manual scan confirmation.
+ * This is deliberately browser-first. Device-screen song ID and synced lyrics
+ * will be integrated only after the recognition pipeline is field-verified.
+ * MIC 24kHz/4slot/24dB, LVGL/QSPI, touch, battery, OTA/NVS retained.
+ * Upload uses AudD quota; no automatic background recording or retry.
+ * Physical external service validation required. */
+#define LF_VERSION "0.8.37-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.37"
