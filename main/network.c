@@ -518,7 +518,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         number_in_range(root, "clock_face", 0, 5, &face) &&
         boolean_value(root, "weather_enabled", &weather_enabled) &&
         number_in_range(root, "font_style", 0, 19, &font_style) &&
-        number_in_range(root, "font_size", 0, 100, &font_size) &&
+        number_in_range(root, "font_size", 0, 200, &font_size) &&
         number_in_range(root, "ring_mode", 0, 2, &ring_mode) &&
         number_in_range(root,"basic_time_x",-100,100,&element[0]) &&
         number_in_range(root,"basic_time_y",-150,150,&element[1]) &&
@@ -528,9 +528,9 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         number_in_range(root,"basic_date_y",-180,180,&element[5]) &&
         number_in_range(root,"basic_weather_x",-180,180,&element[6]) &&
         number_in_range(root,"basic_weather_y",-180,180,&element[7]) &&
-        number_in_range(root,"basic_battery_size",0,100,&element[8]) &&
-        number_in_range(root,"basic_date_size",0,100,&element[9]) &&
-        number_in_range(root,"basic_weather_size",0,100,&element[10]) &&
+        number_in_range(root,"basic_battery_size",0,200,&element[8]) &&
+        number_in_range(root,"basic_date_size",0,200,&element[9]) &&
+        number_in_range(root,"basic_weather_size",0,200,&element[10]) &&
         boolean_value(root, "show_date", &show_date) &&
         boolean_value(root, "weather", &basic_weather) &&
         number_in_range(root, "background", 0, 0xFFFFFF, &bg) &&
