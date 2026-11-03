@@ -18,8 +18,16 @@ Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` an
 
 - **User priority:** replace long GitHub firmware release list with a maximum of three items relative to the version installed on-device: **Old** (closest strictly older published version, disabled), **Current** (device-reported installed version, disabled) and **New** (newest strictly newer validated published OTA, only actionable option). If one category is absent, omit it. Never offer a fourth placeholder entry.
 - **Failure safety:** if installed version cannot be read or parsed, display Current/Unknown only and disable OTA installation. Unknown/prerelease version formats fail closed. Deduplicate identical versions across alpha prereleases, beta catalog and manifest while preserving verified direct GitHub asset preference. Preserve HTTPS remote OTA, local OTA upload, update progress and errors.
+- **Preflight PASS:** repository source/browser, three-choice picker runtime, OTA release-contract, native tests, and packaging checks passed on commit d0c6fb2882d8a7870169897919b1a7d4038f23f1 before compiling. Full build gated behind one `[compile-once]` documentation-only follow-up.
 - **Tests:** host-side firmware-browser runtime tests cover Old/Current only, all 3 categories, newest installed, no older available, malformed installed version, duplicate releases, empty/unreachable catalog, refresh, explicit New click, no downgrade, and preferring a verified direct GitHub OTA image. Physical firmware-page acceptance is required after full build.
 - **No audio or display changes:** 0.8.33 dual MIC1/MIC2 24kHz four-slot TDM/24dB gain, per-mic RMS and near-rail count; QSPI/LVGL verified display; settings storage remain unchanged. Rare extreme PCM samples still need a future targeted test. Do not mix additional microphone or UI changes into this build.
+
+### Alpha 0.8.33 physical mic results (recorded from device)
+
+- Quiet: 142,336 selected samples, combined mean/peak 5/139. MIC1 mean/RMS/peak 5/9/139, near-rail 0; MIC2 5/6/51, near-rail 0. Duration 3,004 ms.
+- Music (medium): 141,568 selected samples, combined mean/peak 86/32768. MIC1 mean/RMS/peak 105/1273/32767, 75 near-rail (0.106%). MIC2 66/634/32768, 20 near-rail (0.028%). Duration 3,011 ms.
+- Voice at 15–20cm: 142,336 selected samples, combined mean/peak 163/32768. MIC1 161/698/32767, 20 near-rail (0.028%); MIC2 166/652/32768, 19 near-rail (0.027%). Duration 3,031 ms.
+- Two microphones pass environmental sound response; extreme near-rail samples are rare but significantly affect RMS. Underlying spike cause is unconfirmed and warrants a targeted future test. Do not change gain or claim clean audio yet.
 
 ## Previous milestone: Alpha 0.8.33 — measure RMS and near-rail artifacts
 
