@@ -23,6 +23,7 @@
 #include "esp_lcd_touch_cst9217.h"
 
 #include "esp_codec_dev_defaults.h"
+#include "driver/i2s_tdm.h"
 #include "bsp/esp32_s3_touch_amoled_1_75.h"
 #include "bsp_err_check.h"
 #include "bsp/display.h"
@@ -574,6 +575,69 @@ err:
     return ret;
 }
 
+/* Board-verified ES7210 voice receive mode: 24 kHz, four 16-bit TDM
+ * slots ordered MIC1, MIC3(reference), MIC2, MIC4. Keep TX on standard I2S.
+ * Waveshare board reference uses the same clocks, pins and TDM timing.
+ * This is audio-only. The known-good QSPI/LVGL display path is unchanged. */
+esp_err_t bsp_audio_init_voice_24k(void)
+{
+    if (i2s_data_if != NULL) return ESP_OK;
+    if (i2s_tx_chan || i2s_rx_chan) return ESP_ERR_INVALID_STATE;
+    esp_err_t ret = ESP_OK;
+    bool tx_enabled = false, rx_enabled = false;
+    i2s_chan_config_t channels = I2S_CHANNEL_DEFAULT_CONFIG(CONFIG_BSP_I2S_NUM, I2S_ROLE_MASTER);
+    channels.auto_clear = true;
+    ret = i2s_new_channel(&channels, &i2s_tx_chan, &i2s_rx_chan);
+    if (ret != ESP_OK) goto fail;
+
+    i2s_std_config_t tx_cfg = {
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(24000),
+        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(
+            I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+        .gpio_cfg = BSP_I2S_GPIO_CFG,
+    };
+    i2s_tdm_config_t rx_cfg = {
+        .clk_cfg = I2S_TDM_CLK_DEFAULT_CONFIG(24000),
+        .slot_cfg = I2S_TDM_PHILIP_SLOT_DEFAULT_CONFIG(
+            I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO,
+            I2S_TDM_SLOT0 | I2S_TDM_SLOT1 | I2S_TDM_SLOT2 | I2S_TDM_SLOT3),
+        .gpio_cfg = BSP_I2S_GPIO_CFG,
+    };
+    tx_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
+    tx_cfg.gpio_cfg.din = I2S_GPIO_UNUSED;
+    rx_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
+    rx_cfg.clk_cfg.bclk_div = 8;
+    rx_cfg.slot_cfg.total_slot = 4;
+    rx_cfg.gpio_cfg.dout = I2S_GPIO_UNUSED;
+
+    ret = i2s_channel_init_std_mode(i2s_tx_chan, &tx_cfg);
+    if (ret != ESP_OK) goto fail;
+    ret = i2s_channel_init_tdm_mode(i2s_rx_chan, &rx_cfg);
+    if (ret != ESP_OK) goto fail;
+    ret = i2s_channel_enable(i2s_tx_chan);
+    if (ret != ESP_OK) goto fail;
+    tx_enabled = true;
+    ret = i2s_channel_enable(i2s_rx_chan);
+    if (ret != ESP_OK) goto fail;
+    rx_enabled = true;
+
+    audio_codec_i2s_cfg_t codec_data = {
+        .port = CONFIG_BSP_I2S_NUM,
+        .rx_handle = i2s_rx_chan,
+        .tx_handle = i2s_tx_chan,
+    };
+    i2s_data_if = audio_codec_new_i2s_data(&codec_data);
+    if (!i2s_data_if) { ret = ESP_ERR_NO_MEM; goto fail; }
+    return ESP_OK;
+
+fail:
+    if (rx_enabled) (void)i2s_channel_disable(i2s_rx_chan);
+    if (tx_enabled) (void)i2s_channel_disable(i2s_tx_chan);
+    if (i2s_rx_chan) { (void)i2s_del_channel(i2s_rx_chan); i2s_rx_chan=NULL; }
+    if (i2s_tx_chan) { (void)i2s_del_channel(i2s_tx_chan); i2s_tx_chan=NULL; }
+    return ret;
+}
+
 esp_codec_dev_handle_t bsp_audio_codec_speaker_init(void)
 {
     if (i2s_data_if == NULL) {
@@ -626,10 +690,9 @@ esp_codec_dev_handle_t bsp_audio_codec_speaker_init(void)
 esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 {
     if (i2s_data_if == NULL) {
-        /* Initilize I2C */
         BSP_ERROR_CHECK_RETURN_NULL(bsp_i2c_init());
-        /* Configure I2S peripheral and Power Amplifier */
-        BSP_ERROR_CHECK_RETURN_NULL(bsp_audio_init(NULL));
+        /* Four-slot TDM input is required by ES7210 on this board. */
+        BSP_ERROR_CHECK_RETURN_NULL(bsp_audio_init_voice_24k());
     }
     assert(i2s_data_if);
 
@@ -643,6 +706,8 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 
     es7210_codec_cfg_t es7210_cfg = {
         .ctrl_if = i2c_ctrl_if,
+        /* Physical ES7210 microphone enable bits: MIC1, MIC2, MIC3 reference. */
+        .mic_selected = (1U << 0) | (1U << 1) | (1U << 2),
     };
     const audio_codec_if_t *es7210_dev = es7210_codec_new(&es7210_cfg);
     BSP_NULL_CHECK(es7210_dev, NULL);

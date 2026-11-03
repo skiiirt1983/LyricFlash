@@ -14,7 +14,15 @@
 
 Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` and `0.8.29` failed screen/touch on physical hardware. `0.8.30` is the targeted display recovery candidate and is not hardware-proven until the user verifies it. Keep 0.8.26 as rollback. Do not merge or publish a stable v1.0 release until the device tests pass. Each functional milestone uses **one isolated change and one gated compile after preflight**, followed by a specific device acceptance test.
 
-## Current milestone: Alpha 0.8.31 manual PCM sound-level test
+## Current milestone: Alpha 0.8.32 — ES7210 TDM receive correction
+
+- **Physical 0.8.31 measurements (outside case):** quiet: 65,536 samples, mean 0, peak 26; low music: 65,536, mean 1, peak 40; loud voice: 65,536, mean 38, peak 243. Strong response to voice proves nonzero microphone path, but magnitude was too low for recognition. Stop early worked in 651 ms. No need for further duplicate audio sampling on 0.8.31.
+- **Confirmed source/config mismatch:** original BSP uses 22,050 Hz standard mono I2S for the ES7210. Waveshare maintained Brookesia firmware instead captures at 24,000 Hz, 16-bit, 4-slot TDM; slot order MIC1, MIC3 playback reference, MIC2, MIC4 unused; gain applied to physical MIC1/MIC2 enable bits.
+- **0.8.32:** use Waveshare's TDM RX plus standard stereo TX audio initialization, select three physically connected ES7210 inputs, configure 24 dB front mic gain, parse only slots 0 and 2, and report per-MIC mean/peak. One manual three-second capture at a time, Stop, no raw audio saved/uploaded. Preserve **exact hardware-verified 0.8.26/0.8.30 QSPI/LVGL values** and the existing on-device 0.8.31 UI/OTA behavior.
+- **Physical verification required before proceeding:** install alpha 0.8.32 after CI passes, confirm screen and touch still work, then capture (a) silence, (b) music, (c) loud voice 5 cm from MIC1 and MIC2. Compare overall and per-mic levels; do not claim meaningful PCM quality based on samples alone. Stop and re-test if the device freezes, audio reports codec/gain error or output stays at 0.
+- **Deferred top priority unchanged:** OTA Web UI picker maximum three entries Old/Current/New, with downgrade disabled. This audio-only change does NOT alter OTA UI.
+
+## Previous milestone: Alpha 0.8.31 manual PCM sound-level test
 
 - **0.8.30 hardware: DISPLAY/TOUCH PASS**, and ES7210 ADC I2C 0x40 ACK PASS. This is the physical stability baseline. Do not change the display-driver file.
 - 0.8.31 adds one Start/Stop audio test to /settings; its ESP codec device is only opened after Start, reads mono 22,050 Hz 16-bit PCM for at most 3 seconds, then closes.
@@ -29,7 +37,7 @@ Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` an
 | Order | Stage | Status | Hardware pass criterion |
 |---|---|---|---|
 | 1 | Manual ES7210 audio-ADC I2C ACK probe via Web UI | **PASS: ES7210 electrical probe on 0.8.29 hardware; remaining display/touch gate pending 0.8.30** | Device Web UI reports `adc_detected` from address 0x40; battery, Wi-Fi, touch and clock still operate |
-| 2 | On-demand ES7210 + I2S PCM amplitude test | **Implemented 0.8.31; physical audio validation pending** | User explicitly presses Start; live audio levels differ in quiet/noisy conditions; Stop reliably releases all capture resources; no audio uploaded |
+| 2 | On-demand ES7210 + I2S PCM amplitude test | **0.8.31 manual capture/Stop passed; 0.8.32 TDM signal correction pending physical test** | User explicitly presses Start; live audio levels differ in quiet/noisy conditions; Stop reliably releases all capture resources; no audio uploaded |
 | 3 | On-device lyrics view using a short original/local timed test fixture | Not started | Readable lines display in order and follow timestamps on the physical 466×466 screen without blocking touch/clock |
 | 4 | Manual song-identification capture and recognition client | Not started | Start captures bounded sample, communicates with configured service over TLS and displays track or clear no-match/quota/error state |
 | 5 | Fetch, parse and cache synced lyrics | Not started | Matched track loads legally available lyric text, timestamps and source/error state; limit external requests |

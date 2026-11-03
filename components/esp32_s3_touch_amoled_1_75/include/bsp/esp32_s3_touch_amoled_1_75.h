@@ -145,6 +145,9 @@ i2c_master_bus_handle_t bsp_i2c_get_handle(void);
  */
 esp_err_t bsp_audio_init(const i2s_std_config_t *i2s_config);
 
+/** Initialize standard stereo TX plus 4-slot ES7210 TDM RX at 24 kHz. */
+esp_err_t bsp_audio_init_voice_24k(void);
+
 /**
  * @brief Initialize speaker codec device
  *

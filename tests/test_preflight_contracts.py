@@ -493,3 +493,22 @@ require('"/api/hardware/mic-test"' in network and
         'audio_uploaded' in network and 'audio_saved' in network and
         'max_uri_handlers=18' in network,
         "0.8.31 manual-only Web UI test and no raw audio exposure")
+
+# 0.8.32: frame the physical ES7210 correctly; never touch the display path.
+require('i2s_channel_init_tdm_mode(i2s_rx_chan, &rx_cfg)' in bsp and
+        'I2S_TDM_CLK_DEFAULT_CONFIG(24000)' in bsp and
+        'I2S_TDM_SLOT0 | I2S_TDM_SLOT1 | I2S_TDM_SLOT2 | I2S_TDM_SLOT3' in bsp and
+        'rx_cfg.slot_cfg.total_slot = 4' in bsp and
+        'rx_cfg.clk_cfg.bclk_div = 8' in bsp and
+        'bsp_audio_init_voice_24k()' in bsp and
+        '.mic_selected = (1U << 0) | (1U << 1) | (1U << 2)' in bsp,
+        "0.8.32 four-slot 24kHz Waveshare ES7210 TDM receive configuration")
+require('LF_PCM_RATE (24000)' in pcm and
+        'LF_PCM_TDM_SLOTS (4)' in pcm and
+        'LF_PCM_TDM_SLOT_MASK (0x0FU)' in pcm and
+        'LF_PCM_FRONT_PHYSICAL_MASK (0x03U)' in pcm and
+        'esp_codec_dev_set_in_channel_gain' in pcm and
+        'v2=pcm[i+2]' in pcm and
+        'mic1_mean_abs' in network and 'mic2_peak_abs' in network and
+        'mic1_mean_abs' in web and 'mic2_peak_abs' in web,
+        "0.8.32 separate physical MIC1 and MIC2 levels, not reference/unused slots")

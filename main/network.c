@@ -516,6 +516,12 @@ static esp_err_t handle_mic_pcm_status(httpd_req_t *req)
     cJSON_AddNumberToObject(reply,"sample_count",s.sample_count);
     cJSON_AddNumberToObject(reply,"peak_abs",s.peak_abs);
     cJSON_AddNumberToObject(reply,"mean_abs",s.mean_abs);
+    cJSON_AddNumberToObject(reply,"mic1_mean_abs",s.mic1_mean_abs);
+    cJSON_AddNumberToObject(reply,"mic1_peak_abs",s.mic1_peak_abs);
+    cJSON_AddNumberToObject(reply,"mic2_mean_abs",s.mic2_mean_abs);
+    cJSON_AddNumberToObject(reply,"mic2_peak_abs",s.mic2_peak_abs);
+    cJSON_AddStringToObject(reply,"audio_input_format","24kHz/16bit/4slot_TDM");
+    cJSON_AddStringToObject(reply,"physical_channels","MIC1 slot0, MIC2 slot2");
     cJSON_AddNumberToObject(reply,"elapsed_ms",s.elapsed_ms);
     cJSON_AddBoolToObject(reply,"stop_requested",s.stop_requested);
     cJSON_AddBoolToObject(reply,"audio_uploaded",false);
@@ -581,6 +587,10 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root,"microphone_pcm_samples",pcm.sample_count);
     cJSON_AddNumberToObject(root,"microphone_pcm_peak",pcm.peak_abs);
     cJSON_AddNumberToObject(root,"microphone_pcm_mean_abs",pcm.mean_abs);
+    cJSON_AddNumberToObject(root,"microphone_pcm_mic1_mean",pcm.mic1_mean_abs);
+    cJSON_AddNumberToObject(root,"microphone_pcm_mic1_peak",pcm.mic1_peak_abs);
+    cJSON_AddNumberToObject(root,"microphone_pcm_mic2_mean",pcm.mic2_mean_abs);
+    cJSON_AddNumberToObject(root,"microphone_pcm_mic2_peak",pcm.mic2_peak_abs);
     cJSON_AddStringToObject(root, "microphone_adc_status", lf_mic_probe_result_text(mic.result));
     cJSON_AddNumberToObject(root, "microphone_adc_test_count", mic.attempts);
     cJSON_AddNumberToObject(root, "microphone_adc_error_code", mic.error_code);

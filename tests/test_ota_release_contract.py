@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Alpha 0.8.31 OTA and USB release contract, host-side checks."""
+"""Alpha 0.8.32 OTA and USB release contract, host-side checks."""
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
@@ -25,15 +25,15 @@ for token in ("XMLHttpRequest", "xhr.upload.onprogress", "xhr.onerror",
 assert "pin_matches" not in net and "X-LyricFlash-PIN" not in net
 assert "esp_https_ota_begin" in net and "esp_https_ota_finish" in net
 assert "OTA_SIZE_UNKNOWN" not in net
-assert "LyricFlash-Alpha-0.8.31-FULL-USB-and-OTA-UNTESTED" in workflow
+assert "LyricFlash-Alpha-0.8.32-FULL-USB-and-OTA-UNTESTED" in workflow
 assert "tools/publish_build_catalog.py _site" in workflow
 assert "_site/beta/firmware/" in workflow
 assert "lyricflash-full.bin" in workflow and "lyricflash-ota.bin" in workflow
 assert "tools/validate_full_image.py" in workflow
-assert "0.8.31-alpha" in preparer
-assert "Alpha 0.8.31" in page
+assert "0.8.32-alpha" in preparer
+assert "Alpha 0.8.32" in page
 assert "LF_VERSION" in main
-print("PASS: Alpha 0.8.31 OTA and full-USB packaging contract")
+print("PASS: Alpha 0.8.32 OTA and full-USB packaging contract")
 
 assert "tools/publish_alpha_ota.py" in workflow
 assert "LyricFlash-OTA-Direct:" in workflow
@@ -43,12 +43,12 @@ print("PASS: direct OTA host and release picker contract")
 # Broken 0.8.11 firmware remains on-device with working Web UI.
 # The recovery build must be DISCOVERABLE as a direct OTA update, not only an
 # Actions artifact; do not accidentally skip alpha publication again.
-assert "feature/0.8.31-manual-mic-pcm-test" in workflow, "Recovery branch not listed in build rules"
+assert "feature/0.8.32-manual-mic-pcm-test" in workflow, "Recovery branch not listed in build rules"
 assert "Publish and verify direct HTTPS alpha OTA image" in workflow
 assert "Publish validated development OTA as an alpha prerelease" in workflow
-assert "github.ref == 'refs/heads/feature/0.8.31-manual-mic-pcm-test'" in workflow
+assert "github.ref == 'refs/heads/feature/0.8.32-manual-mic-pcm-test'" in workflow
 assert "--prerelease --latest=false" in workflow
 assert "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin" in workflow
 assert "gh release create" in workflow
-assert "0.8.31-alpha" in (root / "main/version.h").read_text()
-print("PASS: 0.8.31 recovery OTA selector will receive a published alpha release")
+assert "0.8.32-alpha" in (root / "main/version.h").read_text()
+print("PASS: 0.8.32 recovery OTA selector will receive a published alpha release")

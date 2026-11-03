@@ -31,11 +31,12 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
         #pragma once
         #include <stdint.h>
         typedef void *esp_codec_dev_handle_t;
-        typedef struct {int sample_rate, channel, bits_per_sample;} esp_codec_dev_sample_info_t;
+        typedef struct {int sample_rate, channel, bits_per_sample; unsigned channel_mask;} esp_codec_dev_sample_info_t;
         #define ESP_CODEC_DEV_OK 0
         int esp_codec_dev_open(esp_codec_dev_handle_t,esp_codec_dev_sample_info_t *);
         int esp_codec_dev_read(esp_codec_dev_handle_t,void *,int);
         int esp_codec_dev_close(esp_codec_dev_handle_t);
+        int esp_codec_dev_set_in_channel_gain(esp_codec_dev_handle_t,unsigned,float);
     """))
     (p/"esp_timer.h").write_text(dedent("""
         #pragma once
@@ -67,18 +68,20 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
         #include "freertos/task.h"
         #include <assert.h>
         #include <stdint.h>
-        static int codec_exists=1,open_ok=1,read_ok=1,spawn_ok=1,request_stop=0;
-        static int inits=0,opens=0,reads=0,closes=0;
+        static int codec_exists=1,open_ok=1,read_ok=1,spawn_ok=1,request_stop=0,gain_ok=1;
+        static int inits=0,opens=0,reads=0,closes=0,gains=0;
         static int64_t time_us=0;
         int64_t esp_timer_get_time(void){time_us+=300000;return time_us;}
         esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
         {inits++;return codec_exists?(void*)0x1:0;}
         int esp_codec_dev_open(esp_codec_dev_handle_t c,esp_codec_dev_sample_info_t *f)
-        {assert(c);assert(f->sample_rate==22050&&f->channel==1&&f->bits_per_sample==16);
+        {assert(c);assert(f->sample_rate==24000&&f->channel==4&&f->channel_mask==0xF&&f->bits_per_sample==16);
          opens++;return open_ok?ESP_CODEC_DEV_OK:-1;}
+        int esp_codec_dev_set_in_channel_gain(esp_codec_dev_handle_t c,unsigned mask,float gain)
+        {assert(c&&mask==0x03&&gain==24.0f);gains++;return gain_ok?ESP_CODEC_DEV_OK:-1;}
         int esp_codec_dev_read(esp_codec_dev_handle_t c,void *ptr,int bytes)
         {assert(c&&bytes==1024);reads++;if(!read_ok)return -1;
-         int16_t *buf=ptr;for(int i=0;i<512;i++)buf[i]=(i&1)?-2000:1000;
+         int16_t *buf=ptr;for(int i=0;i<512;i+=4){buf[i]=1000;buf[i+1]=5000;buf[i+2]=-2000;buf[i+3]=9000;}
          if(request_stop)lf_pcm_stop();
          return ESP_CODEC_DEV_OK;}
         int esp_codec_dev_close(esp_codec_dev_handle_t c)
@@ -97,6 +100,9 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
             lf_pcm_snapshot(&s);
             assert(s.state==LF_PCM_COMPLETE && s.error==LF_PCM_ERR_NONE);
             assert(s.sample_count>0 && s.peak_abs==2000 && s.mean_abs==1500);
+            assert(s.mic1_mean_abs==1000 && s.mic1_peak_abs==1000);
+            assert(s.mic2_mean_abs==2000 && s.mic2_peak_abs==2000);
+            assert(gains==1);
             assert(opens==1 && closes==1);
             request_stop=1;time_us=0;
             assert(lf_pcm_start());lf_pcm_snapshot(&s);
@@ -108,7 +114,10 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
             read_ok=1;open_ok=0;time_us=0;
             assert(lf_pcm_start());lf_pcm_snapshot(&s);
             assert(s.state==LF_PCM_ERROR && s.error==LF_PCM_ERR_OPEN && closes==3);
-            open_ok=1;codec_exists=0;time_us=0;
+            open_ok=1;gain_ok=0;time_us=0;
+            assert(lf_pcm_start());lf_pcm_snapshot(&s);
+            assert(s.state==LF_PCM_ERROR && s.error==LF_PCM_ERR_GAIN && closes==4);
+            gain_ok=1;codec_exists=0;time_us=0;
             assert(lf_pcm_start());lf_pcm_snapshot(&s);
             assert(s.state==LF_PCM_ERROR && s.error==LF_PCM_ERR_CODEC);
             codec_exists=1;spawn_ok=0;
@@ -122,4 +131,4 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
                     "-I",str(p),"-I",str(root/"main"),str(root/"main/mic_pcm.c"),
                     str(p/"test.c"),"-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)
-print("PASS: manual PCM capture mock: quiet startup, levels, stop, read/codec/task failures")
+print("PASS: manual four-slot TDM PCM mock: 24 kHz, MIC1/MIC2 slots, gain, stop, errors")
