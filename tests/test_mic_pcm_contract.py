@@ -12,6 +12,10 @@ page=(root/"main/web_device_html.h").read_text()
 cmake=(root/"main/CMakeLists.txt").read_text()
 assert "esp_codec_dev_read(codec,pcm,sizeof(pcm))" in source
 assert "LF_PCM_LIMIT_US (3000000LL)" in source
+assert "LF_PCM_NEAR_RAIL (32760U)" in source
+assert "pcm_isqrt_u64" in source
+assert "mic1_near_rail" in net and "mic2_near_rail" in net
+assert "mic1_rms" in page and "mic2_rms" in page
 assert "esp_codec_dev_close(codec)" in source
 assert "atomic_load(&stop_requested)" in source
 assert "vTaskDelay" not in source
@@ -68,7 +72,7 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
         #include "freertos/task.h"
         #include <assert.h>
         #include <stdint.h>
-        static int codec_exists=1,open_ok=1,read_ok=1,spawn_ok=1,request_stop=0,gain_ok=1;
+        static int codec_exists=1,open_ok=1,read_ok=1,spawn_ok=1,request_stop=0,gain_ok=1,rail_mode=0,silent_mode=0;
         static int inits=0,opens=0,reads=0,closes=0,gains=0;
         static int64_t time_us=0;
         int64_t esp_timer_get_time(void){time_us+=300000;return time_us;}
@@ -81,7 +85,8 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
         {assert(c&&mask==0x03&&gain==24.0f);gains++;return gain_ok?ESP_CODEC_DEV_OK:-1;}
         int esp_codec_dev_read(esp_codec_dev_handle_t c,void *ptr,int bytes)
         {assert(c&&bytes==1024);reads++;if(!read_ok)return -1;
-         int16_t *buf=ptr;for(int i=0;i<512;i+=4){buf[i]=1000;buf[i+1]=5000;buf[i+2]=-2000;buf[i+3]=9000;}
+         int16_t *buf=ptr;for(int i=0;i<512;i+=4){buf[i]=silent_mode?0:1000;buf[i+1]=32767;buf[i+2]=silent_mode?0:-2000;buf[i+3]=-32768;}
+         if(rail_mode){buf[0]=-32768;buf[2]=32767;}
          if(request_stop)lf_pcm_stop();
          return ESP_CODEC_DEV_OK;}
         int esp_codec_dev_close(esp_codec_dev_handle_t c)
@@ -102,6 +107,8 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
             assert(s.sample_count>0 && s.peak_abs==2000 && s.mean_abs==1500);
             assert(s.mic1_mean_abs==1000 && s.mic1_peak_abs==1000);
             assert(s.mic2_mean_abs==2000 && s.mic2_peak_abs==2000);
+            assert(s.mic1_rms==1000 && s.mic2_rms==2000);
+            assert(s.mic1_near_rail==0 && s.mic2_near_rail==0);
             assert(gains==1);
             assert(opens==1 && closes==1);
             request_stop=1;time_us=0;
@@ -123,6 +130,26 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
             codec_exists=1;spawn_ok=0;
             assert(!lf_pcm_start());lf_pcm_snapshot(&s);
             assert(s.state==LF_PCM_ERROR && s.error==LF_PCM_ERR_TASK);
+            /* One near-rail sample per 128 TDM frames; unrelated slots 1
+               and 3 at rails MUST NOT count as front microphone clipping. */
+            spawn_ok=1;rail_mode=1;time_us=0;
+            const int prev_reads=reads;
+            assert(lf_pcm_start());lf_pcm_snapshot(&s);
+            assert(s.state==LF_PCM_COMPLETE);
+            assert(s.mic1_near_rail==(unsigned)(reads-prev_reads));
+            assert(s.mic2_near_rail==(unsigned)(reads-prev_reads));
+            assert(s.mic1_rms>1000 && s.mic2_rms>2000);
+            assert(s.mic1_rms<32768 && s.mic2_rms<32768);
+            rail_mode=0;time_us=0;
+            assert(lf_pcm_start());lf_pcm_snapshot(&s);
+            assert(s.state==LF_PCM_COMPLETE);
+            assert(s.mic1_near_rail==0 && s.mic2_near_rail==0);
+            assert(s.mic1_rms==1000 && s.mic2_rms==2000);
+            silent_mode=1;time_us=0;
+            assert(lf_pcm_start());lf_pcm_snapshot(&s);
+            assert(s.state==LF_PCM_COMPLETE && s.sample_count>0);
+            assert(s.mic1_rms==0 && s.mic2_rms==0);
+            assert(s.mic1_near_rail==0 && s.mic2_near_rail==0);
             return 0;
         }
     """))
@@ -131,4 +158,4 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
                     "-I",str(p),"-I",str(root/"main"),str(root/"main/mic_pcm.c"),
                     str(p/"test.c"),"-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)
-print("PASS: manual four-slot TDM PCM mock: 24 kHz, MIC1/MIC2 slots, gain, stop, errors")
+print("PASS: 24k TDM two-mic RMS, near-rail counts, silence, repeat reset, Stop/errors")

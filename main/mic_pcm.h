@@ -22,6 +22,8 @@ typedef struct {
     uint32_t mean_abs;
     uint32_t mic1_mean_abs, mic1_peak_abs;
     uint32_t mic2_mean_abs, mic2_peak_abs;
+    uint32_t mic1_rms, mic2_rms;
+    uint32_t mic1_near_rail, mic2_near_rail;
     uint32_t elapsed_ms;
     bool stop_requested;
 } lf_pcm_snapshot_t;

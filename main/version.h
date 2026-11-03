@@ -1,11 +1,13 @@
 #pragma once
-/* 0.8.32: correct ES7210 24kHz 16-bit four-slot TDM microphone framing
- * using Waveshare's verified board voice profile (MIC1 slot0, MIC2 slot2,
- * MIC3 reference slot1, slot3 unconnected). Enable physical front-mic
- * input gain 24 dB, preserve explicit three-second Start/Stop and
- * report MIC1/MIC2 levels separately. Physical 0.8.31 had very weak
- * audio: quiet mean 0/peak26, loud mean38/peak243 /32768.
- * Preserve hardware-proven LVGL/QSPI display, OTA and NVS unchanged.
- * Requires new physical ADC gain/framing validation before recognition. */
-#define LF_VERSION "0.8.32-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.32"
+/* 0.8.33: keep hardware-confirmed two-mic ES7210 24kHz four-slot TDM
+ * 0.8.32 audio input configuration and 24dB gain EXACTLY unchanged.
+ * Add read-only 16-bit per-channel integer RMS and near-rail sample counts
+ * (abs(sample) >=32760) to distinguish persistent clipping from occasional
+ * large artifacts. Zero audio is recorded or uploaded. Existing Start/Stop,
+ * QSPI/LVGL screen, OTA, Wi-Fi, and NVS are unchanged.
+ * On actual 0.8.32: quiet MIC1/2 means=6/4, peaks=982/1041;
+ * music means=118/75, peaks=32767/32768;
+ * speech means=127/131, peaks=32767/32767.
+ * Hardware assessment required before adjusting microphone gain/recognition. */
+#define LF_VERSION "0.8.33-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.33"

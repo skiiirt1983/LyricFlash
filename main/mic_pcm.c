@@ -26,6 +26,9 @@
 #define LF_PCM_FRONT_GAIN_DB (24.0f)
 #define LF_PCM_FRONT_PHYSICAL_MASK (0x03U)
 #define LF_PCM_TDM_SLOT_MASK (0x0FU)
+/* Samples within 8 integer units of the signed 16-bit ADC rails.
+ * This flags possible clipping or sporadic transport artifacts, not proof. */
+#define LF_PCM_NEAR_RAIL (32760U)
 static atomic_int state=ATOMIC_VAR_INIT(LF_PCM_IDLE);
 static atomic_int error=ATOMIC_VAR_INIT(LF_PCM_ERR_NONE);
 static atomic_uint attempts;
@@ -35,7 +38,28 @@ static atomic_uint sample_count;
 static atomic_uint elapsed_ms;
 static atomic_uint mic1_mean_abs, mic1_peak_abs;
 static atomic_uint mic2_mean_abs, mic2_peak_abs;
+static atomic_uint mic1_rms, mic2_rms;
+static atomic_uint mic1_near_rail, mic2_near_rail;
 static atomic_bool stop_requested;
+
+/* Integer sqrt of a 64-bit sum-of-squares quotient, bounded to <= 32768.
+ * Avoid libm and floating point work in the hot 24 kHz capture path. */
+static uint32_t pcm_isqrt_u64(uint64_t value)
+{
+    uint64_t result=0;
+    uint64_t bit=(uint64_t)1<<62;
+    while(bit>value)bit>>=2;
+    while(bit!=0) {
+        if(value>=result+bit) {
+            value-=result+bit;
+            result=(result>>1)+bit;
+        } else {
+            result>>=1;
+        }
+        bit>>=2;
+    }
+    return (uint32_t)result;
+}
 
 const char *lf_pcm_state_name(lf_pcm_state_t s)
 {
@@ -74,6 +98,10 @@ void lf_pcm_snapshot(lf_pcm_snapshot_t *out)
     out->mic1_peak_abs=atomic_load(&mic1_peak_abs);
     out->mic2_mean_abs=atomic_load(&mic2_mean_abs);
     out->mic2_peak_abs=atomic_load(&mic2_peak_abs);
+    out->mic1_rms=atomic_load(&mic1_rms);
+    out->mic2_rms=atomic_load(&mic2_rms);
+    out->mic1_near_rail=atomic_load(&mic1_near_rail);
+    out->mic2_near_rail=atomic_load(&mic2_near_rail);
     out->stop_requested=atomic_load(&stop_requested);
 }
 static void capture_worker(void *arg)
@@ -100,6 +128,8 @@ static void capture_worker(void *arg)
         }
     }
     uint64_t total_abs=0, mic1_total=0, mic2_total=0;
+    uint64_t mic1_sum_sq=0, mic2_sum_sq=0;
+    uint32_t mic1_clip=0, mic2_clip=0;
     uint32_t samples=0, frames=0, peak=0, mic1_peak=0, mic2_peak=0;
     if(opened) {
         if(fail==LF_PCM_ERR_NONE) {
@@ -117,6 +147,11 @@ static void capture_worker(void *arg)
                     uint32_t a1=(uint32_t)(v1<0?-v1:v1);
                     uint32_t a2=(uint32_t)(v2<0?-v2:v2);
                     mic1_total+=a1;mic2_total+=a2;
+                    /* Signed 16-bit MIN (-32768) is handled by int32_t. */
+                    mic1_sum_sq+=(uint64_t)a1*a1;
+                    mic2_sum_sq+=(uint64_t)a2*a2;
+                    if(a1>=LF_PCM_NEAR_RAIL)mic1_clip++;
+                    if(a2>=LF_PCM_NEAR_RAIL)mic2_clip++;
                     total_abs+=a1+a2;
                     if(a1>mic1_peak)mic1_peak=a1;
                     if(a2>mic2_peak)mic2_peak=a2;
@@ -132,6 +167,11 @@ static void capture_worker(void *arg)
                 atomic_store(&mic2_peak_abs,mic2_peak);
                 atomic_store(&mic1_mean_abs,(uint32_t)(mic1_total/frames));
                 atomic_store(&mic2_mean_abs,(uint32_t)(mic2_total/frames));
+                /* Integer RMS is floor(sqrt(mean(sample^2))), per channel. */
+                atomic_store(&mic1_rms,pcm_isqrt_u64(mic1_sum_sq/frames));
+                atomic_store(&mic2_rms,pcm_isqrt_u64(mic2_sum_sq/frames));
+                atomic_store(&mic1_near_rail,mic1_clip);
+                atomic_store(&mic2_near_rail,mic2_clip);
             }
         }
         /* Close ES7210 ADC even after gain/read failure or early Stop. */
@@ -159,6 +199,8 @@ bool lf_pcm_start(void)
     atomic_store(&elapsed_ms,0);
     atomic_store(&mic1_mean_abs,0);atomic_store(&mic1_peak_abs,0);
     atomic_store(&mic2_mean_abs,0);atomic_store(&mic2_peak_abs,0);
+    atomic_store(&mic1_rms,0);atomic_store(&mic2_rms,0);
+    atomic_store(&mic1_near_rail,0);atomic_store(&mic2_near_rail,0);
     atomic_fetch_add(&attempts,1);
     if(xTaskCreate(capture_worker,"lf_mic_pcm",6144,NULL,
                    tskIDLE_PRIORITY+1,NULL)!=pdPASS) {

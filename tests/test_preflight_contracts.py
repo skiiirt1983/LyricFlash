@@ -517,3 +517,22 @@ require('static esp_codec_dev_handle_t microphone_codec_dev = NULL;' in bsp and
         'if (microphone_codec_dev != NULL) return microphone_codec_dev;' in bsp and
         'microphone_codec_dev = esp_codec_dev_new(&codec_es7210_dev_cfg)' in bsp,
         "0.8.32 microphone codec handle must be shared across repeated tests")
+
+# 0.8.33 diagnostic-only change. No gain, I2S configuration, audio upload,
+# LCD pipeline, web handler count or OTA behavior may be changed.
+require('LF_PCM_FRONT_GAIN_DB (24.0f)' in pcm and
+        'LF_PCM_RATE (24000)' in pcm and 'LF_PCM_TDM_SLOTS (4)' in pcm and
+        'LF_PCM_FRONT_PHYSICAL_MASK (0x03U)' in pcm and
+        'LF_PCM_LIMIT_US (3000000LL)' in pcm,
+        "0.8.33 preserve proven dual TDM mic capture and manual gating")
+require('LF_PCM_NEAR_RAIL (32760U)' in pcm and
+        'mic1_sum_sq+=' in pcm and 'mic2_sum_sq+=' in pcm and
+        'pcm_isqrt_u64' in pcm and
+        'mic1_rms' in pcm and 'mic2_rms' in pcm and
+        'mic1_near_rail' in pcm and 'mic2_near_rail' in pcm and
+        'mic1_rms' in pcm_h and 'mic2_near_rail' in pcm_h,
+        "0.8.33 per-microphone RMS / near-rail counting")
+require('mic1_rms' in network and 'mic2_rms' in network and
+        'mic1_near_rail' in network and 'mic2_near_rail' in network and
+        'mic1_rms' in web and 'mic2_near_rail' in web,
+        "0.8.33 browser telemetry exposes both microphones")

@@ -14,7 +14,16 @@
 
 Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` and `0.8.29` failed screen/touch on physical hardware. `0.8.30` is the targeted display recovery candidate and is not hardware-proven until the user verifies it. Keep 0.8.26 as rollback. Do not merge or publish a stable v1.0 release until the device tests pass. Each functional milestone uses **one isolated change and one gated compile after preflight**, followed by a specific device acceptance test.
 
-## Current milestone: Alpha 0.8.32 — ES7210 TDM receive correction
+## Current milestone: Alpha 0.8.33 — measure RMS and near-rail artifacts
+
+- **0.8.32 physical test: PASSED dual-microphone response.** Quiet room: 141,824 selected mic samples, combined mean 5, peak 1041; MIC1 mean/peak 6/982; MIC2 4/1041. Low music: 141,824 selected samples, combined mean 96, peak 32768; MIC1 118/32767; MIC2 75/32768. Loud voice: 142,336 samples, combined mean 129, peak 32767; MIC1 127/32767; MIC2 131/32767.
+- **Problem:** rare max-amplitude samples may mean clipping or TDM transport glitches. A single peak cannot establish the prevalence or audio fidelity.
+- **0.8.33: diagnostic-only**, no gain or audio mode changes. Each microphone now reports integer RMS (0–32768) and a count of near-rail values (abs(sample) >= 32760), alongside the existing mean/peak and sample count; percentage in Web UI is count divided by per-mic sample frames. Ignore reference TDM slot1 and unused slot3, and prevent integer overflow by 64-bit sum of squares. Counts and accumulated RMS are reset for each Start. No raw audio is retained.
+- **Hardware acceptance:** physically run one quiet, one low-volume music and one speaking sample. Compare each MIC mean/RMS/peak/near-rail count; a few isolated near-rail events indicate transients/artifacts worth investigation, sustained near-rail events indicate clipping risk. Do not infer clean recognition input until this has been checked.
+- **Safety gate:** preserve 0.8.32 24k four-slot TDM, physical MIC1/MIC2 mapping, 24dB input gain, manual-only 3-second Start/Stop, proven 24-row QSPI/LVGL display, OTA and saved preferences.
+- **Top deferred change unchanged:** OTA Web UI picker Old / Current / New only, disabled older/installed entries and no unsupported downgrade.
+
+## Previous milestone: Alpha 0.8.32 — ES7210 TDM receive correction
 
 - **Physical 0.8.31 measurements (outside case):** quiet: 65,536 samples, mean 0, peak 26; low music: 65,536, mean 1, peak 40; loud voice: 65,536, mean 38, peak 243. Strong response to voice proves nonzero microphone path, but magnitude was too low for recognition. Stop early worked in 651 ms. No need for further duplicate audio sampling on 0.8.31.
 - **Confirmed source/config mismatch:** original BSP uses 22,050 Hz standard mono I2S for the ES7210. Waveshare maintained Brookesia firmware instead captures at 24,000 Hz, 16-bit, 4-slot TDM; slot order MIC1, MIC3 playback reference, MIC2, MIC4 unused; gain applied to physical MIC1/MIC2 enable bits.
@@ -38,7 +47,7 @@ Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` an
 | Order | Stage | Status | Hardware pass criterion |
 |---|---|---|---|
 | 1 | Manual ES7210 audio-ADC I2C ACK probe via Web UI | **PASS: ES7210 electrical probe on 0.8.29 hardware; remaining display/touch gate pending 0.8.30** | Device Web UI reports `adc_detected` from address 0x40; battery, Wi-Fi, touch and clock still operate |
-| 2 | On-demand ES7210 + I2S PCM amplitude test | **0.8.31 manual capture/Stop passed; 0.8.32 TDM signal correction pending physical test** | User explicitly presses Start; live audio levels differ in quiet/noisy conditions; Stop reliably releases all capture resources; no audio uploaded |
+| 2 | On-demand ES7210 + I2S PCM amplitude test | **0.8.32 two-mic sound response passed; 0.8.33 RMS/rail diagnostics pending physical test** | User explicitly presses Start; live audio levels differ in quiet/noisy conditions; Stop reliably releases all capture resources; no audio uploaded |
 | 3 | On-device lyrics view using a short original/local timed test fixture | Not started | Readable lines display in order and follow timestamps on the physical 466×466 screen without blocking touch/clock |
 | 4 | Manual song-identification capture and recognition client | Not started | Start captures bounded sample, communicates with configured service over TLS and displays track or clear no-match/quota/error state |
 | 5 | Fetch, parse and cache synced lyrics | Not started | Matched track loads legally available lyric text, timestamps and source/error state; limit external requests |
