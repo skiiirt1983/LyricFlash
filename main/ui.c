@@ -67,6 +67,8 @@ static uint32_t auto_open_attempt;
 static bool auto_open_pending;
 static bool auto_open_transition;
 static uint64_t auto_open_poll_ms;
+static uint64_t auto_open_requested_ms;
+static uint32_t auto_open_fallback_attempt;
 /* Counts are diagnostics only; a successful screen build acknowledges
  * a song attempt, not merely queuing an asynchronous navigation request. */
 static atomic_uint auto_open_queued_count;
@@ -150,6 +152,10 @@ static atomic_uint render_cycle_max_ms;
 static int64_t render_cycle_start_us;
 static atomic_uint nav_transition_completed_count;
 static atomic_uint nav_transition_last_ms;
+static atomic_uint ui_last_tick_ms;
+static atomic_uint ui_last_page;
+static atomic_uint ui_nav_phase;
+static atomic_uint auto_open_recovery_count;
 
 void lf_ui_display_stats(lf_ui_display_stats_t *out)
 {
@@ -175,6 +181,14 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->render_cycle_last_ms=atomic_load(&render_cycle_last_ms);
     out->render_cycle_max_ms=atomic_load(&render_cycle_max_ms);
     out->clock_repaint_recoveries=atomic_load(&clock_repaint_recoveries);
+    const uint32_t current=(uint32_t)(esp_timer_get_time()/1000LL);
+    const uint32_t tick=atomic_load(&ui_last_tick_ms);
+    out->ui_tick_age_ms=tick?current-tick:UINT32_MAX;
+    out->ui_page=atomic_load(&ui_last_page);
+    out->ui_navigation_phase=atomic_load(&ui_nav_phase);
+    out->lyrics_auto_open_queued=atomic_load(&auto_open_queued_count);
+    out->lyrics_auto_open_completed=atomic_load(&auto_open_completed_count);
+    out->lyrics_auto_open_recoveries=atomic_load(&auto_open_recovery_count);
 }
 static void display_render_event(lv_event_t *e)
 {
@@ -897,6 +911,7 @@ static void auto_open_lyrics_deferred(void *unused)
        previous code did this and could strand the device on Home if the
        pending navigation was superseded or a touch release was missed. */
     auto_open_transition=true;
+    auto_open_requested_ms=now_ms();
     build_preview();
 }
 /* A tiny amplitude envelope is published by the manual capture worker.
@@ -1017,6 +1032,7 @@ static void home_refresh(uint64_t current)
        strcmp(song.lyrics_state,"synced")==0 &&
        song.attempts!=auto_open_attempt && !auto_open_pending){
         auto_open_pending=true;
+        auto_open_requested_ms=current;
         atomic_fetch_add(&auto_open_queued_count,1);
         lv_async_call(auto_open_lyrics_deferred,NULL);
     }
@@ -2612,6 +2628,8 @@ static void on_tick(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
+    atomic_store(&ui_last_tick_ms,(uint32_t)current);
+    atomic_store(&ui_last_page,(uint32_t)page);
     if(primary_pager)primary_pager_watchdog(current);
     if (nav_transition_active) return; /* No UI activity until reveal completes. */
     /* Polling fallback for wake when the cover misses a press. A wake touch
@@ -2679,9 +2697,49 @@ static void on_tick(lv_timer_t *timer)
            strcmp(latest.lyrics_state,"synced")==0 &&
            !ui_pointer_is_down()){
             auto_open_pending=true;
+            auto_open_requested_ms=current;
             atomic_fetch_add(&auto_open_queued_count,1);
             lv_async_call(auto_open_lyrics_deferred,NULL);
         }
+    }
+    /* Hard fallback for the real observed freeze: if the song and synced
+       lines are ready but an async navigation has not reached the lyrics
+       scene in four seconds, recover directly on the LVGL TIMER thread.
+       This is outside input dispatch, so deleting the retired Home child
+       tree here does not destroy an active touch callback. One recovery
+       attempt per scan prevents repeated rebuilding if no lines survive. */
+    if(page==0 && auto_open_pending && auto_open_requested_ms &&
+       current-auto_open_requested_ms>=4000 &&
+       !nav_transition_active && !ui_pointer_is_down()){
+        lf_recog_snapshot_t ready={0};
+        lf_recog_snapshot(&ready);
+        if(ready.state==LF_RECOG_MATCH && ready.lyric_lines>0 &&
+           strcmp(ready.lyrics_state,"synced")==0 &&
+           ready.attempts!=auto_open_attempt &&
+           ready.attempts!=auto_open_fallback_attempt){
+            auto_open_fallback_attempt=ready.attempts;
+            /* Any deferred nav_drain still in the LVGL queue finds NULL
+               and returns; do not run a second scene rebuild afterwards. */
+            nav_pending=NULL;
+            nav_queued=false;
+            auto_open_transition=false;
+            auto_open_pending=false;
+            atomic_fetch_add(&auto_open_recovery_count,1);
+            ESP_LOGW(TAG,"Recovering stalled lyric navigation for attempt %lu",
+                     (unsigned long)ready.attempts);
+            build_timed_lyrics_now(&ready);
+            if(page==1 && timed_lyrics_mode && timed_line_count>0){
+                auto_open_attempt=ready.attempts;
+                atomic_fetch_add(&auto_open_completed_count,1);
+                lv_obj_update_layout(screen);
+                lv_obj_invalidate(screen);
+            }
+            return;
+        }
+        /* A finished scan without synced data must not leave the loading
+           overlay visible forever, even if a prior callback was queued. */
+        if(ready.state!=LF_RECOG_MATCH || ready.lyric_lines==0)
+            auto_open_pending=false;
     }
     if (page == 0 && !touch_held && !pager_scrolling &&
         current-home_last_refresh_ms >= 750)home_refresh(current);
@@ -2922,13 +2980,16 @@ static void nav_drain(void *arg)
         direction=(previous_page==6 || previous_page==11 || previous_page==7)
                     ? LV_SCR_LOAD_ANIM_OVER_RIGHT : LV_SCR_LOAD_ANIM_OVER_LEFT;
     lv_display_t *disp=lv_display_get_default();
+    atomic_store(&ui_nav_phase,1U);
     if(disp&&screen)lv_display_enable_invalidation(disp,false);
     target();
+    atomic_store(&ui_nav_phase,2U);
     if(disp&&screen){
         lv_obj_update_layout(screen);
         lv_display_enable_invalidation(disp,true);
     }
     atomic_fetch_add(&ui_nav_count,1);
+    atomic_store(&ui_nav_phase,3U);
     if(recognition_open){
         auto_open_pending=false;
         if(page==1 && timed_lyrics_mode && timed_line_count>0){
