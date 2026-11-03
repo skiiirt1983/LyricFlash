@@ -18,7 +18,7 @@ end=ui.index("\nstatic void render_home(void)",start)
 home=ui[start:end]
 refresh=ui[ui.index("static void home_refresh(uint64_t current)\n{"):start]
 on_click=ui[ui.index("static void on_home_scan(lv_event_t *e)\n{"):ui.index("static lv_obj_t *home_decor_ring")]
-check('LF_VERSION "0.8.45-alpha"' in version,"0.8.42 alpha version not set")
+check('LF_VERSION "0.8.46-alpha"' in version,"0.8.42 alpha version not set")
 check('home_scan_button=lv_button_create(parent);' in home,"Missing single circular play surface")
 check(home.count('lv_button_create(')==1,"Home must expose only one visual control")
 check('button(parent,' not in home,"Old rectangular navigation buttons still on Home")
@@ -27,6 +27,7 @@ check('LV_RADIUS_CIRCLE' in home,"Play control must be circular")
 check('LV_SYMBOL_PLAY' in home and 'LV_SYMBOL_STOP' in refresh,"Play must switch to Stop when busy")
 check('lv_font_montserrat_48' in home,"Large play symbol is missing")
 check('home_decor_ring(parent,216' in home and 'home_decor_ring(parent,202' in home,
+
       "Missing light-weight circular visual rings")
 check('lv_obj_add_event_cb(home_scan_button,on_home_scan,LV_EVENT_CLICKED,NULL);' in home,
       "Play not wired to manual song scan")
