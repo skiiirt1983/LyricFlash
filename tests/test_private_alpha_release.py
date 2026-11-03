@@ -5,7 +5,7 @@ p=Path(__file__).resolve().parents[1]
 wf=(p/'.github/workflows/firmware.yml').read_text()
 preparer=(p/'tools/prepare_site.py').read_text()
 publisher=(p/'tools/publish_alpha_ota.py').read_text()
-assert "feature/private-0.8.49-recognition-recovery" in wf
+assert "feature/private-0.8.49-watchdog-header" in wf
 assert "Run all host and native source tests before compiling" in wf
 assert "contains(github.event.head_commit.message, '[compile-once]')" in wf
 assert "needs: preflight" in wf
