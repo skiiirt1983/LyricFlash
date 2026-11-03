@@ -153,6 +153,9 @@ static void tick_draw_event(lv_event_t *e)
     lv_obj_get_coords(o,&area);
     const bool diver=(uintptr_t)lv_event_get_user_data(e)!=0;
     for(int i=0;i<60;i++){
+        /* Dress watch: just twelve subtle markers rather than diver's
+           dense 60-beat outer bezel. */
+        if(!diver && i%5)continue;
         bool major=(i%5)==0;
         float angle=(float)(i*6-90)*(PI_F/180.f);
         int outer=diver?185:181;
@@ -164,7 +167,7 @@ static void tick_draw_event(lv_event_t *e)
         line.p2.x=area.x1+CC+cosf(angle)*outer;
         line.p2.y=area.y1+CC+sinf(angle)*outer;
         line.color=lv_color_hex(major?colour_fg():colour_ac());
-        line.width=major?5:2;
+        line.width=diver?(major?5:2):2;
         line.round_start=1;
         line.round_end=1;
         lv_draw_line(layer,&line);
@@ -218,7 +221,7 @@ static void add_hour_markers(lv_obj_t *parent)
 }
 static void create_hands(lv_obj_t *parent, bool diver)
 {
-    int widths[3] = {diver ? 11 : 9, diver ? 7 : 5, 2};
+    int widths[3] = {diver ? 11 : 5, diver ? 7 : 3, diver ? 2 : 1};
     uint32_t colours[3] = {colour_fg(),colour_fg(),colour_ac()};
     for (int i = 0; i < 3; i++) {
         hand_points[i][0] = (lv_point_precise_t){CC, CC};
@@ -245,6 +248,17 @@ static void build_diver(lv_obj_t *parent)
     lv_obj_set_style_radius(dw, 6, 0);
     lv_obj_set_style_pad_all(dw, 0, 0);
     date_label = face_text(dw, "--", 0, 0, &lv_font_montserrat_18, 0x111B1B);
+    /* Original "Brolex" lettering and five-ridge mountain insignia:
+       a playful homage, NOT Rolex's protected crown artwork. */
+    face_text(parent,"BROLEX",0,-98,&lv_font_montserrat_20,0xE9D99C);
+    face_text(parent,"MOUNTAIN DIVER",0,-75,&lv_font_montserrat_12,0xA3C7CB);
+    static lv_point_precise_t ridge[5][2]={
+        {{211,135},{211,122}},{{222,135},{222,113}},
+        {{233,135},{233,106}},{{244,135},{244,113}},
+        {{255,135},{255,122}}
+    };
+    for(int peak=0;peak<5;peak++)
+        dial_line(parent,ridge[peak],2,0xD7BE75);
     create_hands(parent, true);
     battery_label = face_text(parent, "BAT --", 0, -137, &lv_font_montserrat_16, colour_ac());
     info_label = face_text(parent, "", 0, 111, &lv_font_montserrat_12, 0xB5D9E8);
@@ -260,13 +274,22 @@ static void build_digital(lv_obj_t *parent)
 }
 static void build_classic(lv_obj_t *parent)
 {
-    round_panel(parent, 442, 0x05090D, 0x527AA6, 5);
-    round_panel(parent, 397, colour_bg(), colour_ac(), 2);
-    draw_ticks(parent, false);
-    create_hands(parent, false);
-    date_label = face_text(parent, "--", 0, 109, &lv_font_montserrat_12, 0x718FA8);
-    battery_label = face_text(parent, "BAT --", 0, -143, &lv_font_montserrat_16, 0xA5D6E8);
-    info_label = face_text(parent, "", 0, 87, &lv_font_montserrat_12, 0x809DB8);
+    /* Restrained dress-watch face deliberately unlike the diver: no
+       diving bezel, luminous bars or large date magnifier. Roman markers,
+       slim hands and a simple brushed inner rim. */
+    round_panel(parent,449,0x101822,0x70808F,3);
+    round_panel(parent,417,colour_bg(),colour_ac(),1);
+    draw_ticks(parent,false);
+    face_text(parent,"XII",0,-158,&lv_font_montserrat_24,colour_fg());
+    face_text(parent,"III",160,0,&lv_font_montserrat_20,colour_fg());
+    face_text(parent,"VI",0,159,&lv_font_montserrat_24,colour_fg());
+    face_text(parent,"IX",-160,0,&lv_font_montserrat_20,colour_fg());
+    face_text(parent,"CLASSIC",0,-78,&lv_font_montserrat_16,0xA5B4C3);
+    create_hands(parent,false);
+    date_label=face_text(parent,"--",0,106,&lv_font_montserrat_16,0xC3D5E3);
+    battery_label=face_text(parent,"BAT --",0,-109,
+                            &lv_font_montserrat_16,0xA5D6E8);
+    info_label=face_text(parent,"",0,129,&lv_font_montserrat_12,0x809DB8);
 }
 
 /* Retro green 1980s LCD watch. Intentionally an original face, not a
@@ -436,6 +459,12 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
                    current_style==5?basic_element_font(settings->basic_weather_size):
                                     &lv_font_montserrat_24,colour);
     }
+    if(battery_label && current_style!=5){
+        /* User-adjustable battery location on EVERY non-Basic dial. */
+        lv_obj_align(battery_label,LV_ALIGN_CENTER,
+                     settings->face_battery_x[current_style],
+                     settings->face_battery_y[current_style]);
+    }
     if(!settings->face_show_date[current_style] && date_label)
         lv_obj_add_flag(date_label,LV_OBJ_FLAG_HIDDEN);
     if(!settings->face_show_seconds[current_style] && hands[2])
@@ -456,10 +485,12 @@ void lf_clock_update(void)
                 state.percentage>=63?LV_SYMBOL_BATTERY_3:
                 state.percentage>=38?LV_SYMBOL_BATTERY_2:
                 state.percentage>=15?LV_SYMBOL_BATTERY_1:LV_SYMBOL_BATTERY_EMPTY;
-            snprintf(text,sizeof text,"%s %d%%",symbol,state.percentage);
+            snprintf(text,sizeof text,"%s%s %d%%",
+                     state.charging?LV_SYMBOL_CHARGE:"",symbol,state.percentage);
         }
         else
-            snprintf(text, sizeof(text), "%s", state.charging ? "CHARGING" : "BATTERY");
+            snprintf(text,sizeof text,"%s",state.charging?
+                     LV_SYMBOL_CHARGE:LV_SYMBOL_BATTERY_EMPTY);
         update_label_if_changed(battery_label, text);
         uint32_t color = state.usb_connected ? clock_settings->charging_color : lf_power_color(&state);
         if (color != displayed_battery_color) {
