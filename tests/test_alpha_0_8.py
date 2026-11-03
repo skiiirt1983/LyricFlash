@@ -12,7 +12,10 @@ assert 'lv_screen_load_anim(' not in ui
 assert 'nav_settle(' not in ui
 assert 'pager_build(' not in ui
 assert 'lv_obj_set_style_translate_x(' not in ui
-assert 'lv_obj_set_style_translate_y(' not in ui
+# Pager transitions must not use CSS translation; the dedicated lyric
+# layer is the sole exception, and never moves the Clock/Home/Settings pager.
+assert ui.count('lv_obj_set_style_translate_y(')==1
+assert 'lv_obj_set_style_translate_y(timed_scroll_group,target,0)' in ui
 assert 'lv_anim_set_exec_cb(' not in ui
 assert 'render_home();' in ui and 'render_clock();' in ui and 'render_settings();' in ui
 assert 'lv_indev_get_state(ptr)==LV_INDEV_STATE_PRESSED' in ui
