@@ -150,6 +150,49 @@ static void pixel_digit(lv_layer_t *layer,int x,int y,int cell,char c,
         }
     }
 }
+/* These fifteen additional designs are generated from original numeral
+ * geometry, not loaded commercial font files. Their silhouettes, thickness,
+ * shearing, borders and ornamentation differ on the actual AMOLED. */
+static void styled_digit(lv_layer_t *layer,int x,int y,int cell,char c,
+                         uint32_t color,uint8_t style)
+{
+    if(c<'0'||c>'9'){
+        pixel_digit(layer,x,y,cell,c,color,false);
+        return;
+    }
+    const uint8_t *rows=grid_digits[c-'0'];
+    for(int row=0;row<7;row++)for(int col=0;col<5;col++){
+        if(!((rows[row]>>(4-col))&1))continue;
+        if(style==16 && col==2 && (row==1||row==4))continue;
+        int skew=(style==11 || style==12)?(6-row)*cell/3:0;
+        if(style==5)skew=(row>3?(row-3):-row)*cell/5; /* Deco */
+        int jitter=style==10?(((row*7+col*5)%3)-1)*cell/3:0;
+        int px=x+col*cell+skew+jitter;
+        int py=y+row*cell;
+        int w=cell,h=cell,r=0;
+        if(style==6){r=cell/2;w=cell+1;}
+        if(style==8){w=cell+2;h=cell+1;}
+        if(style==9){h=cell-1;}
+        if(style==11){h=cell-2;r=1;}
+        if(style==14){w=cell-1;h=cell-1;}
+        if(style==18){w=cell-1;h=cell-1;r=cell/2;}
+        if(style==19){w=cell/3+1;h=cell-1;}
+        if(style==13||style==15){
+            draw_bar(layer,px+2,py+2,w,h,style==13?0x394855:0x254866,1);
+        }
+        if(style==17 && (row==0||row==6)){
+            draw_bar(layer,px-1,py+cell-2,cell+2,2,color,0);
+        }
+        draw_bar(layer,px,py,w,h,color,r);
+        if(style==7 && row<3)
+            draw_bar(layer,px,py,w,1,0xF9DD8E,0);
+        if(style==9 && row==0)
+            draw_bar(layer,px+cell/2,py-cell/2,2,cell/2,color,0);
+        if(style==15)
+            draw_bar(layer,px+1,py+1,w>2?w-2:1,h>2?h-2:1,0xD2FAFF,1);
+    }
+}
+
 static void basic_digits_draw(lv_event_t *e)
 {
     const lf_settings_t *p=(const lf_settings_t *)lv_event_get_user_data(e);
@@ -159,12 +202,12 @@ static void basic_digits_draw(lv_event_t *e)
     lv_area_t box;lv_obj_get_coords(obj,&box);
     const int center_x=(box.x1+box.x2)/2,center_y=(box.y1+box.y2)/2;
     const int length=5;
-    if(p->basic_font_style==1){
+    if(p->basic_font_style==1 || p->basic_font_style==12){
         const int h=44+(int)p->basic_font_size/2;
         const int w=h*54/100,gap=5+(int)p->basic_font_size/12;
         const int total=length*w+(length-1)*gap;
         const int start_x=center_x-total/2,start_y=center_y-h/2;
-        const int thick=h/9;
+        const int thick=p->basic_font_style==12?h/6:h/9;
         for(int i=0;i<length;i++)
             segment_digit(layer,start_x+i*(w+gap),start_y,w,h,thick,
                           custom_time[i],p->basic_foreground);
@@ -172,9 +215,14 @@ static void basic_digits_draw(lv_event_t *e)
         const int cell=4+(int)p->basic_font_size/18;
         const int w=5*cell,gap=2*cell,total=length*w+(length-1)*gap;
         const int start_x=center_x-total/2,start_y=center_y-7*cell/2;
-        for(int i=0;i<length;i++)
-            pixel_digit(layer,start_x+i*(w+gap),start_y,cell,
-                        custom_time[i],p->basic_foreground,p->basic_font_style==3);
+        for(int i=0;i<length;i++){
+            if(p->basic_font_style>=5)
+                styled_digit(layer,start_x+i*(w+gap),start_y,cell,
+                             custom_time[i],p->basic_foreground,p->basic_font_style);
+            else
+                pixel_digit(layer,start_x+i*(w+gap),start_y,cell,
+                            custom_time[i],p->basic_foreground,p->basic_font_style==3);
+        }
     }
 }
 
@@ -196,11 +244,12 @@ lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
     lv_label_set_long_mode(time,LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(time,time_font(p),0);
     const int letter_spacing[5]={0,3,1,6,2};
-    lv_obj_set_style_text_letter_space(time,letter_spacing[p->basic_font_style],0);
+    lv_obj_set_style_text_letter_space(time,
+         letter_spacing[p->basic_font_style<5?p->basic_font_style:0],0);
     lv_obj_set_style_text_color(time,lv_color_hex(p->basic_foreground),0);
     lv_obj_set_style_text_align(time,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_align(time,LV_ALIGN_CENTER,p->basic_time_x,p->basic_time_y);
-    if(p->basic_font_style>=1 && p->basic_font_style<=3){
+    if(p->basic_font_style!=0 && p->basic_font_style!=4){
         lv_obj_add_flag(time,LV_OBJ_FLAG_HIDDEN);
         custom_time_layer=lv_obj_create(parent);
         lv_obj_set_size(custom_time_layer,412,132);
