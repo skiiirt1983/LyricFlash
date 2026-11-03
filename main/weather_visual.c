@@ -121,7 +121,10 @@ void lf_weather_visual_build(lv_obj_t *parent)
     lv_obj_set_scroll_dir(scrollbox,LV_DIR_VER);
     lv_obj_set_scrollbar_mode(scrollbox,LV_SCROLLBAR_MODE_AUTO);
     lv_obj_add_flag(scrollbox,LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_remove_flag(scrollbox,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    /* Let horizontal Weather exit gestures reach the owning screen.
+       Vertical gestures remain scrollable inside the forecast. */
+    lv_obj_add_flag(scrollbox,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(scrollbox,LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_remove_flag(scrollbox,LV_OBJ_FLAG_SCROLL_CHAIN);
 }
 void lf_weather_visual_update(const lf_weather_view_t *w)

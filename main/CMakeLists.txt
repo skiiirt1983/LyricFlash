@@ -3,6 +3,12 @@ idf_component_register(
     SRCS
         "main.c"
         "diagnostics.c"
+        "mic_probe.c"
+        "mic_pcm.c"
+        "recognition.c"
+        "recognition_audio.c"
+        "lrclib_match.c"
+        "lrclib_client.c"
         "ui.c"
         "char_wheel.c"
         "clock_face.c"
@@ -12,6 +18,7 @@ idf_component_register(
         "ota_guard.c"
         "settings.c"
         "lyrics.c"
+        "lyric_clock.c"
         "image_policy.c"
         "service_errors.c"
         "power.c"
@@ -20,9 +27,11 @@ idf_component_register(
         "wifi_json.c"
     INCLUDE_DIRS "."
     REQUIRES
+        esp32_s3_touch_amoled_1_75
         nvs_flash
         esp_timer
         app_update
+        esp_https_ota
         esp_wifi
         esp_netif
         esp_event
