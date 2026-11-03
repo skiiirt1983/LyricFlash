@@ -83,6 +83,6 @@ lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
     lv_obj_set_style_text_letter_space(time,letter_spacing[p->basic_font_style],0);
     lv_obj_set_style_text_color(time,lv_color_hex(p->basic_foreground),0);
     lv_obj_set_style_text_align(time,LV_TEXT_ALIGN_CENTER,0);
-    lv_obj_align(time,LV_ALIGN_CENTER,0,-6);
+    lv_obj_align(time,LV_ALIGN_CENTER,p->basic_time_x,p->basic_time_y);
     return time;
 }
