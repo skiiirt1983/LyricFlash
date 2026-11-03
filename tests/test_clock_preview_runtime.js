@@ -66,6 +66,12 @@ const runtime=new Function("document","fetch","setInterval",
   fontPreviews.push(el("clock-preview").innerHTML);
  }
  assert.equal(new Set(fontPreviews).size,5,"Font presets must produce five visibly different time previews");
+ const oldBatteryPreview=el("clock-preview").innerHTML;
+ el("basic_battery_x").value="37";el("basic_battery_x").dispatch("input");
+ const newBatteryPreview=el("clock-preview").innerHTML;
+ assert.notEqual(oldBatteryPreview,newBatteryPreview,"Battery position slider does not update preview");
+ el("basic_date_size").value="93";el("basic_date_size").dispatch("input");
+ assert.equal(el("value_basic_date_size").textContent,"93","Slider value is not shown");
  el("ring_mode").value="0";el("ring_mode").dispatch("input");
  assert.equal(el("ring-b-row").hidden,true,"Solid ring must hide colour 2");
  assert.equal(el("ring-c-row").hidden,true,"Solid ring must hide colour 3");
@@ -87,6 +93,8 @@ const runtime=new Function("document","fetch","setInterval",
  await runtime.save();
  assert.equal(posts.length,1,"Clock Studio did not send save request");
  assert.equal(posts[0].face_profiles.length,6);
+ assert.equal(posts[0].basic_battery_x,37,"Battery X not saved as number");
+ assert.equal(posts[0].basic_date_size,93,"Date size not saved as number");
  assert.equal(posts[0].face_profiles[2].background,0x112233);
  assert.equal(posts[0].face_profiles[3].background,0xa7c7a0);
  el("reset-face").onclick();
