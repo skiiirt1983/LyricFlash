@@ -653,7 +653,7 @@ require('lf_sync_estimate_position_ms(' in ui and
         'LV_EVENT_LONG_PRESSED' in ui and
         'PAUSE' in ui and 'RESUME' in ui and
         'timed_pause' in ui and 'timed_adjust' in ui and
-        '(int32_t)(step*2000)' in ui and
+        'timed_change_offset(timed_clock.correction_ms+(int32_t)(direction*500));' in ui and
         'timed_scan_attempt!=song->attempts' in ui,
         "0.8.42 estimated sync, hidden alignment controls and new scan reset")
 require('lv_obj_delete_async(old_screen);' in ui and
