@@ -45,6 +45,8 @@ uint8_t brightness;
 static i2s_chan_handle_t i2s_tx_chan = NULL;
 static i2s_chan_handle_t i2s_rx_chan = NULL;
 static const audio_codec_data_if_t *i2s_data_if = NULL; /* Codec data interface */
+/* Reuse the ES7210 codec handle across manual tests: no per-scan allocation. */
+static esp_codec_dev_handle_t microphone_codec_dev = NULL;
 
 #define BSP_ES7210_CODEC_ADDR ES7210_CODEC_DEFAULT_ADDR
 #define BSP_I2S_GPIO_CFG       \
@@ -689,6 +691,7 @@ esp_codec_dev_handle_t bsp_audio_codec_speaker_init(void)
 
 esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 {
+    if (microphone_codec_dev != NULL) return microphone_codec_dev;
     if (i2s_data_if == NULL) {
         BSP_ERROR_CHECK_RETURN_NULL(bsp_i2c_init());
         /* Four-slot TDM input is required by ES7210 on this board. */
@@ -717,7 +720,8 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
         .codec_if = es7210_dev,
         .data_if = i2s_data_if,
     };
-    return esp_codec_dev_new(&codec_es7210_dev_cfg);
+    microphone_codec_dev = esp_codec_dev_new(&codec_es7210_dev_cfg);
+    return microphone_codec_dev;
 }
 
 #define LCD_CMD_BITS (8)

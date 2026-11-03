@@ -512,3 +512,8 @@ require('LF_PCM_RATE (24000)' in pcm and
         'mic1_mean_abs' in network and 'mic2_peak_abs' in network and
         'mic1_mean_abs' in web and 'mic2_peak_abs' in web,
         "0.8.32 separate physical MIC1 and MIC2 levels, not reference/unused slots")
+
+require('static esp_codec_dev_handle_t microphone_codec_dev = NULL;' in bsp and
+        'if (microphone_codec_dev != NULL) return microphone_codec_dev;' in bsp and
+        'microphone_codec_dev = esp_codec_dev_new(&codec_es7210_dev_cfg)' in bsp,
+        "0.8.32 microphone codec handle must be shared across repeated tests")
