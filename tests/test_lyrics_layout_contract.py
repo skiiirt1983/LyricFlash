@@ -6,7 +6,7 @@ ui=(root/"main/ui.c").read_text()
 settings=(root/"main/settings.c").read_text()
 schema=(root/"main/settings.h").read_text()
 scene=ui.split("static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)\n{",1)[1].split("static void build_preview_now",1)[0]
-assert "LF_CONFIG_SCHEMA 11U" in schema
+assert "LF_CONFIG_SCHEMA 12U" in schema
 assert ".timing_offset_ms = -2000" in settings
 assert "schema < 10 && s->timing_offset_ms == 0" in settings
 assert 'nvs_set_i32(h, "offset_ms", s->timing_offset_ms)' in settings
@@ -26,6 +26,9 @@ for token in ("lv_label_set_long_mode(line,LV_LABEL_LONG_WRAP)",
               "battery.percentage<=20)?0xFFD34D",
               "current>=timed_controls_until_ms"):
     assert token in ui,token
+assert "lyric_logo_at_top(screen)" not in scene
+assert "lv_obj_set_style_translate_y(timed_scroll_group,target,0)" in ui
+assert "timed_scroll_timer=lv_timer_create(timed_scroll_frame,25,NULL)" in ui
 assert "song->title,38" not in scene and "song->artist,77" not in scene
 assert "lv_obj_t *focus=lv_obj_create(screen)" not in scene
 print("PASS: minimal battery with charging/low colours, lyric viewport and saved -2s offset")
