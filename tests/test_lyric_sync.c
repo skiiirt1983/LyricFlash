@@ -25,5 +25,10 @@ int main(void){
  assert(lf_sync_row_pitch_px(30,30,1000)==92);
  assert(lf_sync_row_pitch_px(30,30,12000)==127);
  assert(lf_sync_row_pitch_px(110,80,1000)==113);
+ assert(lf_sync_rate_position(12000,10000,10000,100)==12000);
+ assert(lf_sync_rate_position(12000,10000,10000,80)==11600);
+ assert(lf_sync_rate_position(12000,10000,10000,120)==12400);
+ assert(lf_sync_rate_position(12000,12000,11600,125)==11600);
+ assert(lf_sync_rate_position(UINT32_MAX,0,UINT32_MAX,125)==UINT32_MAX);
  return 0;
 }

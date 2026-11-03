@@ -13,6 +13,7 @@
 #include "recognition.h"
 #include "lyric_clock.h"
 #include "lyric_sync.h"
+#include "song_cache.h"
 #include "recognition_audio.h"
 #include "weather.h"
 #include "weather_visual.h"
@@ -70,7 +71,16 @@ static lv_obj_t *timed_save_note;
 static uint64_t timed_hint_until_ms;
 static uint64_t timed_last_short_tap_ms;
 static uint64_t timed_controls_until_ms;
+/* Song-local timing anchors. Rate changes are continuous, without jumps. */
 static bool timed_estimated;
+static uint16_t timed_rate_percent=100;
+static uint32_t timed_rate_clock_anchor_ms;
+static uint32_t timed_rate_song_anchor_ms;
+static bool timed_song_custom;
+static lv_obj_t *timed_sync_slider;
+static lv_obj_t *timed_rate_slider;
+static lv_obj_t *timed_sync_value;
+static lv_obj_t *timed_rate_value;
 static uint32_t auto_open_attempt;
 static bool auto_open_pending;
 static bool auto_open_transition;
@@ -754,6 +764,8 @@ static void lyrics_overlay_close(void)
     timed_hint=NULL;
     timed_battery=NULL;
     timed_save_note=NULL;
+    timed_sync_slider=NULL;timed_rate_slider=NULL;
+    timed_sync_value=NULL;timed_rate_value=NULL;
     timed_line_count=0;
     timed_last_short_tap_ms=0;
     atomic_store(&ui_lyrics_scene_phase,0U);
@@ -844,6 +856,8 @@ static void make_base(void)
     timed_battery=NULL;
     timed_power_update_ms=0;
     timed_save_note=NULL;
+    timed_sync_slider=NULL;timed_rate_slider=NULL;
+    timed_sync_value=NULL;timed_rate_value=NULL;
     timed_hint_until_ms=0;
     timed_controls_until_ms=0;
     timed_last_short_tap_ms=0;
@@ -1461,6 +1475,14 @@ static uint8_t timed_future_mask(uint32_t ms,int index)
     }
     return visible;
 }
+static uint32_t timed_song_position(uint64_t current)
+{
+    if(!timed_clock.started)return 0;
+    const uint32_t base=lf_lyric_clock_position(&timed_clock,current);
+    const uint32_t scaled=lf_sync_rate_position(base,timed_rate_clock_anchor_ms,
+                                       timed_rate_song_anchor_ms,timed_rate_percent);
+    return lf_sync_visible_position_ms(scaled);
+}
 static void timed_render(uint64_t current,bool force);
 static void timed_layout_rows(uint32_t ms,int index)
 {
@@ -1543,8 +1565,7 @@ static void timed_render(uint64_t current,bool force)
     }
     /* Observed lyrics run ~1s ahead: adjust the rendered timeline only,
        keeping the user's saved manual clock offset independent. */
-    const uint32_t ms=lf_sync_visible_position_ms(
-        lf_lyric_clock_position(&timed_clock,current));
+    const uint32_t ms=timed_song_position(current);
     const uint32_t second=ms/1000U;
     if(force||timed_last_second!=second){
         char info[105];
@@ -1591,8 +1612,11 @@ static void timed_start(lv_event_t *e)
     (void)e;
     if(!timed_lyrics_mode)return;
     const uint64_t now=now_ms();
+    const int32_t active_offset=timed_clock.correction_ms;
     lf_lyric_clock_start(&timed_clock,now);
-    lf_lyric_clock_adjust(&timed_clock,prefs->timing_offset_ms);
+    lf_lyric_clock_adjust(&timed_clock,active_offset);
+    timed_rate_clock_anchor_ms=lf_lyric_clock_position(&timed_clock,now);
+    timed_rate_song_anchor_ms=timed_rate_clock_anchor_ms;
     timed_estimated=false; /* Restart is deliberately manual alignment. */
     timed_controls_until_ms=now+15000;
     timed_active_index=-999;timed_last_second=UINT32_MAX;
@@ -1603,32 +1627,108 @@ static void timed_start(lv_event_t *e)
     }
     timed_render(now,true);
 }
+static void timed_update_slider_labels(void)
+{
+    char text[42];
+    if(timed_sync_value){
+        const int32_t offset=timed_clock.correction_ms;
+        snprintf(text,sizeof text,"Timing %c%ld.%02lds",
+            offset<0?'-':'+',(long)(labs((long)offset)/1000),
+            (long)((labs((long)offset)%1000)/10));
+        lv_label_set_text(timed_sync_value,text);
+    }
+    if(timed_rate_value){
+        snprintf(text,sizeof text,"Lyrics speed %u%%",(unsigned)timed_rate_percent);
+        lv_label_set_text(timed_rate_value,text);
+    }
+}
+/* Re-anchor the variable-speed song clock without an instantaneous jump. */
+static void timed_change_rate(uint16_t new_rate)
+{
+    if(!timed_clock.started || new_rate<75 || new_rate>125)return;
+    const uint64_t current=now_ms();
+    const uint32_t base=lf_lyric_clock_position(&timed_clock,current);
+    const uint32_t song=lf_sync_rate_position(base,timed_rate_clock_anchor_ms,
+                                   timed_rate_song_anchor_ms,timed_rate_percent);
+    timed_rate_clock_anchor_ms=base;
+    timed_rate_song_anchor_ms=song;
+    timed_rate_percent=new_rate;
+    timed_active_index=-999;timed_last_second=UINT32_MAX;
+    timed_update_slider_labels();
+    activity();timed_render(current,true);
+}
+static void timed_change_offset(int32_t new_offset)
+{
+    if(!timed_clock.started)return;
+    const int32_t delta=new_offset-timed_clock.correction_ms;
+    if(!delta)return;
+    const uint64_t current=now_ms();
+    const uint32_t base=lf_lyric_clock_position(&timed_clock,current);
+    const uint32_t song=lf_sync_rate_position(base,timed_rate_clock_anchor_ms,
+                                   timed_rate_song_anchor_ms,timed_rate_percent);
+    lf_lyric_clock_adjust(&timed_clock,delta);
+    const int64_t updated=(int64_t)song+delta;
+    timed_rate_clock_anchor_ms=lf_lyric_clock_position(&timed_clock,current);
+    timed_rate_song_anchor_ms=(uint32_t)(updated<0?0:
+                                            updated>UINT32_MAX?UINT32_MAX:updated);
+    timed_active_index=-999;timed_last_second=UINT32_MAX;
+    timed_update_slider_labels();
+    activity();timed_render(current,true);
+}
+static void timed_on_sync_slide(lv_event_t *e)
+{
+    if(!timed_lyrics_mode || !timed_clock.started)return;
+    int32_t v=lv_slider_get_value(lv_event_get_target(e));
+    v=((v>=0?v+125:v-125)/250)*250; /* quarter-second steps */
+    timed_change_offset(v);
+    if(timed_save_note)lv_label_set_text(timed_save_note,"Save Custom to retain this track");
+}
+static void timed_on_rate_slide(lv_event_t *e)
+{
+    if(!timed_lyrics_mode || !timed_clock.started)return;
+    timed_change_rate((uint16_t)lv_slider_get_value(lv_event_get_target(e)));
+    if(timed_save_note)lv_label_set_text(timed_save_note,"Save Custom to retain this track");
+}
 static void timed_adjust(lv_event_t *e)
 {
     if(!timed_lyrics_mode || !timed_clock.started)return;
-    const intptr_t step=(intptr_t)lv_event_get_user_data(e);
-    lf_lyric_clock_adjust(&timed_clock,(int32_t)(step*2000));
-    timed_controls_until_ms=now_ms()+15000;
-    if(timed_save_note)lv_label_set_text(timed_save_note,"SAVE DEFAULT to keep this offset");
-    timed_active_index=-999;timed_last_second=UINT32_MAX;
-    activity();timed_render(now_ms(),true);
+    const intptr_t direction=(intptr_t)lv_event_get_user_data(e);
+    timed_change_offset(timed_clock.correction_ms+(int32_t)(direction*500));
+    if(timed_sync_slider)lv_slider_set_value(timed_sync_slider,timed_clock.correction_ms,LV_ANIM_OFF);
 }
-/* Save a global correction in the same NVS namespace as Wi-Fi-adjacent
- * device preferences; retain changes across restarts and future OTAs. */
 static void timed_save_default(lv_event_t *e)
 {
     (void)e;
-    if(!timed_lyrics_mode || !timed_clock.started)return;
-    const int32_t previous=prefs->timing_offset_ms;
-    prefs->timing_offset_ms=timed_clock.correction_ms;
-    const esp_err_t err=lf_settings_save(prefs);
-    if(err!=ESP_OK){
-        prefs->timing_offset_ms=previous;
-        ESP_LOGE(TAG,"Lyric sync preference save failed: %s",esp_err_to_name(err));
-        if(timed_save_note)lv_label_set_text(timed_save_note,"Save failed - retry");
-    }else if(timed_save_note)
-        lv_label_set_text(timed_save_note,"Saved across restarts and OTA");
-    timed_controls_until_ms=now_ms()+15000;
+    if(!timed_lyrics_mode||!timed_clock.started)return;
+    lf_recog_snapshot_t track={0};lf_recog_snapshot(&track);
+    const bool saved=track.attempts==timed_scan_attempt &&
+        lf_song_cache_store_profile(track.title,track.artist,
+                               timed_clock.correction_ms,timed_rate_percent);
+    if(saved)timed_song_custom=true;
+    if(timed_save_note)lv_label_set_text(timed_save_note,
+        saved?"Saved for this track across restarts":"Save failed - storage unavailable");
+    timed_controls_until_ms=0; /* explicit DONE, not an automatic timeout */
+    activity();
+}
+static void timed_load_default(lv_event_t *e)
+{
+    (void)e;
+    timed_change_offset(prefs->timing_offset_ms);
+    timed_change_rate(100U);
+    if(timed_sync_slider)lv_slider_set_value(timed_sync_slider,timed_clock.correction_ms,LV_ANIM_OFF);
+    if(timed_rate_slider)lv_slider_set_value(timed_rate_slider,100,LV_ANIM_OFF);
+    timed_song_custom=false;
+    if(timed_save_note)lv_label_set_text(timed_save_note,
+        "Defaults active. Save Custom to replace saved track settings.");
+    timed_controls_until_ms=0;
+    activity();
+}
+static void timed_controls_done(lv_event_t *e)
+{
+    (void)e;
+    timed_controls_until_ms=0;
+    timed_last_short_tap_ms=0;
+    if(timed_controls)lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
     activity();
 }
 static void timed_pause(lv_event_t *e)
@@ -1669,7 +1769,7 @@ static void timed_toggle_controls(lv_event_t *e)
         if(lv_obj_has_flag(timed_controls,LV_OBJ_FLAG_HIDDEN)){
             lv_obj_remove_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
             lv_obj_move_foreground(timed_controls);
-            timed_controls_until_ms=now_ms()+15000;
+            timed_controls_until_ms=0; /* user must press DONE to close */
         }else{
             lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
             timed_controls_until_ms=0;
@@ -1736,8 +1836,22 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
             timed_clock.elapsed_ms=lf_sync_estimate_position_ms(
                 song->audd_timecode_ms,song->capture_start_ms,
                 song->captured_frames,LF_SCAN_RATE,now_ms());
-            lf_lyric_clock_adjust(&timed_clock,prefs->timing_offset_ms);
+            int32_t offset=prefs->timing_offset_ms;
+            uint16_t rate=100U;
+            timed_song_custom=lf_song_cache_load_profile(
+                song->title,song->artist,&offset,&rate);
+            lf_lyric_clock_adjust(&timed_clock,offset);
+            timed_rate_percent=rate;
+            timed_rate_clock_anchor_ms=lf_lyric_clock_position(&timed_clock,now_ms());
+            timed_rate_song_anchor_ms=timed_rate_clock_anchor_ms;
             timed_estimated=true;
+        }
+        if(!timed_clock.started){
+            int32_t saved_offset=prefs->timing_offset_ms;
+            uint16_t saved_rate=100U;
+            timed_song_custom=lf_song_cache_load_profile(
+                song->title,song->artist,&saved_offset,&saved_rate);
+            timed_rate_percent=saved_rate;
         }
         timed_scan_attempt=song->attempts;
     }
@@ -1830,11 +1944,11 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_width(timed_hint,260);
     timed_hint_until_ms=now_ms()+5000; /* Hint disappears after first five seconds. */
     timed_controls=lv_obj_create(surface);
-    lv_obj_set_size(timed_controls,362,212);
+    lv_obj_set_size(timed_controls,396,374);
     lv_obj_align(timed_controls,LV_ALIGN_CENTER,0,0);
     lv_obj_set_style_radius(timed_controls,22,0);
     lv_obj_set_style_bg_color(timed_controls,lv_color_hex(0x111E2D),0);
-    lv_obj_set_style_bg_opa(timed_controls,LV_OPA_COVER,0);
+    lv_obj_set_style_bg_opa(timed_controls,LV_OPA_90,0);
     lv_obj_set_style_border_width(timed_controls,1,0);
     lv_obj_set_style_border_color(timed_controls,lv_color_hex(0x335672),0);
     lv_obj_set_style_shadow_width(timed_controls,0,0);
@@ -1844,33 +1958,62 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
     lv_obj_t *caption=lv_label_create(timed_controls);
-    lv_label_set_text(caption,"SYNC CONTROLS");
-    lv_obj_set_style_text_font(caption,&lv_font_montserrat_16,0);
-    lv_obj_set_style_text_color(caption,lv_color_hex(0xB6D4EA),0);
-    lv_obj_align(caption,LV_ALIGN_CENTER,0,-88);
-    button(timed_controls,"-2 SEC",98,48,-110,-28,0xA6BED1,timed_adjust,(void *)(intptr_t)-1);
-    button(timed_controls,"RESTART",105,48,0,-28,0xA8D6FF,timed_start,NULL);
-    button(timed_controls,"+2 SEC",98,48,110,-28,0xA6BED1,timed_adjust,(void *)(intptr_t)1);
-    timed_pause_button=button(timed_controls,timed_clock.started&&!timed_clock.running?
-        "RESUME":"PAUSE",98,48,-110,29,0xA8D6FF,timed_pause,NULL);
-    lv_obj_t *save=button(timed_controls,"SAVE DEFAULT",116,48,0,29,0x8BCCFF,timed_save_default,NULL);
-    lv_obj_t *save_caption=lv_obj_get_child(save,0);
-    if(save_caption)lv_obj_set_style_text_font(save_caption,&lv_font_montserrat_16,0);
-    button(timed_controls,"SETTINGS",98,48,110,29,0x8FAFC7,on_settings,NULL);
+    lv_label_set_text(caption,"LIVE SONG ALIGNMENT");
+    lv_obj_set_style_text_font(caption,&lv_font_montserrat_20,0);
+    lv_obj_set_style_text_color(caption,lv_color_hex(0xD6EDFF),0);
+    lv_obj_align(caption,LV_ALIGN_CENTER,0,-157);
     timed_status=lv_label_create(timed_controls);
     lv_label_set_text(timed_status,"");
-    lv_obj_set_width(timed_status,330);
+    lv_obj_set_width(timed_status,344);
     lv_obj_set_style_text_align(timed_status,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_set_style_text_font(timed_status,&lv_font_montserrat_16,0);
     lv_obj_set_style_text_color(timed_status,lv_color_hex(0xC3DEF1),0);
-    lv_obj_align(timed_status,LV_ALIGN_CENTER,0,69);
+    lv_obj_align(timed_status,LV_ALIGN_CENTER,0,-127);
+    lv_obj_t *sync_label=lv_label_create(timed_controls);
+    lv_label_set_text(sync_label,"TIMING  - later     + earlier");
+    lv_obj_set_style_text_font(sync_label,&lv_font_montserrat_16,0);
+    lv_obj_set_style_text_color(sync_label,lv_color_hex(0xB6D4EA),0);
+    lv_obj_align(sync_label,LV_ALIGN_CENTER,0,-97);
+    timed_sync_slider=lv_slider_create(timed_controls);
+    lv_obj_set_size(timed_sync_slider,320,13);
+    lv_slider_set_range(timed_sync_slider,-10000,10000);
+    lv_slider_set_value(timed_sync_slider,timed_clock.correction_ms,LV_ANIM_OFF);
+    lv_obj_align(timed_sync_slider,LV_ALIGN_CENTER,0,-70);
+    lv_obj_add_event_cb(timed_sync_slider,timed_on_sync_slide,LV_EVENT_VALUE_CHANGED,NULL);
+    timed_sync_value=lv_label_create(timed_controls);
+    lv_obj_set_style_text_font(timed_sync_value,&lv_font_montserrat_16,0);
+    lv_obj_set_style_text_color(timed_sync_value,lv_color_hex(0xFFFFFF),0);
+    lv_obj_align(timed_sync_value,LV_ALIGN_CENTER,0,-47);
+    lv_obj_t *rate_label=lv_label_create(timed_controls);
+    lv_label_set_text(rate_label,"SPEED  - slower      + faster");
+    lv_obj_set_style_text_font(rate_label,&lv_font_montserrat_16,0);
+    lv_obj_set_style_text_color(rate_label,lv_color_hex(0xB6D4EA),0);
+    lv_obj_align(rate_label,LV_ALIGN_CENTER,0,-18);
+    timed_rate_slider=lv_slider_create(timed_controls);
+    lv_obj_set_size(timed_rate_slider,320,13);
+    lv_slider_set_range(timed_rate_slider,75,125);
+    lv_slider_set_value(timed_rate_slider,timed_rate_percent,LV_ANIM_OFF);
+    lv_obj_align(timed_rate_slider,LV_ALIGN_CENTER,0,9);
+    lv_obj_add_event_cb(timed_rate_slider,timed_on_rate_slide,LV_EVENT_VALUE_CHANGED,NULL);
+    timed_rate_value=lv_label_create(timed_controls);
+    lv_obj_set_style_text_font(timed_rate_value,&lv_font_montserrat_16,0);
+    lv_obj_set_style_text_color(timed_rate_value,lv_color_hex(0xFFFFFF),0);
+    lv_obj_align(timed_rate_value,LV_ALIGN_CENTER,0,32);
+    timed_update_slider_labels();
+    timed_pause_button=button(timed_controls,timed_clock.started&&!timed_clock.running?
+        "RESUME":"PAUSE",126,42,-88,72,0xA8D6FF,timed_pause,NULL);
+    button(timed_controls,"RESTART",126,42,88,72,0xA8D6FF,timed_start,NULL);
+    button(timed_controls,"SAVE CUSTOM",138,42,-86,125,0x8BCCFF,timed_save_default,NULL);
+    button(timed_controls,"LOAD DEFAULT",138,42,86,125,0x8FAFC7,timed_load_default,NULL);
     timed_save_note=lv_label_create(timed_controls);
-    lv_label_set_text(timed_save_note,"Changes affect this song until saved");
-    lv_obj_set_width(timed_save_note,332);
+    lv_label_set_text(timed_save_note,timed_song_custom?
+        "Saved timing loaded for this track":"Default timing active");
+    lv_obj_set_width(timed_save_note,340);
     lv_obj_set_style_text_align(timed_save_note,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_set_style_text_font(timed_save_note,&lv_font_montserrat_12,0);
     lv_obj_set_style_text_color(timed_save_note,lv_color_hex(0x8EAFC7),0);
-    lv_obj_align(timed_save_note,LV_ALIGN_CENTER,0,94);
+    lv_obj_align(timed_save_note,LV_ALIGN_CENTER,0,153);
+    button(timed_controls,"DONE",108,36,0,176,0x8BCCFF,timed_controls_done,NULL);
     lv_obj_remove_event_cb(surface,timed_toggle_controls);
     lv_obj_add_event_cb(surface,timed_toggle_controls,LV_EVENT_LONG_PRESSED,NULL);
     lv_obj_add_event_cb(surface,timed_double_tap_home,LV_EVENT_SHORT_CLICKED,NULL);

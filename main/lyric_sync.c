@@ -62,3 +62,16 @@ uint16_t lf_sync_row_pitch_px(uint16_t height_a,uint16_t height_b,uint32_t gap_m
  if(pitch>320U)pitch=320U;
  return (uint16_t)pitch;
 }
+
+/* A song's speed can change mid-line without jumping. Store the current
+   position as the new anchor every time the user moves the tempo slider. */
+uint32_t lf_sync_rate_position(uint32_t base_ms,uint32_t anchor_base_ms,
+                               uint32_t anchor_song_ms,uint16_t rate_percent){
+ if(rate_percent<75)rate_percent=75;
+ if(rate_percent>125)rate_percent=125;
+ const uint64_t elapsed=base_ms>=anchor_base_ms?
+        (uint64_t)(base_ms-anchor_base_ms):0U;
+ const uint64_t result=(uint64_t)anchor_song_ms+
+                       (elapsed*(uint64_t)rate_percent)/100U;
+ return result>UINT32_MAX?UINT32_MAX:(uint32_t)result;
+}

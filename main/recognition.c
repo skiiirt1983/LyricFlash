@@ -5,6 +5,7 @@
 #include "service_errors.h"
 #include "lrclib_client.h"
 #include "lyrics.h"
+#include "song_cache.h"
 #include "lyric_sync.h"
 #include "bsp/esp32_s3_touch_amoled_1_75.h"
 #include "esp_codec_dev.h"
@@ -165,8 +166,13 @@ static void lookup_lyrics_after_match(void)
         if(!cancelled())status(LF_RECOG_MATCH,"Song identified; lyrics memory unavailable");
         return;
     }
-    const lf_lrclib_state_t found=lf_lrclib_lookup(
-        song.title,song.artist,parsed,cancelled);
+    /* Song identification still comes from the explicit AudD scan.
+       Cache hit skips only the LRCLIB HTTPS lookup, never the microphone. */
+    bool from_local=lf_song_cache_load_lyrics(song.title,song.artist,parsed);
+    const lf_lrclib_state_t found=from_local?LF_LRCLIB_SYNCED:
+        lf_lrclib_lookup(song.title,song.artist,parsed,cancelled);
+    if(found==LF_LRCLIB_SYNCED && parsed->count && !from_local && !cancelled())
+        (void)lf_song_cache_store_lyrics(song.title,song.artist,parsed);
     if(cancelled()){heap_caps_free(parsed);return;}
     portENTER_CRITICAL(&result_mux);
     snprintf(result.lyrics_state,sizeof result.lyrics_state,"%s",
@@ -181,7 +187,9 @@ static void lookup_lyrics_after_match(void)
     if(cancelled())return;
     switch(found){
         case LF_LRCLIB_SYNCED:
-            status(LF_RECOG_MATCH,"Song identified; synchronized lyrics found");break;
+            status(LF_RECOG_MATCH,from_local?
+                   "Song identified; cached synchronized lyrics loaded":
+                   "Song identified; synchronized lyrics found");break;
         case LF_LRCLIB_PLAIN:
             status(LF_RECOG_MATCH,"Song identified; only unsynchronized lyrics available");break;
         case LF_LRCLIB_INSTRUMENTAL:
