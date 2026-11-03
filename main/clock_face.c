@@ -418,7 +418,7 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
     else if (current_style == 4) build_sundial(parent);
     else {
         time_label = lf_basic_clock_render(parent, settings);
-        if(settings->basic_font_style>=1 && settings->basic_font_style<=3 &&
+        if(settings->basic_font_style!=0 && settings->basic_font_style!=4 &&
            !settings->face_24h[5])
             meridiem_label=face_text(parent,"",settings->basic_time_x+139,
                                     settings->basic_time_y+22,
