@@ -13,6 +13,7 @@ start=next(i for i,line in enumerate(lines) if 'lf_basic_settings_html[] =' in l
 parts=[]
 for line in lines[start:]:
     line=line.strip()
+    if not line: continue  # Blank lines do not affect adjacent C string literals
     if line == ";": break
     assert line.startswith('"') and line.endswith('"'), f"Invalid C string on line {line[:50]}"
     parts.append(ast.literal_eval(line))
