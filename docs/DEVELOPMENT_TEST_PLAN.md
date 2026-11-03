@@ -14,6 +14,15 @@
 
 Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` and `0.8.29` failed screen/touch on physical hardware. `0.8.30` is the targeted display recovery candidate and is not hardware-proven until the user verifies it. Keep 0.8.26 as rollback. Do not merge or publish a stable v1.0 release until the device tests pass. Each functional milestone uses **one isolated change and one gated compile after preflight**, followed by a specific device acceptance test.
 
+## Current milestone: Alpha 0.8.39 — real lyrics on the circular AMOLED
+
+- **Baseline validated:** 0.8.38 identified Mr. Jones by Counting Crows and retrieved 83 timestamped LRCLIB lines on physical Waveshare hardware. Reuse the existing lyric cache and manual AudD scan; no changes to microphone driver, recording, source services or keys.
+- **Screen:** Home > LYRICS now displays the song's title and artist, three lyric rows (past/current/next) and a highlighted current row using fixed LVGL labels. At most 200ms tick, only update strings on a line transition. Keep the original QSPI/LVGL clock and swipe paths untouched.
+- **Honest timing:** AudD provides a song identity but no exact external music-playback position. User restarts their music at 0:00 and taps **START / RESTART** simultaneously; manual monotonic clock aligns the cached timestamps. **+2 SEC/-2 SEC** shifts the lyric clock by 2 seconds up to ±10 seconds; PAUSE/RESUME affects only the on-device lyric clock, not the external player. Reopening the view for the same scan preserves alignment; a new scan resets it.
+- **Field acceptance:** Install 0.8.39, confirm clock/swipes/Wi-Fi still responsive, run one manual recognition from Device Settings Web UI, then on the round screen tap **LYRICS**. Confirm recognized title/artist and real lyric lines (not demo text), tap START at 0:00 on external player, watch highlight advance at the LRCLIB times, check ±2s shift, Pause/Resume, and HOME return with no black screen or frozen input. Send results or photo. Real synchronization is still manual.
+- **Privacy and OTA:** no background microphone reads, no extra AudD/LRCLIB calls when opening the viewer, no raw audio/token exposure, and preserve saved settings, HTTPS OTA and Current reinstall. No stable version without on-device acceptance.
+- **Preflight gate:** native clock start/pause/seek/line selection tests and existing recognition/LRCLIB/OTA/UI suite. Only one firmware compile after all green.
+
 ## Hardware test PASS: Alpha 0.8.38 — AudD to LRCLIB timestamped lyrics
 
 - **User-confirmed on-device result:** `Identified: Mr. Jones — Counting Crows`; `Synchronized lyrics found: 83 timed lines.`

@@ -1,12 +1,10 @@
 #pragma once
-/* Alpha 0.8.38: After a manually requested AudD song identification, query
- * LRCLIB over verified HTTPS using title/artist only (no mic audio or key).
- * Timestamp-parse synced lyrics into PSRAM and show count + four-line preview
- * in Device Settings. This is not yet real-time playback synchronization.
- * One version-neutral title fallback; no automatic 429 retries.
- * Optional Pages catalog 404 is hidden from end users; total update-check
- * failure remains a clear nontechnical message. Preserve 24kHz MIC/24dB,
- * QSPI/LVGL clock/touch, NVS, and Current-version OTA reinstall.
- * Hardware lyrics lookup and Stop validation required. */
-#define LF_VERSION "0.8.38-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.38"
+/* Alpha 0.8.39: show the 0.8.38 LRCLIB timestamped lyrics on the
+ * Waveshare AMOLED. Three-row lyric focus with manual timeline START,
+ * PAUSE/RESUME and +/-2s offset correction; no audio playback clock is
+ * provided by AudD, so this is NOT automatic synchronization. Existing
+ * dual-mic recognition, 24kHz 4-slot TDM 24dB gain, NVS, Clock pager,
+ * QSPI drawing, Wi-Fi and three-option OTA remain unchanged. Field test
+ * required before promoting this experimental alpha. */
+#define LF_VERSION "0.8.39-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.39"

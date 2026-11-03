@@ -10,6 +10,8 @@
 #include "diagnostics.h"
 #include "version.h"
 #include "clock_face.h"
+#include "recognition.h"
+#include "lyric_clock.h"
 #include "weather.h"
 #include "weather_visual.h"
 #include "char_wheel.h"
@@ -29,6 +31,19 @@ static bool paused;
 static bool asleep;
 static lv_obj_t *scroll_panel;
 static lv_obj_t *lyrics_label;
+/* A three-row lyric viewport avoids repainting huge scrolling text; all
+ * LVGL mutations stay on its existing task. No additional display roots. */
+static bool timed_lyrics_mode;
+static lf_lyric_clock_t timed_clock;
+static uint32_t timed_stamps[LF_MAX_LINES];
+static size_t timed_line_count;
+static uint32_t timed_scan_attempt;
+static int timed_active_index=-999;
+static uint32_t timed_last_second=UINT32_MAX;
+static uint64_t timed_last_update_ms;
+static lv_obj_t *timed_rows[3];
+static lv_obj_t *timed_status;
+static lv_obj_t *timed_pause_button;
 static lv_obj_t *speed_text;
 static lv_obj_t *brightness_text;
 static lv_obj_t *timeout_text;
@@ -702,6 +717,10 @@ static void make_base(void)
     debug_text=NULL;
     scroll_panel=NULL;
     lyrics_label=NULL;
+    timed_lyrics_mode=false;
+    for(size_t i=0;i<3;i++)timed_rows[i]=NULL;
+    timed_status=NULL;
+    timed_pause_button=NULL;
     battery_status=NULL;
     network_status=NULL;
     network_password=NULL;
@@ -795,8 +814,168 @@ static void on_touch_scroll(lv_event_t *e)
     }
 }
 
+/* The song ID does NOT supply the external player's current time. This
+ * is an explicitly MANUAL alignment preview: restart music and tap START;
+ * the +/-2s controls trim timing without listening in the background. */
+static void timed_render(uint64_t current, bool force)
+{
+    if(!timed_lyrics_mode||!timed_status)return;
+    lf_recog_snapshot_t state={0};
+    lf_recog_snapshot(&state);
+    if(state.attempts!=timed_scan_attempt || state.state!=LF_RECOG_MATCH ||
+       strcmp(state.lyrics_state,"synced")!=0){
+        timed_lyrics_mode=false;
+        lv_label_set_text(timed_status,"New scan started. Reopen Lyrics after identification.");
+        for(size_t i=0;i<3;i++)if(timed_rows[i])lv_label_set_text(timed_rows[i]," ");
+        return;
+    }
+    const uint32_t ms=lf_lyric_clock_position(&timed_clock,current);
+    const uint32_t second=ms/1000U;
+    if(force||timed_last_second!=second){
+        char info[105];
+        if(!timed_clock.started)
+            snprintf(info,sizeof info,"MANUAL: start music from 0:00, then tap START");
+        else{
+            const int64_t a=timed_clock.correction_ms<0?
+                -(int64_t)timed_clock.correction_ms:(int64_t)timed_clock.correction_ms;
+            snprintf(info,sizeof info,"MANUAL %02lu:%02lu  |  offset %c%ld.%01lds",
+                (unsigned long)(second/60),(unsigned long)(second%60),
+                timed_clock.correction_ms<0?'-':'+',
+                (long)(a/1000),(long)((a%1000)/100));
+        }
+        lv_label_set_text(timed_status,info);
+        timed_last_second=second;
+    }
+    const int index=timed_clock.started?
+        lf_lyric_clock_line_at(timed_stamps,timed_line_count,ms):-1;
+    if(force||index!=timed_active_index){
+        for(int slot=0;slot<3;slot++){
+            const int line_index=index+slot-1;
+            lf_lyric_line_t line={0};
+            if(line_index>=0 && (size_t)line_index<timed_line_count &&
+               lf_recog_lyric_line((uint32_t)line_index,&line))
+                lv_label_set_text(timed_rows[slot],line.text[0]?line.text:" ");
+            else if(slot==1 && index<0)
+                lv_label_set_text(timed_rows[slot],"Ready for first lyric");
+            else
+                lv_label_set_text(timed_rows[slot]," ");
+        }
+        timed_active_index=index;
+    }
+}
+static void timed_start(lv_event_t *e)
+{
+    (void)e;
+    if(!timed_lyrics_mode)return;
+    const uint64_t now=now_ms();
+    lf_lyric_clock_start(&timed_clock,now);
+    timed_active_index=-999;timed_last_second=UINT32_MAX;
+    paused=false;activity();
+    if(timed_pause_button){
+        lv_obj_t *caption=lv_obj_get_child(timed_pause_button,0);
+        if(caption)lv_label_set_text(caption,"PAUSE");
+    }
+    timed_render(now,true);
+}
+static void timed_adjust(lv_event_t *e)
+{
+    if(!timed_lyrics_mode || !timed_clock.started)return;
+    const intptr_t step=(intptr_t)lv_event_get_user_data(e);
+    lf_lyric_clock_adjust(&timed_clock,(int32_t)(step*2000));
+    timed_active_index=-999;timed_last_second=UINT32_MAX;
+    activity();timed_render(now_ms(),true);
+}
+static void timed_pause(lv_event_t *e)
+{
+    (void)e;
+    if(!timed_lyrics_mode || !timed_clock.started)return;
+    const uint64_t now=now_ms();
+    if(timed_clock.running)lf_lyric_clock_pause(&timed_clock,now);
+    else lf_lyric_clock_resume(&timed_clock,now);
+    paused=!timed_clock.running;
+    lv_obj_t *caption=timed_pause_button?lv_obj_get_child(timed_pause_button,0):NULL;
+    if(caption)lv_label_set_text(caption,timed_clock.running?"PAUSE":"RESUME");
+    activity();timed_render(now,true);
+}
+static lv_obj_t *timed_line_label(int y,const lv_font_t *font,uint32_t color)
+{
+    lv_obj_t *line=label(screen," ",y,font,color);
+    lv_obj_set_size(line,344,54);
+    lv_label_set_long_mode(line,LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(line,font,0);
+    lv_obj_remove_flag(line,LV_OBJ_FLAG_CLICKABLE);
+    return line;
+}
+static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
+{
+    page=1;
+    make_base();
+    timed_lyrics_mode=true;
+    /* Preserve a manually started clock across menus for the same song.
+     * A new AudD attempt invalidates the previous alignment. */
+    if(timed_scan_attempt!=song->attempts){
+        memset(&timed_clock,0,sizeof timed_clock);
+        timed_scan_attempt=song->attempts;
+    }
+    timed_line_count=0;
+    const size_t maximum=song->lyric_lines<LF_MAX_LINES?
+        song->lyric_lines:LF_MAX_LINES;
+    for(size_t i=0;i<maximum;i++){
+        lf_lyric_line_t line={0};
+        if(!lf_recog_lyric_line((uint32_t)i,&line))break;
+        timed_stamps[timed_line_count++]=line.start_ms;
+    }
+    if(!timed_line_count){
+        timed_lyrics_mode=false;
+        label(screen,"No timed lyrics loaded",200,&lv_font_montserrat_20,prefs->text_color);
+        button(screen,"HOME",150,49,0,172,0xA8D6FF,on_home,NULL);
+        return;
+    }
+    lv_obj_t *title=label(screen,song->title,38,&lv_font_montserrat_24,prefs->text_color);
+    lv_obj_set_height(title,35);
+    lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
+    lv_obj_t *artist=label(screen,song->artist,77,&lv_font_montserrat_18,0xA8C2D7);
+    lv_obj_set_style_text_font(artist,&lv_font_montserrat_18,0);
+    lv_label_set_long_mode(artist,LV_LABEL_LONG_DOT);
+    timed_status=label(screen,"MANUAL SYNC",112,&lv_font_montserrat_16,0x8DD8FF);
+    lv_obj_set_width(timed_status,390);
+    lv_obj_set_style_text_font(timed_status,&lv_font_montserrat_16,0);
+    /* Only the current line receives a shaded focus surface; nothing
+     * animates all 83 line widgets or changes the QSPI clock strategy. */
+    lv_obj_t *focus=lv_obj_create(screen);
+    lv_obj_set_size(focus,364,67);
+    lv_obj_align(focus,LV_ALIGN_TOP_MID,0,200);
+    lv_obj_set_style_radius(focus,24,0);
+    lv_obj_set_style_border_width(focus,1,0);
+    lv_obj_set_style_border_color(focus,lv_color_hex(prefs->accent_color),0);
+    lv_obj_set_style_bg_color(focus,lv_color_hex(0x15293A),0);
+    lv_obj_set_style_bg_opa(focus,LV_OPA_COVER,0);
+    lv_obj_remove_flag(focus,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(focus,LV_OBJ_FLAG_CLICKABLE);
+    timed_rows[0]=timed_line_label(144,&lv_font_montserrat_18,0x8198AB);
+    timed_rows[1]=timed_line_label(207,&lv_font_montserrat_24,prefs->text_color);
+    timed_rows[2]=timed_line_label(268,&lv_font_montserrat_18,0x8198AB);
+    button(screen,"-2 SEC",96,48,-122,119,0xA6BED1,timed_adjust,(void *)(intptr_t)-1);
+    button(screen,"START / RESTART",139,48,0,119,0xA8D6FF,timed_start,NULL);
+    button(screen,"+2 SEC",96,48,122,119,0xA6BED1,timed_adjust,(void *)(intptr_t)1);
+    button(screen,"HOME",124,48,-82,172,0x8FAFC7,on_home,NULL);
+    timed_pause_button=button(screen,timed_clock.started&&!timed_clock.running?
+        "RESUME":"PAUSE",124,48,82,172,prefs->text_color,timed_pause,NULL);
+    paused=!timed_clock.running;
+    timed_active_index=-999;timed_last_second=UINT32_MAX;
+    timed_last_update_ms=0;
+    timed_render(now_ms(),true);
+}
+
 static void build_preview_now(void)
 {
+    lf_recog_snapshot_t song={0};
+    lf_recog_snapshot(&song);
+    if(song.state==LF_RECOG_MATCH && song.lyric_lines>0 &&
+       strcmp(song.lyrics_state,"synced")==0) {
+        build_timed_lyrics_now(&song);
+        return;
+    }
     page = 1;
     make_base();
     scroll_y = 0;
@@ -1873,6 +2052,13 @@ static void on_tick(lv_timer_t *timer)
     if (prefs->sleep_seconds && !(page == 1 && !paused) && page != 14 && page != 15 && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
         sleep_display();
         return;
+    }
+    if(page==1 && timed_lyrics_mode){
+        if(current-timed_last_update_ms>=200){
+            timed_last_update_ms=current;
+            timed_render(current,false);
+        }
+        return; /* The demo auto-scroller must never run on real LRC. */
     }
     if (page != 1 || paused || touch_held || user_dragging || finger_was_scrolling ||
         !scroll_panel || (touch_resume_at_ms && current < touch_resume_at_ms)) {

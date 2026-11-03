@@ -627,3 +627,35 @@ require('Synchronized lyrics found:' in pages['settings'] and
         'checkedAtLeastOneSource' in pages['firmware'] and
         'Some sources unavailable:' not in pages['firmware'],
         "0.8.38 lyrics preview and nontechnical update status")
+
+# Alpha 0.8.39: use the proven circular UI to view real parsed LRCLIB lyrics.
+clock=read("main/lyric_clock.c")
+clock_h=read("main/lyric_clock.h")
+require('lyric_clock.c' in cmake and
+        'lf_lyric_clock_start' in clock and
+        'lf_lyric_clock_pause' in clock and
+        'lf_lyric_clock_resume' in clock and
+        'lf_lyric_clock_adjust' in clock and
+        'lf_lyric_clock_line_at' in clock and
+        'lf_lyric_clock_t' in clock_h,
+        "0.8.39 manual monotonic lyric clock with pause and offset")
+require('#include "recognition.h"' in ui and
+        'lf_recog_snapshot(&song)' in ui and
+        'lf_recog_lyric_line((uint32_t)i,&line)' in ui and
+        'strcmp(song.lyrics_state,"synced")==0' in ui and
+        'build_timed_lyrics_now(&song)' in ui and
+        'lf_lyric_clock_line_at(timed_stamps,timed_line_count,ms)' in ui and
+        'timed_render(current,false)' in ui,
+        "0.8.39 real song and timestamp focused lyric viewport")
+require('MANUAL' in ui and 'START / RESTART' in ui and
+        'PAUSE' in ui and 'RESUME' in ui and
+        'timed_pause' in ui and 'timed_adjust' in ui and
+        '(int32_t)(step*2000)' in ui and
+        'timed_scan_attempt!=song->attempts' in ui,
+        "0.8.39 explicitly manual playback alignment and new scan reset")
+require('lv_obj_delete_async(old_screen);' in ui and
+        'lv_timer_create(on_tick, 50, NULL)' in ui and
+        'timed_last_update_ms>=200' in ui and
+        'timed_rows[3]' in ui and
+        'for(int slot=0;slot<3;slot++)' in ui,
+        "0.8.39 retain proven QSPI, pager and redraw-safe 3-row UI")

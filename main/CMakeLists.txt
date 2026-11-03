@@ -18,6 +18,7 @@ idf_component_register(
         "ota_guard.c"
         "settings.c"
         "lyrics.c"
+        "lyric_clock.c"
         "image_policy.c"
         "service_errors.c"
         "power.c"
