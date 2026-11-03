@@ -11,6 +11,7 @@ python3 tests/test_recognition_contract.py
 python3 tests/test_recognition_quality_contract.py
 python3 tests/test_lrclib_contract.py
 python3 tests/test_ota_release_contract.py
+python3 tests/test_private_alpha_release.py
 python3 tests/test_build_catalog.py
 python3 tests/test_release_package.py
 python3 tests/test_alpha_0_8.py

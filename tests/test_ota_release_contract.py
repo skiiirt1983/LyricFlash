@@ -30,7 +30,7 @@ assert "tools/publish_build_catalog.py _site" in workflow
 assert "_site/beta/firmware/" in workflow
 assert "lyricflash-full.bin" in workflow and "lyricflash-ota.bin" in workflow
 assert "tools/validate_full_image.py" in workflow
-assert "0.8.41-alpha" in preparer
+assert "LF_VERSION" in preparer and "image_version" in preparer
 assert "Alpha 0.8.41" in page
 assert "LF_VERSION" in main
 print("PASS: Alpha 0.8.41 OTA and full-USB packaging contract")
@@ -62,6 +62,10 @@ if '"0.8.42-alpha"' in active_version:
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
     assert "feature/private-0.8.42-auto-lyrics" in private_workflow
     assert "LyricFlash-Private-Alpha-0.8.42-ESP32S3-UNTESTED" in private_workflow
-    print("PASS: 0.8.42 private firmware artifact contract (direct OTA not yet published)")
+    assert "tools/package_release.py --verify _site" in private_workflow
+    assert "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin" in private_workflow
+    assert "gh release create" in private_workflow
+    assert "--prerelease --latest=false" in private_workflow
+    print("PASS: 0.8.42 private firmware artifacts and gated OTA publishing contract")
 else:
     print("PASS: 0.8.41 manual alpha build is eligible for direct OTA publishing")
