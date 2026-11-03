@@ -32,6 +32,14 @@
 #define LF_RECOG_BOUNDARY "----LyricFlashScan2026"
 #define LF_RECOG_MIN_FRAMES (LF_SCAN_RATE*6U)
 #define LF_RECOG_RESPONSE_CAP 4096
+/* 10-second microphone capture is unaffected. Limit the subsequent HTTPS
+ * upload/recognition to a real total budget, not 15s multiplied by every
+ * 4096-byte write of an ~1MB WAV. */
+#define LF_RECOG_UPLOAD_BUDGET_MS 60000ULL
+static uint64_t lf_recog_now_ms(void)
+{
+    return (uint64_t)(esp_timer_get_time()/1000LL);
+}
 static atomic_int active_state=ATOMIC_VAR_INIT(LF_RECOG_IDLE);
 static atomic_bool stop_flag;
 static atomic_uint attempts;
@@ -49,6 +57,7 @@ static void status(lf_recog_state_t state,const char *message)
 {
     portENTER_CRITICAL(&result_mux);
     result.state=state;
+    result.stage_started_ms=lf_recog_now_ms();
     if(message)snprintf(result.message,sizeof result.message,"%s",message);
     portEXIT_CRITICAL(&result_mux);
     atomic_store(&active_state,state);
@@ -226,14 +235,22 @@ bool lf_recog_clear_token(void)
     nvs_close(h);
     return err==ESP_OK;
 }
-static bool post_write(esp_http_client_handle_t client,const uint8_t *src,size_t len)
+static bool post_write(esp_http_client_handle_t client,const uint8_t *src,size_t len,
+                       uint64_t deadline_ms)
 {
     size_t sent=0;
     while(sent<len && !atomic_load(&stop_flag)){
+        if(lf_recog_now_ms()>=deadline_ms){
+            set_transport_error(ESP_ERR_TIMEOUT);
+            return false;
+        }
         const size_t chunk=len-sent>4096U?4096U:len-sent;
         const int written=esp_http_client_write(client,(const char *)src+sent,(int)chunk);
         if(written<=0)return false;
         sent+=(size_t)written;
+        portENTER_CRITICAL(&result_mux);
+        result.upload_bytes_sent+=(uint32_t)written;
+        portEXIT_CRITICAL(&result_mux);
     }
     return sent==len;
 }
@@ -293,6 +310,11 @@ static bool send_audio(const uint8_t *wav,size_t wav_bytes,const char *token)
     const char suffix[]="\r\n--" LF_RECOG_BOUNDARY "--\r\n";
     if(n<=0||(size_t)n>=sizeof prefix)return false;
     const size_t body_len=(size_t)n+wav_bytes+sizeof suffix-1U;
+    const uint64_t deadline_ms=lf_recog_now_ms()+LF_RECOG_UPLOAD_BUDGET_MS;
+    portENTER_CRITICAL(&result_mux);
+    result.upload_bytes_sent=0;
+    result.upload_bytes_total=(uint32_t)body_len;
+    portEXIT_CRITICAL(&result_mux);
     esp_http_client_config_t config={
         .url="https://api.audd.io/",
         .crt_bundle_attach=esp_crt_bundle_attach,
@@ -309,9 +331,10 @@ static bool send_audio(const uint8_t *wav,size_t wav_bytes,const char *token)
     const esp_err_t open_rc=esp_http_client_open(client,(int)body_len);
     if(open_rc!=ESP_OK)set_transport_error((int)open_rc);
     if(open_rc==ESP_OK){
-        if(post_write(client,(const uint8_t*)prefix,(size_t)n)&&
-           post_write(client,wav,wav_bytes)&&
-           post_write(client,(const uint8_t*)suffix,sizeof suffix-1U)&&
+        if(post_write(client,(const uint8_t*)prefix,(size_t)n,deadline_ms)&&
+           post_write(client,wav,wav_bytes,deadline_ms)&&
+           post_write(client,(const uint8_t*)suffix,sizeof suffix-1U,deadline_ms)&&
+           lf_recog_now_ms()<deadline_ms &&
            !atomic_load(&stop_flag)){
             const int64_t header_len=esp_http_client_fetch_headers(client);
             portENTER_CRITICAL(&result_mux);
@@ -392,8 +415,14 @@ static void worker(void *arg)
     lf_scan_wav_header(wav,frames);
     status(LF_RECOG_UPLOAD,"Identifying song securely with AudD...");
     ok=send_audio(wav,LF_SCAN_WAV_HEADER+(size_t)frames*4U,token);
-    if(!ok&&!atomic_load(&stop_flag))status(LF_RECOG_ERROR,
-                        "Music recognition connection failed. Try again.");
+    if(!ok&&!atomic_load(&stop_flag)){
+        lf_recog_snapshot_t last={0};
+        lf_recog_snapshot(&last);
+        status(LF_RECOG_ERROR,
+            last.audd_transport_error_code==ESP_ERR_TIMEOUT?
+            "Recognition upload timed out. Tap Play to retry.":
+            "Music recognition connection failed. Tap Play to retry.");
+    }
     /* The private WAV is no longer needed once AudD has responded. Wipe it
      * BEFORE any additional network call so the lyrics lookup is lightweight. */
     if(wav){clear_secret(wav,LF_SCAN_WAV_BYTES);heap_caps_free(wav);wav=NULL;}
@@ -424,6 +453,7 @@ bool lf_recog_start(void)
     memset(&result,0,sizeof result);
     snprintf(result.lyrics_state,sizeof result.lyrics_state,"not_checked");
     result.state=LF_RECOG_CAPTURE;
+    result.stage_started_ms=lf_recog_now_ms();
     result.attempts=atomic_fetch_add(&attempts,1)+1;
     snprintf(result.message,sizeof result.message,"Recording up to 10 seconds");
     portEXIT_CRITICAL(&result_mux);
