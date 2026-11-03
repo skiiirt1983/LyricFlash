@@ -65,6 +65,12 @@ static uint64_t timed_controls_until_ms;
 static bool timed_estimated;
 static uint32_t auto_open_attempt;
 static bool auto_open_pending;
+static bool auto_open_transition;
+static uint64_t auto_open_poll_ms;
+/* Counts are diagnostics only; a successful screen build acknowledges
+ * a song attempt, not merely queuing an asynchronous navigation request. */
+static atomic_uint auto_open_queued_count;
+static atomic_uint auto_open_completed_count;
 /* Home now reflects the same explicitly triggered recognition session and
  * manual LRC timeline as the Lyrics viewer. These pointers are never used
  * after make_base() destroys its child pager. */
@@ -861,20 +867,37 @@ static lv_obj_t *home_caption(lv_obj_t *parent,const char *value,int y,
     lv_obj_add_flag(item,LV_OBJ_FLAG_GESTURE_BUBBLE);
     return item;
 }
+/* A stale touch_held flag is not evidence of a finger on glass.
+ * Query the actual LVGL pointer before opening, then retry automatically. */
+static bool ui_pointer_is_down(void)
+{
+    lv_indev_t *ptr=lv_indev_get_next(NULL);
+    while(ptr){
+        if(lv_indev_get_type(ptr)==LV_INDEV_TYPE_POINTER &&
+           lv_indev_get_state(ptr)==LV_INDEV_STATE_PRESSED)
+            return true;
+        ptr=lv_indev_get_next(ptr);
+    }
+    return false;
+}
 static void auto_open_lyrics_deferred(void *unused)
 {
     (void)unused;
     lf_recog_snapshot_t latest={0};
     lf_recog_snapshot(&latest);
-    auto_open_pending=false;
-    if(latest.state==LF_RECOG_MATCH && latest.attempts!=auto_open_attempt &&
-       latest.lyric_lines>0 && strcmp(latest.lyrics_state,"synced")==0 &&
-       page==0 && !touch_held && !asleep){
-        /* Mark handled only when navigation is actually safe. A callback
-           during a touch or swipe retries on the following Home refresh. */
-        auto_open_attempt=latest.attempts;
-        build_preview();
+    if(latest.state!=LF_RECOG_MATCH ||
+       latest.attempts==auto_open_attempt ||
+       latest.lyric_lines==0 || strcmp(latest.lyrics_state,"synced")!=0 ||
+       page!=0 || asleep || nav_queued || nav_transition_active ||
+       ui_pointer_is_down()){
+        auto_open_pending=false;
+        return;
     }
+    /* Never mark a song handled before the target scene exists. The
+       previous code did this and could strand the device on Home if the
+       pending navigation was superseded or a touch release was missed. */
+    auto_open_transition=true;
+    build_preview();
 }
 /* A tiny amplitude envelope is published by the manual capture worker.
  * Draw only a bounded yellow line inside the existing Home pager. No PCM
@@ -994,6 +1017,7 @@ static void home_refresh(uint64_t current)
        strcmp(song.lyrics_state,"synced")==0 &&
        song.attempts!=auto_open_attempt && !auto_open_pending){
         auto_open_pending=true;
+        atomic_fetch_add(&auto_open_queued_count,1);
         lv_async_call(auto_open_lyrics_deferred,NULL);
     }
 }
@@ -2641,6 +2665,24 @@ static void on_tick(lv_timer_t *timer)
            !lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN))
             home_recording_update(&scan,current);
     }
+    /* UI-timer retry is independent of Home's 750ms text refresh and
+       stale touch_held. Even if the first async request loses a race,
+       the song reopens when the physical finger is actually released. */
+    if(page==0 && !auto_open_pending && !auto_open_transition &&
+       current-auto_open_poll_ms>=200){
+        auto_open_poll_ms=current;
+        lf_recog_snapshot_t latest={0};
+        lf_recog_snapshot(&latest);
+        if(latest.state==LF_RECOG_MATCH &&
+           latest.attempts!=auto_open_attempt &&
+           latest.lyric_lines>0 &&
+           strcmp(latest.lyrics_state,"synced")==0 &&
+           !ui_pointer_is_down()){
+            auto_open_pending=true;
+            atomic_fetch_add(&auto_open_queued_count,1);
+            lv_async_call(auto_open_lyrics_deferred,NULL);
+        }
+    }
     if (page == 0 && !touch_held && !pager_scrolling &&
         current-home_last_refresh_ms >= 750)home_refresh(current);
     if (page == 14 && current - last_debug_refresh >= 2500) {
@@ -2867,6 +2909,10 @@ static void nav_drain(void *arg)
     void (*target)(void)=nav_pending;
     nav_pending=NULL;
     if(!target)return;
+    /* Recognition takes a direct, one-time transition: no 16-strip legacy
+       reveal or duplicate screen rebuild while the audio worker finishes. */
+    const bool recognition_open=auto_open_transition;
+    auto_open_transition=false;
     if(nav_transition_active)nav_transition_end(true);
     bool was_pager=(primary_pager!=NULL);
     int previous_page=page;
@@ -2883,6 +2929,19 @@ static void nav_drain(void *arg)
         lv_display_enable_invalidation(disp,true);
     }
     atomic_fetch_add(&ui_nav_count,1);
+    if(recognition_open){
+        auto_open_pending=false;
+        if(page==1 && timed_lyrics_mode && timed_line_count>0){
+            auto_open_attempt=timed_scan_attempt;
+            atomic_fetch_add(&auto_open_completed_count,1);
+            ESP_LOGI(TAG,"Automatic lyrics scene confirmed for attempt %lu",
+                     (unsigned long)auto_open_attempt);
+        }else{
+            ESP_LOGW(TAG,"Automatic lyrics scene not ready; user may retry");
+        }
+        if(screen && !asleep)lv_obj_invalidate(screen);
+        return; /* Never run the old panel-wipe after automatic lyrics. */
+    }
     /* Native pager already moves the real sibling pages with the finger;
        never overlay the old post-release panel-wipe transition on top. */
     if(was_pager && primary_pager)return;
