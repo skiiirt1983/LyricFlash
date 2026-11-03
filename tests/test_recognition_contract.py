@@ -11,7 +11,7 @@ html=(p/"main/web_device_html.h").read_text()
 cm=(p/"main/CMakeLists.txt").read_text()
 assert '"recognition.c"' in cm and '"recognition_audio.c"' in cm
 for s in ('bsp_audio_codec_microphone_init','esp_codec_dev_open(codec,&fs)',
-          'esp_codec_dev_set_in_channel_gain(codec,0x03,24.0f)',
+          'esp_codec_dev_set_in_channel_gain(codec,0x03,27.0f)',
           'esp_codec_dev_close(codec)','LF_SCAN_SECONDS','LF_SCAN_TDM_FRAMES',
           'esp_codec_dev_read(codec,tdm,sizeof tdm)',
           'heap_caps_malloc(LF_SCAN_WAV_BYTES,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT)',

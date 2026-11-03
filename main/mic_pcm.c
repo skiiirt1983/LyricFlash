@@ -23,7 +23,7 @@
 #define LF_PCM_LIMIT_US (3000000LL)
 #define LF_PCM_RATE (24000)
 #define LF_PCM_TDM_SLOTS (4)
-#define LF_PCM_FRONT_GAIN_DB (24.0f)
+#define LF_PCM_FRONT_GAIN_DB (27.0f)
 #define LF_PCM_FRONT_PHYSICAL_MASK (0x03U)
 #define LF_PCM_TDM_SLOT_MASK (0x0FU)
 /* Samples within 8 integer units of the signed 16-bit ADC rails.

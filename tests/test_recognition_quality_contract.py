@@ -38,7 +38,7 @@ for field in ('audio_measured_frames','mic1_rms','mic2_rms',
 for field in ('mic1_rms','mic2_rms','audio_measured_frames',
               'audd_api_error_code','audd_transport_error_code'):
     assert field in snapshot and field in net,field
-assert 'esp_codec_dev_set_in_channel_gain(codec,0x03,24.0f)' in recog
+assert 'esp_codec_dev_set_in_channel_gain(codec,0x03,27.0f)' in recog
 assert 'https://api.audd.io/' in recog and 'lf_recog_start(void)' in recog
 assert 'lf_recog_has_token()' in recog
 assert 'Open complete scan diagnostics (JSON)' in page

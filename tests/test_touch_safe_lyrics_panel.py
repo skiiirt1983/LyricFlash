@@ -24,6 +24,10 @@ for name in ('"SLOW DOWN"','"SPEED UP"','"SAVE CURRENT"','"DEFAULT"'):
     assert name in scene,name
 assert "lv_obj_set_style_bg_opa(timed_controls,LV_OPA_80,0);" in scene
 assert "if(timed_scan_attempt!=song->attempts)" in scene
+# Minimal lyrics has no status widget; missing labels must never stop scrolling.
+assert "if(!timed_lyrics_mode||!timed_status)return;" not in src
+assert "if(!timed_lyrics_mode)return;" in src
+assert "if(timed_status && (force||timed_last_second!=second))" in src
 fallback=section("static void build_preview_now(void)\n{","/* List rows are clickable")
 assert '"NO LYRICS YET"' in fallback
 assert "DEMO_TEXT" not in fallback and "SAMPLE LYRICS" not in fallback

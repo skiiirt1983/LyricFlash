@@ -1542,7 +1542,9 @@ static void timed_scroll_frame(lv_timer_t *timer)
 }
 static void timed_render(uint64_t current,bool force)
 {
-    if(!timed_lyrics_mode||!timed_status)return;
+    /* The minimal player intentionally has no status label: its lyric compositor
+       must continue advancing even when that optional decoration is absent. */
+    if(!timed_lyrics_mode)return;
     if(timed_hint && timed_hint_until_ms && current>=timed_hint_until_ms){
         lv_obj_add_flag(timed_hint,LV_OBJ_FLAG_HIDDEN);
         timed_hint_until_ms=0;
@@ -1586,7 +1588,7 @@ static void timed_render(uint64_t current,bool force)
        keeping the user's saved manual clock offset independent. */
     const uint32_t ms=timed_song_position(current);
     const uint32_t second=ms/1000U;
-    if(force||timed_last_second!=second){
+    if(timed_status && (force||timed_last_second!=second)){
         char info[105];
         if(!timed_clock.started)
             snprintf(info,sizeof info,"HOLD TO OPEN ALIGNMENT CONTROLS");

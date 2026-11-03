@@ -392,7 +392,7 @@ static void worker(void *arg)
         status(LF_RECOG_ERROR,"Microphone could not open");goto done;
     }
     opened=true;
-    if(esp_codec_dev_set_in_channel_gain(codec,0x03,24.0f)!=ESP_CODEC_DEV_OK){
+    if(esp_codec_dev_set_in_channel_gain(codec,0x03,27.0f)!=ESP_CODEC_DEV_OK){
         status(LF_RECOG_ERROR,"Microphone gain setup failed");goto done;
     }
     const int64_t start=esp_timer_get_time();
