@@ -11,7 +11,7 @@ int main(void)
     assert(lf_settings_load(&initial)==ESP_OK);
     assert(initial.brightness==55 && initial.scroll_speed==70);
     assert(initial.line_spacing_px==5 && initial.show_progress==1);
-    assert(initial.timing_offset_ms==-2000);
+    assert(initial.timing_offset_ms==0);
     assert(initial.basic_battery_size==85 && initial.basic_battery_y==-160);
     assert(initial.basic_date_size==70 && initial.basic_weather_y==135);
     /* Virgin NVS must use the NEW default (70), not migrate a nonexistent
@@ -63,21 +63,31 @@ int main(void)
     assert(nvs_set_i32(h,"offset_ms",-100000)==ESP_OK);
     nvs_close(h);
     assert(lf_settings_load(&next)==ESP_OK);
-    assert(next.brightness==55 && next.timing_offset_ms==-2000);
-    /* Legacy 0.8.42 default zero maps to the new calibrated baseline. */
+    assert(next.brightness==55 && next.timing_offset_ms==0);
+    /* An older zero remains neutral. */
     assert(nvs_open(LF_CONFIG_NS,NVS_READWRITE,&h)==ESP_OK);
     assert(nvs_set_u32(h,"schema",9)==ESP_OK);
     assert(nvs_set_i32(h,"offset_ms",0)==ESP_OK);
     nvs_close(h);
-    assert(lf_settings_load(&next)==ESP_OK && next.timing_offset_ms==-2000);
+    assert(lf_settings_load(&next)==ESP_OK && next.timing_offset_ms==0);
     /* Schema 10 permits deliberate zero as a user preference. */
     assert(nvs_open(LF_CONFIG_NS,NVS_READWRITE,&h)==ESP_OK);
     assert(nvs_set_u32(h,"schema",10)==ESP_OK);
     assert(nvs_set_i32(h,"offset_ms",0)==ESP_OK);
     nvs_close(h);
     assert(lf_settings_load(&next)==ESP_OK && next.timing_offset_ms==0);
+    /* Version 0.8.45 saved -2 seconds as an automatic default. */
+    assert(nvs_open(LF_CONFIG_NS,NVS_READWRITE,&h)==ESP_OK);
+    assert(nvs_set_u32(h,"schema",12)==ESP_OK);
+    assert(nvs_set_i32(h,"offset_ms",-2000)==ESP_OK);
+    nvs_close(h);
+    assert(lf_settings_load(&next)==ESP_OK && next.timing_offset_ms==0);
+    /* Once the upgrade saves schema 13, intentional -2 seconds persists. */
     next.timing_offset_ms=-2000;
     assert(lf_settings_save(&next)==ESP_OK);
     assert(lf_settings_load(&next)==ESP_OK && next.timing_offset_ms==-2000);
+    next.timing_offset_ms=-420;
+    assert(lf_settings_save(&next)==ESP_OK);
+    assert(lf_settings_load(&next)==ESP_OK && next.timing_offset_ms==-420);
     printf("Persistent settings and schema migration defaults passed\n");
 }
