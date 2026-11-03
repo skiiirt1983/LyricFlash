@@ -70,7 +70,13 @@ const runtime=new Function("document","fetch","setInterval",
   el("font_style").dispatch("input");
   fontPreviews.push(el("clock-preview").innerHTML);
  }
- assert.equal(new Set(fontPreviews).size,20,
+ const seenGlyphs=new Map();
+ fontPreviews.forEach((markup,id)=>{
+  if(seenGlyphs.has(markup))console.log("DUPLICATE PREVIEW FONTS",seenGlyphs.get(markup),id);
+  else seenGlyphs.set(markup,id);
+ });
+ console.log("DIAGNOSTIC FONT UNIQUE",seenGlyphs.size);
+ assert.equal(seenGlyphs.size,20,
    "All twenty original clock typography options must render distinct previews");
  assert.match(fontPreviews[3],/data-face-style|<rect/,
    "Actual Garamond-like raster glyphs missing from browser preview");
