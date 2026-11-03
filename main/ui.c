@@ -53,6 +53,11 @@ static lv_obj_t *home_song_title;
 static lv_obj_t *home_song_artist;
 static lv_obj_t *home_lyric_line;
 static uint64_t home_last_refresh_ms;
+static lv_obj_t *home_play_symbol;
+static lv_obj_t *home_play_hint;
+static uint64_t home_warning_until_ms;
+static const char *home_warning;
+static int home_visual_busy=-1;
 static lv_obj_t *speed_text;
 static lv_obj_t *brightness_text;
 static lv_obj_t *timeout_text;
@@ -735,6 +740,8 @@ static void make_base(void)
     home_song_title=NULL;
     home_song_artist=NULL;
     home_lyric_line=NULL;
+    home_play_symbol=NULL;
+    home_play_hint=NULL;
     home_last_refresh_ms=0;
     home_visual_busy=-1;
     battery_status=NULL;
@@ -775,12 +782,6 @@ static void build_connection_help_now(void)
  * Home deliberately presents one large, circular PLAY control. The Clock
  * and Settings pages are still reached by swiping the proven LVGL pager.
  * A tap on song text opens the timed-lyrics viewer after recognition. */
-static lv_obj_t *home_play_symbol;
-static lv_obj_t *home_play_hint;
-static uint64_t home_warning_until_ms;
-static const char *home_warning;
-static int home_visual_busy=-1;
-
 static void home_set_text(lv_obj_t *obj,const char *value)
 {
     if(!obj||!value)return;
