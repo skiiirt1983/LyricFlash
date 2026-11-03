@@ -323,7 +323,7 @@ static const char lf_basic_settings_html[] =
 "svg+='<defs><linearGradient id=\"basic-gradient\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">'+stops.map(s=>'<stop offset=\"'+s[0]+'\" stop-color=\"'+s[1]+'\"/>').join('')+'</linearGradient></defs><circle cx=\"233\" cy=\"233\" r=\"191\" stroke=\"'+(mode===0?a:'url(#basic-gradient)')+'\" stroke-width=\"12\" fill=\"none\"/>';\n"
 "const cx=233+nval('basic_time_x'),cy=233+nval('basic_time_y')+16;\n"
 "const digits=String(f.time_24h?now.getHours():(now.getHours()%12)||12).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');\n"
-"if(style===1||style===12)svg+=glyphSegment(digits,cx,cy-17,42+fs/2,f.foreground);\n"
+"if(style===1||style===12)svg+=glyphSegment(digits,cx,cy-17,(style===12?54:42)+fs/2,f.foreground);\n"
 "else if(style===2||style===3)svg+=glyphPixel(digits,cx,cy-17,4+Math.floor(fs/18),f.foreground,style===3);\n"
 "else if(style>=5)svg+=glyphStyled(digits,cx,cy-17,4+Math.floor(fs/20),f.foreground,style);\n"
 "else svg+=text(cy,px,time,f.foreground,tracking,cx,fontFamily,weight);\n"
