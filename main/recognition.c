@@ -139,7 +139,13 @@ static void parse_recognition(int http_code,const char *json)
     const cJSON *song=root?cJSON_GetObjectItemCaseSensitive(root,"result"):NULL;
     const cJSON *err=root?cJSON_GetObjectItemCaseSensitive(root,"error"):NULL;
     const cJSON *code=err?cJSON_GetObjectItemCaseSensitive(err,"error_code"):NULL;
-    const int provider_code=cJSON_IsNumber(code)?code->valueint:0;
+    int provider_code=cJSON_IsNumber(code)?code->valueint:0;
+    if(provider_code==0 && cJSON_IsString(code)){
+        char *end=NULL;
+        const long parsed=strtol(code->valuestring,&end,10);
+        if(end!=code->valuestring && end && *end==0 && parsed>0 && parsed<10000)
+            provider_code=(int)parsed;
+    }
     const bool success=cJSON_IsString(status_field)&&
         strcmp(status_field->valuestring,"success")==0;
     const cJSON *title=cJSON_IsObject(song)?cJSON_GetObjectItemCaseSensitive(song,"title"):NULL;

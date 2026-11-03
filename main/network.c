@@ -549,6 +549,11 @@ static esp_err_t handle_song_token(httpd_req_t *req)
     bool saved=false;
     if(valid) saved=token->valuestring[0]?
            lf_recog_save_token(token->valuestring):lf_recog_clear_token();
+    /* Clear the temporary parsed JSON credential before cJSON frees it. */
+    if(valid){
+        volatile char *p=(volatile char *)token->valuestring;
+        for(size_t i=0,len=strlen(token->valuestring);i<len;i++)p[i]=0;
+    }
     cJSON_Delete(root);
     if(!valid||!saved)
         return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,
