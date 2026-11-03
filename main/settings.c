@@ -20,7 +20,7 @@ void lf_settings_defaults(lf_settings_t *s)
         .text_color = 0x86E3AE,
         .background_color = 0x000000,
         .accent_color = 0x86E3AE,
-        .timing_offset_ms = 0,
+        .timing_offset_ms = -2000, /* AudD timecode calibration */
         .line_spacing_px = 5,
         .clock_face = 0,
         .basic_font_style = 0,
@@ -83,6 +83,10 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     (void)nvs_get_u32(h, "bgcolor", &s->background_color);
     (void)nvs_get_u32(h, "accent", &s->accent_color);
     (void)nvs_get_i32(h, "offset_ms", &s->timing_offset_ms);
+    /* Old versions stored zero without applying it to the live lyric clock.
+       Migrate that default only, preserving explicitly saved nonzero offsets. */
+    if (schema < 10 && s->timing_offset_ms == 0)
+        s->timing_offset_ms = -2000;
     (void)nvs_get_u8(h, "spacing", &s->line_spacing_px);
     (void)nvs_get_u8(h, "progress", &s->show_progress);
     (void)nvs_get_u32(h, "chargeclr", &s->charging_color);
@@ -121,7 +125,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     s->text_color &= 0xFFFFFF;
     s->background_color &= 0xFFFFFF;
     s->accent_color &= 0xFFFFFF;
-    if (s->timing_offset_ms < -10000 || s->timing_offset_ms > 10000) s->timing_offset_ms = 0;
+    if (s->timing_offset_ms < -10000 || s->timing_offset_ms > 10000) s->timing_offset_ms = -2000;
     s->line_spacing_px = in_range(s->line_spacing_px, 0, 24, 5);
     s->show_progress = in_range(s->show_progress, 0, 1, 1);
     s->charging_color &= 0xFFFFFF;
