@@ -18,6 +18,7 @@
 #include "cJSON.h"
 #include "image_policy.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "esp_netif.h"
 #include "esp_netif_sntp.h"
@@ -702,6 +703,25 @@ static esp_err_t handle_song_status(httpd_req_t *req)
     cJSON_AddNumberToObject(reply,"captured_frames",s.captured_frames);
     cJSON_AddNumberToObject(reply,"capture_seconds",s.capture_seconds);
     cJSON_AddNumberToObject(reply,"attempts",s.attempts);
+    cJSON_AddBoolToObject(reply,"worker_busy",lf_recog_busy());
+    const uint64_t monotonic_ms=(uint64_t)(esp_timer_get_time()/1000LL);
+    cJSON_AddNumberToObject(reply,"stage_age_ms",
+        s.stage_started_ms && monotonic_ms>=s.stage_started_ms?
+        (double)(monotonic_ms-s.stage_started_ms):0);
+    cJSON_AddNumberToObject(reply,"upload_bytes_sent",s.upload_bytes_sent);
+    cJSON_AddNumberToObject(reply,"upload_bytes_total",s.upload_bytes_total);
+    /* Safe cross-thread diagnostics: no display lock, no audio or token. */
+    lf_ui_display_stats_t live={0};
+    lf_ui_display_stats(&live);
+    cJSON_AddNumberToObject(reply,"ui_tick_age_ms",live.ui_tick_age_ms);
+    cJSON_AddNumberToObject(reply,"ui_page",live.ui_page);
+    cJSON_AddNumberToObject(reply,"ui_navigation_phase",live.ui_navigation_phase);
+    cJSON_AddNumberToObject(reply,"lyrics_auto_open_queued",
+                            live.lyrics_auto_open_queued);
+    cJSON_AddNumberToObject(reply,"lyrics_auto_open_completed",
+                            live.lyrics_auto_open_completed);
+    cJSON_AddNumberToObject(reply,"lyrics_auto_open_recoveries",
+                            live.lyrics_auto_open_recoveries);
     /* The actual submitted stereo scan, not the separate 3-second PCM test.
      * Aggregate metrics only; no audio, credentials or remote response body. */
     cJSON_AddNumberToObject(reply,"audd_http_status",s.http_status);
