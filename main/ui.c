@@ -1213,12 +1213,19 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_height(timed_rows[0],70);
     lv_obj_set_height(timed_rows[1],110);
     lv_obj_set_height(timed_rows[2],90);
-    button(screen,"-2 SEC",96,48,-122,119,0xA6BED1,timed_adjust,(void *)(intptr_t)-1);
-    button(screen,"START / RESTART",139,48,0,119,0xA8D6FF,timed_start,NULL);
-    button(screen,"+2 SEC",96,48,122,119,0xA6BED1,timed_adjust,(void *)(intptr_t)1);
-    button(screen,"HOME",124,48,-82,172,0x8FAFC7,on_home,NULL);
-    timed_pause_button=button(screen,timed_clock.started&&!timed_clock.running?
-        "RESUME":"PAUSE",124,48,82,172,prefs->text_color,timed_pause,NULL);
+    timed_controls=lv_obj_create(screen);
+    lv_obj_set_size(timed_controls,360,116);
+    lv_obj_align(timed_controls,LV_ALIGN_BOTTOM_MID,0,-12);
+    lv_obj_set_style_bg_opa(timed_controls,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(timed_controls,0,0);
+    lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
+    button(timed_controls,"-2 SEC",96,48,-112,-22,0xA6BED1,timed_adjust,(void *)(intptr_t)-1);
+    button(timed_controls,"RESTART",112,48,0,-22,0xA8D6FF,timed_start,NULL);
+    button(timed_controls,"+2 SEC",96,48,112,-22,0xA6BED1,timed_adjust,(void *)(intptr_t)1);
+    button(timed_controls,"SETTINGS",124,48,-80,26,0x8FAFC7,on_settings,NULL);
+    timed_pause_button=button(timed_controls,timed_clock.started&&!timed_clock.running?
+        "RESUME":"PAUSE",124,48,80,26,prefs->text_color,timed_pause,NULL);
+    lv_obj_add_event_cb(screen,timed_toggle_controls,LV_EVENT_LONG_PRESSED,NULL);
     paused=!timed_clock.running;
     timed_active_index=-999;timed_last_second=UINT32_MAX;
     timed_last_update_ms=0;
