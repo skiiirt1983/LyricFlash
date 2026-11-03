@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/private-0.8.54-cache-controls-recovery
+      - feature/private-0.8.55-touch-safe-lyrics-panel
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
