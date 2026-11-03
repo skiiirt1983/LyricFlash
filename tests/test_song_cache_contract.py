@@ -24,10 +24,12 @@ assert "from_local=lf_song_cache_load_lyrics(song.title,song.artist,parsed)" in 
 assert "lf_lrclib_lookup(" in recog and "lf_song_cache_store_lyrics(" in recog
 assert "lf_song_cache_load_profile(" in ui and "lf_song_cache_store_profile(" in ui
 assert "timed_on_rate_slide" in ui and "timed_on_sync_slide" in ui
-assert '"SAVE CUSTOM"' in ui and '"LOAD DEFAULT"' in ui and '"DONE"' in ui
+assert '"SAVE CURRENT"' in ui and '"DEFAULT"' in ui
 assert "lf_sync_rate_position(" in ui
 assert "lv_slider_set_range(timed_rate_slider,75,125);" in ui
-assert "lv_slider_set_range(timed_sync_slider,-10000,10000);" in ui
+scene=ui.split("static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)\n{",1)[1].split("static void build_preview_now",1)[0]
+assert "lv_slider_set_range(timed_sync_slider,-10000,10000);" not in scene
+assert "lv_obj_set_style_bg_opa(timed_controls,LV_OPA_80,0);" in scene
 assert "const bool exiting_lyrics=timed_overlay!=NULL;" in ui
 assert "if(was_pager && primary_pager){" in ui
 assert "if(page==1 && timed_lyrics_mode)last_activity_ms=current;" in ui
