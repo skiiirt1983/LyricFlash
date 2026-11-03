@@ -232,13 +232,19 @@ static void open_face_digit(lv_layer_t *layer,int x,int y,int scale,
             if(!(bits&(1U<<(14-col)))){col++;continue;}
             int end=col+1;
             while(end<15 && (bits&(1U<<(14-end))))end++;
-            int skew=style==11?(int)(20U-row)*scale/7:0;
+            int skew=style==11?(int)(20U-row)*scale/7:
+                     style==10?(int)(20U-row)*scale/12:0;
             int xx=x+col*scale+skew,yy=y+(int)row*scale;
-            int w=(end-col)*scale;
-            if(style==7 || style==13)
-                draw_bar(layer,xx+2,yy+2,w,scale,0x2D4659,1);
-            if(style==9 || style==19)w=w>1?w-1:1;
-            draw_bar(layer,xx,yy,w,scale,rgb,
+            int w=(end-col)*scale,h=scale;
+            if(style==7 || style==13 || style==15)
+                draw_bar(layer,xx+2,yy+2,w,h,
+                         style==15?0x246DA7:0x2D4659,1);
+            if(style==8)w+=1; /* bold block display */
+            if(style==9 || style==14)w=w>1?w-1:1;
+            if(style==19){w=w>2?w-2:1;h=h>1?h-1:1;xx++;}
+            if(style==17&&(row==0 || row==20))
+                draw_bar(layer,xx-1,yy+h-1,w+2,1,rgb,0);
+            draw_bar(layer,xx,yy,w,h,rgb,
                      (style==6 || style==10)?scale/2:0);
             col=end;
         }
