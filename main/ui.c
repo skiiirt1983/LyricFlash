@@ -48,6 +48,7 @@ static lv_obj_t *timed_status;
 static lv_obj_t *timed_pause_button;
 static lv_obj_t *timed_controls;
 static lv_obj_t *timed_hint;
+static lv_obj_t *timed_battery;
 static lv_obj_t *timed_save_note;
 static uint64_t timed_hint_until_ms;
 static uint64_t timed_controls_until_ms;
@@ -746,6 +747,7 @@ static void make_base(void)
     timed_pause_button=NULL;
     timed_controls=NULL;
     timed_hint=NULL;
+    timed_battery=NULL;
     timed_save_note=NULL;
     timed_hint_until_ms=0;
     timed_controls_until_ms=0;
@@ -1101,6 +1103,27 @@ static void timed_render(uint64_t current, bool force)
         lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
         timed_controls_until_ms=0;
     }
+    /* Read cached AXP2101 state (never I2C from the UI task); repaint only on changes. */
+    if(timed_battery){
+        lf_power_state_t battery={0};
+        char battery_text[40];
+        uint32_t battery_color=0xAFC6DC;
+        if(lf_power_cached(&battery)){
+            const char *symbol=battery.percentage<0?LV_SYMBOL_BATTERY_EMPTY:
+                battery.percentage>=88?LV_SYMBOL_BATTERY_FULL:
+                battery.percentage>=63?LV_SYMBOL_BATTERY_3:
+                battery.percentage>=38?LV_SYMBOL_BATTERY_2:
+                battery.percentage>=15?LV_SYMBOL_BATTERY_1:LV_SYMBOL_BATTERY_EMPTY;
+            if(battery.percentage>=0)
+                snprintf(battery_text,sizeof battery_text,"%s %d%%",symbol,battery.percentage);
+            else snprintf(battery_text,sizeof battery_text,"%s --%%",symbol);
+            battery_color=battery.charging?0x42DC89:
+                (battery.percentage>=0 && battery.percentage<=20)?0xFFD34D:0xAFC6DC;
+        }else snprintf(battery_text,sizeof battery_text,"%s --%%",LV_SYMBOL_BATTERY_EMPTY);
+        if(strcmp(lv_label_get_text(timed_battery),battery_text)!=0)
+            lv_label_set_text(timed_battery,battery_text);
+        lv_obj_set_style_text_color(timed_battery,lv_color_hex(battery_color),0);
+    }
     lf_recog_snapshot_t state={0};
     lf_recog_snapshot(&state);
     if(state.attempts!=timed_scan_attempt || state.state!=LF_RECOG_MATCH ||
@@ -1286,6 +1309,16 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_style_text_font(wordmark,&lv_font_montserrat_16,0);
     lv_obj_set_style_text_letter_space(wordmark,3,0);
     lv_obj_set_width(wordmark,270);
+    /* A compact icon + percent only; four-segment detail stays in Web UI. */
+    timed_battery=lv_label_create(screen);
+    lv_label_set_text(timed_battery,LV_SYMBOL_BATTERY_EMPTY " --%");
+    lv_obj_set_style_text_font(timed_battery,&lv_font_montserrat_20,0);
+    lv_obj_set_style_text_color(timed_battery,lv_color_hex(0xAFC6DC),0);
+    lv_obj_set_width(timed_battery,150);
+    lv_obj_set_style_text_align(timed_battery,LV_TEXT_ALIGN_CENTER,0);
+    lv_obj_align(timed_battery,LV_ALIGN_TOP_MID,0,47);
+    lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_GESTURE_BUBBLE);
     timed_rows[0]=timed_line_label(0,352,0x7187A1);
     timed_rows[1]=timed_line_label(1,398,0xFFFFFF);
     timed_rows[2]=timed_line_label(2,352,0x7187A1);
