@@ -12,6 +12,7 @@
 #include "clock_face.h"
 #include "recognition.h"
 #include "lyric_clock.h"
+#include "lyric_sync.h"
 #include "weather.h"
 #include "weather_visual.h"
 #include "char_wheel.h"
@@ -44,6 +45,9 @@ static uint64_t timed_last_update_ms;
 static lv_obj_t *timed_rows[3];
 static lv_obj_t *timed_status;
 static lv_obj_t *timed_pause_button;
+static lv_obj_t *timed_controls;
+static bool timed_estimated;
+static uint32_t auto_open_attempt;
 /* Home now reflects the same explicitly triggered recognition session and
  * manual LRC timeline as the Lyrics viewer. These pointers are never used
  * after make_base() destroys its child pager. */
@@ -902,6 +906,11 @@ static void home_refresh(uint64_t current)
             lv_color_hex(busy?0xE06A69:0x2884EA),0);
     }
     home_last_refresh_ms=current;
+    if(song.state==LF_RECOG_MATCH && song.lyric_lines>0 &&
+       strcmp(song.lyrics_state,"synced")==0 && song.attempts!=auto_open_attempt){
+        auto_open_attempt=song.attempts;
+        build_preview();
+    }
 }
 static void on_home_scan(lv_event_t *e)
 {
@@ -1060,11 +1069,12 @@ static void timed_render(uint64_t current, bool force)
     if(force||timed_last_second!=second){
         char info[105];
         if(!timed_clock.started)
-            snprintf(info,sizeof info,"MANUAL: start music from 0:00, then tap START");
+            snprintf(info,sizeof info,"HOLD TO OPEN ALIGNMENT CONTROLS");
         else{
             const int64_t a=timed_clock.correction_ms<0?
                 -(int64_t)timed_clock.correction_ms:(int64_t)timed_clock.correction_ms;
-            snprintf(info,sizeof info,"MANUAL %02lu:%02lu  |  offset %c%ld.%01lds",
+            snprintf(info,sizeof info,"%s %02lu:%02lu  |  offset %c%ld.%01lds",
+                timed_estimated?"ESTIMATED":"MANUAL",
                 (unsigned long)(second/60),(unsigned long)(second%60),
                 timed_clock.correction_ms<0?'-':'+',
                 (long)(a/1000),(long)((a%1000)/100));
@@ -1141,6 +1151,14 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
      * A new AudD attempt invalidates the previous alignment. */
     if(timed_scan_attempt!=song->attempts){
         memset(&timed_clock,0,sizeof timed_clock);
+        timed_estimated=false;
+        if(song->audd_timecode_valid && song->capture_start_ms){
+            lf_lyric_clock_start(&timed_clock,now_ms());
+            timed_clock.elapsed_ms=lf_sync_estimate_position_ms(
+                song->audd_timecode_ms,song->capture_start_ms,
+                song->captured_frames,LF_SCAN_RATE,now_ms());
+            timed_estimated=true;
+        }
         timed_scan_attempt=song->attempts;
     }
     timed_line_count=0;
