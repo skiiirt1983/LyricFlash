@@ -1717,7 +1717,8 @@ static void timed_save_default(lv_event_t *e)
     if(saved)timed_song_custom=true;
     if(timed_save_note)lv_label_set_text(timed_save_note,
         saved?"Saved for this track across restarts":"Save failed - storage unavailable");
-    timed_controls_until_ms=0; /* explicit DONE, not an automatic timeout */
+    timed_controls_until_ms=0;
+    if(timed_controls)lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
     activity();
 }
 static void timed_load_default(lv_event_t *e)
@@ -1731,6 +1732,7 @@ static void timed_load_default(lv_event_t *e)
     if(timed_save_note)lv_label_set_text(timed_save_note,
         "Defaults active. Save Custom to replace saved track settings.");
     timed_controls_until_ms=0;
+    if(timed_controls)lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
     activity();
 }
 static void timed_controls_done(lv_event_t *e)
@@ -1953,80 +1955,46 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_style_text_font(timed_hint,&lv_font_montserrat_16,0);
     lv_obj_set_width(timed_hint,260);
     timed_hint_until_ms=now_ms()+5000; /* Hint disappears after first five seconds. */
+    /* A simple black translucent overlay. The live scrolling lyrics remain
+       visible behind it. Two bottom actions replace the old control grid. */
     timed_controls=lv_obj_create(surface);
-    lv_obj_set_size(timed_controls,396,374);
+    lv_obj_set_size(timed_controls,466,466);
     lv_obj_align(timed_controls,LV_ALIGN_CENTER,0,0);
-    lv_obj_set_style_radius(timed_controls,22,0);
-    lv_obj_set_style_bg_color(timed_controls,lv_color_hex(0x111E2D),0);
-    lv_obj_set_style_bg_opa(timed_controls,LV_OPA_90,0);
-    lv_obj_set_style_border_width(timed_controls,1,0);
-    lv_obj_set_style_border_color(timed_controls,lv_color_hex(0x335672),0);
-    lv_obj_set_style_shadow_width(timed_controls,0,0);
+    lv_obj_set_style_radius(timed_controls,0,0);
+    lv_obj_set_style_bg_color(timed_controls,lv_color_black(),0);
+    lv_obj_set_style_bg_opa(timed_controls,LV_OPA_80,0);
+    lv_obj_set_style_border_width(timed_controls,0,0);
     lv_obj_set_style_pad_all(timed_controls,0,0);
     lv_obj_remove_flag(timed_controls,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_EVENT_BUBBLE);
-    lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
-    lv_obj_t *caption=lv_label_create(timed_controls);
-    lv_label_set_text(caption,"LIVE SONG ALIGNMENT");
-    lv_obj_set_style_text_font(caption,&lv_font_montserrat_20,0);
-    lv_obj_set_style_text_color(caption,lv_color_hex(0xD6EDFF),0);
-    lv_obj_align(caption,LV_ALIGN_CENTER,0,-157);
-    timed_status=lv_label_create(timed_controls);
-    lv_label_set_text(timed_status,"");
-    lv_obj_set_width(timed_status,344);
-    lv_obj_set_style_text_align(timed_status,LV_TEXT_ALIGN_CENTER,0);
-    lv_obj_set_style_text_font(timed_status,&lv_font_montserrat_16,0);
-    lv_obj_set_style_text_color(timed_status,lv_color_hex(0xC3DEF1),0);
-    lv_obj_align(timed_status,LV_ALIGN_CENTER,0,-127);
-    lv_obj_t *sync_label=lv_label_create(timed_controls);
-    lv_label_set_text(sync_label,"TIMING  - later     + earlier");
-    lv_obj_set_style_text_font(sync_label,&lv_font_montserrat_16,0);
-    lv_obj_set_style_text_color(sync_label,lv_color_hex(0xB6D4EA),0);
-    lv_obj_align(sync_label,LV_ALIGN_CENTER,0,-97);
-    timed_sync_slider=lv_slider_create(timed_controls);
-    lv_obj_set_size(timed_sync_slider,320,13);
-    lv_slider_set_range(timed_sync_slider,-10000,10000);
-    lv_slider_set_value(timed_sync_slider,timed_clock.correction_ms,LV_ANIM_OFF);
-    lv_obj_align(timed_sync_slider,LV_ALIGN_CENTER,0,-70);
-    lv_obj_add_event_cb(timed_sync_slider,timed_on_sync_slide,LV_EVENT_VALUE_CHANGED,NULL);
-    timed_sync_value=lv_label_create(timed_controls);
-    lv_obj_set_style_text_font(timed_sync_value,&lv_font_montserrat_16,0);
-    lv_obj_set_style_text_color(timed_sync_value,lv_color_hex(0xFFFFFF),0);
-    lv_obj_align(timed_sync_value,LV_ALIGN_CENTER,0,-47);
-    /* Optional half-second taps for finer alignment while a song plays. */
-    button(timed_controls,"-0.5s",62,32,-145,-43,0xA6BED1,timed_adjust,(void *)(intptr_t)-1);
-    button(timed_controls,"+0.5s",62,32,145,-43,0xA6BED1,timed_adjust,(void *)(intptr_t)1);
-    lv_obj_t *rate_label=lv_label_create(timed_controls);
-    lv_label_set_text(rate_label,"SPEED  - slower      + faster");
-    lv_obj_set_style_text_font(rate_label,&lv_font_montserrat_16,0);
-    lv_obj_set_style_text_color(rate_label,lv_color_hex(0xB6D4EA),0);
-    lv_obj_align(rate_label,LV_ALIGN_CENTER,0,-18);
+    lv_obj_t *slow_label=lv_label_create(timed_controls);
+    lv_label_set_text(slow_label,"SLOW DOWN");
+    lv_obj_set_style_text_font(slow_label,&lv_font_montserrat_18,0);
+    lv_obj_set_style_text_color(slow_label,lv_color_white(),0);
+    lv_obj_align(slow_label,LV_ALIGN_CENTER,-124,-55);
+    lv_obj_t *fast_label=lv_label_create(timed_controls);
+    lv_label_set_text(fast_label,"SPEED UP");
+    lv_obj_set_style_text_font(fast_label,&lv_font_montserrat_18,0);
+    lv_obj_set_style_text_color(fast_label,lv_color_white(),0);
+    lv_obj_align(fast_label,LV_ALIGN_CENTER,128,-55);
     timed_rate_slider=lv_slider_create(timed_controls);
-    lv_obj_set_size(timed_rate_slider,320,13);
+    lv_obj_set_size(timed_rate_slider,348,22);
     lv_slider_set_range(timed_rate_slider,75,125);
     lv_slider_set_value(timed_rate_slider,timed_rate_percent,LV_ANIM_OFF);
-    lv_obj_align(timed_rate_slider,LV_ALIGN_CENTER,0,9);
+    lv_obj_align(timed_rate_slider,LV_ALIGN_CENTER,0,-10);
+    lv_obj_remove_flag(timed_rate_slider,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_remove_flag(timed_rate_slider,LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(timed_rate_slider,timed_on_rate_slide,LV_EVENT_VALUE_CHANGED,NULL);
     timed_rate_value=lv_label_create(timed_controls);
-    lv_obj_set_style_text_font(timed_rate_value,&lv_font_montserrat_16,0);
-    lv_obj_set_style_text_color(timed_rate_value,lv_color_hex(0xFFFFFF),0);
-    lv_obj_align(timed_rate_value,LV_ALIGN_CENTER,0,32);
+    lv_obj_set_style_text_font(timed_rate_value,&lv_font_montserrat_18,0);
+    lv_obj_set_style_text_color(timed_rate_value,lv_color_white(),0);
+    lv_obj_align(timed_rate_value,LV_ALIGN_CENTER,0,35);
     timed_update_slider_labels();
-    timed_pause_button=button(timed_controls,timed_clock.started&&!timed_clock.running?
-        "RESUME":"PAUSE",126,42,-88,72,0xA8D6FF,timed_pause,NULL);
-    button(timed_controls,"RESTART",126,42,88,72,0xA8D6FF,timed_start,NULL);
-    button(timed_controls,"SAVE CUSTOM",138,42,-86,125,0x8BCCFF,timed_save_default,NULL);
-    button(timed_controls,"LOAD DEFAULT",138,42,86,125,0x8FAFC7,timed_load_default,NULL);
-    timed_save_note=lv_label_create(timed_controls);
-    lv_label_set_text(timed_save_note,timed_song_custom?
-        "Saved timing loaded for this track":"Default timing active");
-    lv_obj_set_width(timed_save_note,340);
-    lv_obj_set_style_text_align(timed_save_note,LV_TEXT_ALIGN_CENTER,0);
-    lv_obj_set_style_text_font(timed_save_note,&lv_font_montserrat_12,0);
-    lv_obj_set_style_text_color(timed_save_note,lv_color_hex(0x8EAFC7),0);
-    lv_obj_align(timed_save_note,LV_ALIGN_CENTER,0,150);
-    button(timed_controls,"DONE",108,31,0,171,0x8BCCFF,timed_controls_done,NULL);
+    button(timed_controls,"SAVE CURRENT",150,54,-89,125,0x8BCCFF,timed_save_default,NULL);
+    button(timed_controls,"DEFAULT",150,54,89,125,0x9CB7CB,timed_load_default,NULL);
+    timed_save_note=NULL;
     lv_obj_remove_event_cb(surface,timed_toggle_controls);
     lv_obj_add_event_cb(surface,timed_toggle_controls,LV_EVENT_LONG_PRESSED,NULL);
     lv_obj_add_event_cb(surface,timed_double_tap_home,LV_EVENT_SHORT_CLICKED,NULL);
