@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Alpha 0.8.40 OTA and USB release contract, host-side checks."""
+"""Alpha 0.8.41 OTA and USB release contract, host-side checks."""
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
@@ -25,15 +25,15 @@ for token in ("XMLHttpRequest", "xhr.upload.onprogress", "xhr.onerror",
 assert "pin_matches" not in net and "X-LyricFlash-PIN" not in net
 assert "esp_https_ota_begin" in net and "esp_https_ota_finish" in net
 assert "OTA_SIZE_UNKNOWN" not in net
-assert "LyricFlash-Alpha-0.8.40-FULL-USB-and-OTA-UNTESTED" in workflow
+assert "LyricFlash-Alpha-0.8.41-FULL-USB-and-OTA-UNTESTED" in workflow
 assert "tools/publish_build_catalog.py _site" in workflow
 assert "_site/beta/firmware/" in workflow
 assert "lyricflash-full.bin" in workflow and "lyricflash-ota.bin" in workflow
 assert "tools/validate_full_image.py" in workflow
-assert "0.8.40-alpha" in preparer
-assert "Alpha 0.8.40" in page
+assert "0.8.41-alpha" in preparer
+assert "Alpha 0.8.41" in page
 assert "LF_VERSION" in main
-print("PASS: Alpha 0.8.40 OTA and full-USB packaging contract")
+print("PASS: Alpha 0.8.41 OTA and full-USB packaging contract")
 
 assert "tools/publish_alpha_ota.py" in workflow
 assert "LyricFlash-OTA-Direct:" in workflow
@@ -43,15 +43,15 @@ print("PASS: direct OTA host and release picker contract")
 # An older version can be present on-device with working Web UI.
 # The recovery build must be DISCOVERABLE as a direct OTA update, not only an
 # Actions artifact; do not accidentally skip alpha publication again.
-assert "feature/0.8.40-home-song-status" in workflow, "Recovery branch not listed in build rules"
+assert "feature/0.8.41-recognition-diagnostics" in workflow, "Recovery branch not listed in build rules"
 assert "Publish and verify direct HTTPS alpha OTA image" in workflow
 assert "Publish validated development OTA as an alpha prerelease" in workflow
-assert "github.ref == 'refs/heads/feature/0.8.40-home-song-status'" in workflow
+assert "github.ref == 'refs/heads/feature/0.8.41-recognition-diagnostics'" in workflow
 assert "--prerelease --latest=false" in workflow
 assert "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin" in workflow
 assert "gh release create" in workflow
 # The previously validated 0.8.39 release remains published.
-# The 0.8.40 branch may publish a new OTA only after a validated compile-once gate.
+# The 0.8.41 branch may publish a new OTA only after a validated compile-once gate.
 active_version=(root / "main/version.h").read_text()
-assert '"0.8.40-alpha"' in active_version
-print("PASS: 0.8.40 manual alpha build is eligible for direct OTA publishing")
+assert '"0.8.41-alpha"' in active_version
+print("PASS: 0.8.41 manual alpha build is eligible for direct OTA publishing")
