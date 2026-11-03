@@ -25,6 +25,12 @@ void lf_settings_defaults(lf_settings_t *s)
         .clock_face = 0,
         .basic_font_style = 0,
         .basic_font_size = 60,
+        .basic_time_x = 0, .basic_time_y = -6,
+        .basic_battery_x = 0, .basic_battery_y = -160,
+        .basic_date_x = 0, .basic_date_y = 70,
+        .basic_weather_x = 0, .basic_weather_y = 135,
+        .basic_battery_size = 85, .basic_date_size = 70,
+        .basic_weather_size = 70,
         .basic_ring_mode = 1,
         .basic_show_date = 1,
         .basic_weather = 0,
@@ -93,6 +99,17 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     (void)nvs_get_u8(h, "clockface", &s->clock_face);
     (void)nvs_get_u8(h, "basicfont", &s->basic_font_style);
     (void)nvs_get_u8(h, "basicsize", &s->basic_font_size);
+    (void)nvs_get_i32(h, "bt_x", &s->basic_time_x);
+    (void)nvs_get_i32(h, "bt_y", &s->basic_time_y);
+    (void)nvs_get_i32(h, "bb_x", &s->basic_battery_x);
+    (void)nvs_get_i32(h, "bb_y", &s->basic_battery_y);
+    (void)nvs_get_i32(h, "bd_x", &s->basic_date_x);
+    (void)nvs_get_i32(h, "bd_y", &s->basic_date_y);
+    (void)nvs_get_i32(h, "bw_x", &s->basic_weather_x);
+    (void)nvs_get_i32(h, "bw_y", &s->basic_weather_y);
+    (void)nvs_get_u8(h, "bb_size", &s->basic_battery_size);
+    (void)nvs_get_u8(h, "bd_size", &s->basic_date_size);
+    (void)nvs_get_u8(h, "bw_size", &s->basic_weather_size);
     (void)nvs_get_u8(h, "ringmode", &s->basic_ring_mode);
     (void)nvs_get_u8(h, "basicdate", &s->basic_show_date);
     (void)nvs_get_u8(h, "basicweather", &s->basic_weather);
@@ -132,6 +149,18 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     s->clock_face = in_range(s->clock_face, 0, 5, 0);
     s->basic_font_style = in_range(s->basic_font_style, 0, 4, 0);
     s->basic_font_size = in_range(s->basic_font_size, 0, 100, 60);
+    /* Per-element offsets remain bounded inside the AMOLED circle. */
+    if(s->basic_time_x<-100||s->basic_time_x>100)s->basic_time_x=0;
+    if(s->basic_time_y<-150||s->basic_time_y>150)s->basic_time_y=-6;
+    if(s->basic_battery_x<-150||s->basic_battery_x>150)s->basic_battery_x=0;
+    if(s->basic_battery_y<-180||s->basic_battery_y>180)s->basic_battery_y=-160;
+    if(s->basic_date_x<-150||s->basic_date_x>150)s->basic_date_x=0;
+    if(s->basic_date_y<-180||s->basic_date_y>180)s->basic_date_y=70;
+    if(s->basic_weather_x<-150||s->basic_weather_x>150)s->basic_weather_x=0;
+    if(s->basic_weather_y<-180||s->basic_weather_y>180)s->basic_weather_y=135;
+    s->basic_battery_size=in_range(s->basic_battery_size,0,100,85);
+    s->basic_date_size=in_range(s->basic_date_size,0,100,70);
+    s->basic_weather_size=in_range(s->basic_weather_size,0,100,70);
     s->basic_ring_mode = in_range(s->basic_ring_mode, 0, 2, 1);
     s->basic_show_date = in_range(s->basic_show_date, 0, 1, 1);
     s->basic_weather = in_range(s->basic_weather, 0, 1, 0);
@@ -178,6 +207,17 @@ esp_err_t lf_settings_save(const lf_settings_t *s)
     TRY_NVS(nvs_set_u8(h, "clockface", s->clock_face));
     TRY_NVS(nvs_set_u8(h, "basicfont", s->basic_font_style));
     TRY_NVS(nvs_set_u8(h, "basicsize", s->basic_font_size));
+    TRY_NVS(nvs_set_i32(h, "bt_x", s->basic_time_x));
+    TRY_NVS(nvs_set_i32(h, "bt_y", s->basic_time_y));
+    TRY_NVS(nvs_set_i32(h, "bb_x", s->basic_battery_x));
+    TRY_NVS(nvs_set_i32(h, "bb_y", s->basic_battery_y));
+    TRY_NVS(nvs_set_i32(h, "bd_x", s->basic_date_x));
+    TRY_NVS(nvs_set_i32(h, "bd_y", s->basic_date_y));
+    TRY_NVS(nvs_set_i32(h, "bw_x", s->basic_weather_x));
+    TRY_NVS(nvs_set_i32(h, "bw_y", s->basic_weather_y));
+    TRY_NVS(nvs_set_u8(h, "bb_size", s->basic_battery_size));
+    TRY_NVS(nvs_set_u8(h, "bd_size", s->basic_date_size));
+    TRY_NVS(nvs_set_u8(h, "bw_size", s->basic_weather_size));
     TRY_NVS(nvs_set_u8(h, "ringmode", s->basic_ring_mode));
     TRY_NVS(nvs_set_u8(h, "basicdate", s->basic_show_date));
     TRY_NVS(nvs_set_u8(h, "basicweather", s->basic_weather));
