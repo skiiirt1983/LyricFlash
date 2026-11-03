@@ -29,6 +29,7 @@
 /* Samples within 8 integer units of the signed 16-bit ADC rails.
  * This flags possible clipping or sporadic transport artifacts, not proof. */
 #define LF_PCM_NEAR_RAIL (32760U)
+#define LF_PCM_HALF_SCALE (16384U)
 static atomic_int state=ATOMIC_VAR_INIT(LF_PCM_IDLE);
 static atomic_int error=ATOMIC_VAR_INIT(LF_PCM_ERR_NONE);
 static atomic_uint attempts;
@@ -40,6 +41,11 @@ static atomic_uint mic1_mean_abs, mic1_peak_abs;
 static atomic_uint mic2_mean_abs, mic2_peak_abs;
 static atomic_uint mic1_rms, mic2_rms;
 static atomic_uint mic1_near_rail, mic2_near_rail;
+static atomic_uint mic1_rail_bursts, mic2_rail_bursts;
+static atomic_uint mic1_longest_rail_burst, mic2_longest_rail_burst;
+static atomic_uint mic1_rms_below_rail, mic2_rms_below_rail;
+static atomic_uint mic1_half_scale, mic2_half_scale;
+static atomic_uint both_near_rail_frames;
 static atomic_bool stop_requested;
 
 /* Integer sqrt of a 64-bit sum-of-squares quotient, bounded to <= 32768.
@@ -102,6 +108,15 @@ void lf_pcm_snapshot(lf_pcm_snapshot_t *out)
     out->mic2_rms=atomic_load(&mic2_rms);
     out->mic1_near_rail=atomic_load(&mic1_near_rail);
     out->mic2_near_rail=atomic_load(&mic2_near_rail);
+    out->mic1_rail_bursts=atomic_load(&mic1_rail_bursts);
+    out->mic2_rail_bursts=atomic_load(&mic2_rail_bursts);
+    out->mic1_longest_rail_burst=atomic_load(&mic1_longest_rail_burst);
+    out->mic2_longest_rail_burst=atomic_load(&mic2_longest_rail_burst);
+    out->mic1_rms_below_rail=atomic_load(&mic1_rms_below_rail);
+    out->mic2_rms_below_rail=atomic_load(&mic2_rms_below_rail);
+    out->mic1_half_scale=atomic_load(&mic1_half_scale);
+    out->mic2_half_scale=atomic_load(&mic2_half_scale);
+    out->both_near_rail_frames=atomic_load(&both_near_rail_frames);
     out->stop_requested=atomic_load(&stop_requested);
 }
 static void capture_worker(void *arg)
@@ -130,6 +145,10 @@ static void capture_worker(void *arg)
     uint64_t total_abs=0, mic1_total=0, mic2_total=0;
     uint64_t mic1_sum_sq=0, mic2_sum_sq=0;
     uint32_t mic1_clip=0, mic2_clip=0;
+    uint32_t mic1_bursts=0, mic2_bursts=0, mic1_run=0, mic2_run=0;
+    uint32_t mic1_longest=0, mic2_longest=0, both_rail=0;
+    uint32_t mic1_half=0, mic2_half=0, mic1_below_count=0, mic2_below_count=0;
+    uint64_t mic1_below_sq=0, mic2_below_sq=0;
     uint32_t samples=0, frames=0, peak=0, mic1_peak=0, mic2_peak=0;
     if(opened) {
         if(fail==LF_PCM_ERR_NONE) {
@@ -150,8 +169,34 @@ static void capture_worker(void *arg)
                     /* Signed 16-bit MIN (-32768) is handled by int32_t. */
                     mic1_sum_sq+=(uint64_t)a1*a1;
                     mic2_sum_sq+=(uint64_t)a2*a2;
-                    if(a1>=LF_PCM_NEAR_RAIL)mic1_clip++;
-                    if(a2>=LF_PCM_NEAR_RAIL)mic2_clip++;
+                    /* Preserve frame adjacency across read-buffer boundaries.
+                     * Bursts distinguish isolated one-sample artifacts from
+                     * contiguous clipping; no raw audio retained. */
+                    const bool rail1=a1>=LF_PCM_NEAR_RAIL;
+                    const bool rail2=a2>=LF_PCM_NEAR_RAIL;
+                    if(a1>=LF_PCM_HALF_SCALE)mic1_half++;
+                    if(a2>=LF_PCM_HALF_SCALE)mic2_half++;
+                    if(rail1) {
+                        mic1_clip++;
+                        if(mic1_run==0)mic1_bursts++;
+                        mic1_run++;
+                        if(mic1_run>mic1_longest)mic1_longest=mic1_run;
+                    } else {
+                        mic1_run=0;
+                        mic1_below_sq+=(uint64_t)a1*a1;
+                        mic1_below_count++;
+                    }
+                    if(rail2) {
+                        mic2_clip++;
+                        if(mic2_run==0)mic2_bursts++;
+                        mic2_run++;
+                        if(mic2_run>mic2_longest)mic2_longest=mic2_run;
+                    } else {
+                        mic2_run=0;
+                        mic2_below_sq+=(uint64_t)a2*a2;
+                        mic2_below_count++;
+                    }
+                    if(rail1&&rail2)both_rail++;
                     total_abs+=a1+a2;
                     if(a1>mic1_peak)mic1_peak=a1;
                     if(a2>mic2_peak)mic2_peak=a2;
@@ -172,6 +217,17 @@ static void capture_worker(void *arg)
                 atomic_store(&mic2_rms,pcm_isqrt_u64(mic2_sum_sq/frames));
                 atomic_store(&mic1_near_rail,mic1_clip);
                 atomic_store(&mic2_near_rail,mic2_clip);
+                atomic_store(&mic1_rail_bursts,mic1_bursts);
+                atomic_store(&mic2_rail_bursts,mic2_bursts);
+                atomic_store(&mic1_longest_rail_burst,mic1_longest);
+                atomic_store(&mic2_longest_rail_burst,mic2_longest);
+                atomic_store(&mic1_rms_below_rail,mic1_below_count?
+                    pcm_isqrt_u64(mic1_below_sq/mic1_below_count):0);
+                atomic_store(&mic2_rms_below_rail,mic2_below_count?
+                    pcm_isqrt_u64(mic2_below_sq/mic2_below_count):0);
+                atomic_store(&mic1_half_scale,mic1_half);
+                atomic_store(&mic2_half_scale,mic2_half);
+                atomic_store(&both_near_rail_frames,both_rail);
             }
         }
         /* Close ES7210 ADC even after gain/read failure or early Stop. */
@@ -201,6 +257,11 @@ bool lf_pcm_start(void)
     atomic_store(&mic2_mean_abs,0);atomic_store(&mic2_peak_abs,0);
     atomic_store(&mic1_rms,0);atomic_store(&mic2_rms,0);
     atomic_store(&mic1_near_rail,0);atomic_store(&mic2_near_rail,0);
+    atomic_store(&mic1_rail_bursts,0);atomic_store(&mic2_rail_bursts,0);
+    atomic_store(&mic1_longest_rail_burst,0);atomic_store(&mic2_longest_rail_burst,0);
+    atomic_store(&mic1_rms_below_rail,0);atomic_store(&mic2_rms_below_rail,0);
+    atomic_store(&mic1_half_scale,0);atomic_store(&mic2_half_scale,0);
+    atomic_store(&both_near_rail_frames,0);
     atomic_fetch_add(&attempts,1);
     if(xTaskCreate(capture_worker,"lf_mic_pcm",6144,NULL,
                    tskIDLE_PRIORITY+1,NULL)!=pdPASS) {

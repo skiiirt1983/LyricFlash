@@ -564,3 +564,20 @@ require('strcmp(descriptor.project_name,"lyricflash")!=0' in network and
         'esp_https_ota_finish(handle)' in network and
         'allowed_github_ota_url(url->valuestring)' in network,
         "0.8.35 retain device-side OTA project, version, URL and image integrity")
+
+# 0.8.36 audio diagnostic: count contiguous near-rail runs across PCM reads,
+# compare the two front microphone slots and expose robust representative
+# signal level without hiding the original RMS/peak. No capture path changes.
+require('LF_PCM_HALF_SCALE (16384U)' in pcm and
+        'mic1_run=0' in pcm and 'mic2_run=0' in pcm and
+        'both_rail++' in pcm and
+        'pcm_isqrt_u64(mic1_below_sq/mic1_below_count)' in pcm and
+        'mic1_rail_bursts' in pcm and 'mic2_longest_rail_burst' in pcm and
+        'mic1_rms_below_rail' in pcm and 'mic2_rms_below_rail' in pcm,
+        "0.8.36 noninvasive rail spike burst duration and sub-rail RMS")
+require('mic1_rail_bursts' in network and
+        'mic2_longest_rail_burst' in network and
+        'both_near_rail_frames' in network and
+        'mic1_rms_below_rail' in web and
+        'both_near_rail_frames' in web,
+        "0.8.36 microphone rail diagnostics must reach the device Web UI")

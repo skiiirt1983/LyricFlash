@@ -14,7 +14,15 @@
 
 Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` and `0.8.29` failed screen/touch on physical hardware. `0.8.30` is the targeted display recovery candidate and is not hardware-proven until the user verifies it. Keep 0.8.26 as rollback. Do not merge or publish a stable v1.0 release until the device tests pass. Each functional milestone uses **one isolated change and one gated compile after preflight**, followed by a specific device acceptance test.
 
-## Current milestone: Alpha 0.8.35 — allow exact Current firmware reinstallation
+## Current milestone: Alpha 0.8.36 — rare audio rail-spike duration diagnostic
+
+- **Alpha 0.8.35 physically confirmed by user:** Current same-version reinstall appears and works; release OTA picker/installed baseline passed. No need to retest OTA behavior on this microphone-only release.
+- **Problem:** both MIC1/MIC2 have 0 near-rail samples at quiet baseline, but about 20–25 near-rail samples per MIC in 3 seconds at medium music/15–20 cm voice. Very low typical signal and rare full-scale values disproportionately inflate RMS. We have not determined if bursts represent I²S ADC framing, clipping or physical impulses; changing input gain or software interpolation is premature.
+- **Diagnostic-only 0.8.36:** count contiguous near-rail bursts per MIC (abs(sample)>=32760), longest run in frames with cross-buffer continuity, frames in which both MICs are near-rail simultaneously, count samples above half-scale (>=16384), and RMS with near-rail values excluded. Both original RMS and peak metrics remain; no raw audio stored or uploaded.
+- **Physical acceptance:** first check screen, touch, OTA and Wi-Fi unchanged, then one manual three-second **medium-music** microphone test with device outside its case. Only repeat voice if the pattern differs materially or the user desires. Report near-rail count, burst count, longest burst, simultaneous frames, and RMS excluding rails; this is enough to choose an isolated-artifact vs sustained-overload next step. Do not assert clean recognition audio solely on these statistics.
+- **Isolation:** retained 24kHz four-slot TDM, 24dB gain, MIC1 slot0/MIC2 slot2, manual 3-second Start/Stop, QSPI/LVGL 24-row display, 0.8.35 Old/Current/New picker and current reinstall, NVS. One compile only after all host/native/browser preflight checks pass.
+
+## Previous milestone: Alpha 0.8.35 — allow exact Current firmware reinstallation
 
 - **User feedback after 0.8.34 hardware verification:** Current can be the latest published firmware, so an OTA picker that only enables New makes it impossible to reinstall a functioning published version. Requirement revised: Old stays disabled, Current is selectable for an explicit reinstallation, and New remains selectable if a newer release exists. No more than three entries.
 - **Verified-image prerequisite:** Current only enables when the release catalog offers an **exact** matching published application OTA version and known-approved URL; otherwise Current is displayed but disabled, and no guessed link is generated. The selected device-image descriptor must match the requested firmware version. The backend already permits the same-version request and independently checks HTTPS, project name, image version and ESP-IDF image integrity. Previous old-version/invalid-catalog restrictions remain intact.

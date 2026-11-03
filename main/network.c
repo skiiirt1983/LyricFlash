@@ -524,6 +524,16 @@ static esp_err_t handle_mic_pcm_status(httpd_req_t *req)
     cJSON_AddNumberToObject(reply,"mic2_rms",s.mic2_rms);
     cJSON_AddNumberToObject(reply,"mic1_near_rail",s.mic1_near_rail);
     cJSON_AddNumberToObject(reply,"mic2_near_rail",s.mic2_near_rail);
+    cJSON_AddNumberToObject(reply,"mic1_rail_bursts",s.mic1_rail_bursts);
+    cJSON_AddNumberToObject(reply,"mic2_rail_bursts",s.mic2_rail_bursts);
+    cJSON_AddNumberToObject(reply,"mic1_longest_rail_burst",s.mic1_longest_rail_burst);
+    cJSON_AddNumberToObject(reply,"mic2_longest_rail_burst",s.mic2_longest_rail_burst);
+    cJSON_AddNumberToObject(reply,"mic1_rms_below_rail",s.mic1_rms_below_rail);
+    cJSON_AddNumberToObject(reply,"mic2_rms_below_rail",s.mic2_rms_below_rail);
+    cJSON_AddNumberToObject(reply,"mic1_half_scale",s.mic1_half_scale);
+    cJSON_AddNumberToObject(reply,"mic2_half_scale",s.mic2_half_scale);
+    cJSON_AddNumberToObject(reply,"both_near_rail_frames",s.both_near_rail_frames);
+    cJSON_AddNumberToObject(reply,"half_scale_threshold",16384);
     cJSON_AddNumberToObject(reply,"near_rail_threshold",32760);
     cJSON_AddStringToObject(reply,"audio_input_format","24kHz/16bit/4slot_TDM");
     cJSON_AddStringToObject(reply,"physical_channels","MIC1 slot0, MIC2 slot2");

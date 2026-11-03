@@ -16,6 +16,9 @@ assert "LF_PCM_NEAR_RAIL (32760U)" in source
 assert "pcm_isqrt_u64" in source
 assert "mic1_near_rail" in net and "mic2_near_rail" in net
 assert "mic1_rms" in page and "mic2_rms" in page
+assert "mic1_rail_bursts" in net and "mic2_longest_rail_burst" in net
+assert "mic1_rms_below_rail" in page and "both_near_rail_frames" in page
+assert "LF_PCM_HALF_SCALE (16384U)" in source
 assert "esp_codec_dev_close(codec)" in source
 assert "atomic_load(&stop_requested)" in source
 assert "vTaskDelay" not in source
@@ -86,7 +89,11 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
         int esp_codec_dev_read(esp_codec_dev_handle_t c,void *ptr,int bytes)
         {assert(c&&bytes==1024);reads++;if(!read_ok)return -1;
          int16_t *buf=ptr;for(int i=0;i<512;i+=4){buf[i]=silent_mode?0:1000;buf[i+1]=32767;buf[i+2]=silent_mode?0:-2000;buf[i+3]=-32768;}
-         if(rail_mode){buf[0]=-32768;buf[2]=32767;}
+         if(rail_mode==1){buf[0]=-32768;buf[2]=32767;}
+         if(rail_mode==2){for(int j=0;j<3;j++)buf[j*4]=-32768;
+                           for(int j=0;j<2;j++)buf[j*4+2]=32767;}
+         if(rail_mode==3){for(int j=0;j<2;j++){buf[j*4]=-32768;
+                            buf[(126+j)*4]=-32768;}}
          if(request_stop)lf_pcm_stop();
          return ESP_CODEC_DEV_OK;}
         int esp_codec_dev_close(esp_codec_dev_handle_t c)
@@ -109,6 +116,10 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
             assert(s.mic2_mean_abs==2000 && s.mic2_peak_abs==2000);
             assert(s.mic1_rms==1000 && s.mic2_rms==2000);
             assert(s.mic1_near_rail==0 && s.mic2_near_rail==0);
+            assert(s.mic1_rms_below_rail==1000 && s.mic2_rms_below_rail==2000);
+            assert(s.mic1_rail_bursts==0 && s.mic2_longest_rail_burst==0);
+            assert(s.mic1_half_scale==0 && s.mic2_half_scale==0);
+            assert(s.both_near_rail_frames==0);
             assert(gains==1);
             assert(opens==1 && closes==1);
             request_stop=1;time_us=0;
@@ -138,18 +149,51 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
             assert(s.state==LF_PCM_COMPLETE);
             assert(s.mic1_near_rail==(unsigned)(reads-prev_reads));
             assert(s.mic2_near_rail==(unsigned)(reads-prev_reads));
+            assert(s.mic1_rail_bursts==(unsigned)(reads-prev_reads));
+            assert(s.mic2_rail_bursts==(unsigned)(reads-prev_reads));
+            assert(s.mic1_longest_rail_burst==1 && s.mic2_longest_rail_burst==1);
+            assert(s.both_near_rail_frames==(unsigned)(reads-prev_reads));
+            assert(s.mic1_half_scale==s.mic1_near_rail && s.mic2_half_scale==s.mic2_near_rail);
+            assert(s.mic1_rms_below_rail==1000 && s.mic2_rms_below_rail==2000);
             assert(s.mic1_rms>1000 && s.mic2_rms>2000);
             assert(s.mic1_rms<32768 && s.mic2_rms<32768);
+            /* Consecutive bursts: 3 frames MIC1, 2 frames MIC2.
+               Each buffer has a new independent burst. */
+            rail_mode=2;time_us=0;int prev_reads_burst=reads;
+            assert(lf_pcm_start());lf_pcm_snapshot(&s);
+            assert(s.mic1_near_rail==3U*(unsigned)(reads-prev_reads_burst));
+            assert(s.mic2_near_rail==2U*(unsigned)(reads-prev_reads_burst));
+            assert(s.mic1_rail_bursts==(unsigned)(reads-prev_reads_burst));
+            assert(s.mic2_rail_bursts==(unsigned)(reads-prev_reads_burst));
+            assert(s.mic1_longest_rail_burst==3 && s.mic2_longest_rail_burst==2);
+            assert(s.both_near_rail_frames==2U*(unsigned)(reads-prev_reads_burst));
+            assert(s.mic1_rms_below_rail==1000 && s.mic2_rms_below_rail==2000);
+            /* Run spanning an I2S read boundary must not split in two.
+               There are 2 rail frames at both ends of each read. */
+            rail_mode=3;time_us=0;int prev_reads_cross=reads;
+            assert(lf_pcm_start());lf_pcm_snapshot(&s);
+            assert(s.mic1_near_rail==4U*(unsigned)(reads-prev_reads_cross));
+            assert(s.mic2_near_rail==0);
+            assert(s.mic1_longest_rail_burst==4);
+            assert(s.mic1_rail_bursts==(unsigned)(reads-prev_reads_cross)+1U);
+            assert(s.mic2_rail_bursts==0 && s.both_near_rail_frames==0);
+            assert(s.mic1_rms_below_rail==1000 && s.mic2_rms_below_rail==2000);
             rail_mode=0;time_us=0;
             assert(lf_pcm_start());lf_pcm_snapshot(&s);
             assert(s.state==LF_PCM_COMPLETE);
             assert(s.mic1_near_rail==0 && s.mic2_near_rail==0);
             assert(s.mic1_rms==1000 && s.mic2_rms==2000);
+            assert(s.mic1_rms_below_rail==1000 && s.mic2_rms_below_rail==2000);
+            assert(s.mic1_rail_bursts==0 && s.mic2_longest_rail_burst==0);
+            assert(s.both_near_rail_frames==0);
             silent_mode=1;time_us=0;
             assert(lf_pcm_start());lf_pcm_snapshot(&s);
             assert(s.state==LF_PCM_COMPLETE && s.sample_count>0);
             assert(s.mic1_rms==0 && s.mic2_rms==0);
             assert(s.mic1_near_rail==0 && s.mic2_near_rail==0);
+            assert(s.mic1_rms_below_rail==0 && s.mic2_rms_below_rail==0);
+            assert(s.mic1_rail_bursts==0 && s.mic2_rail_bursts==0);
+            assert(s.both_near_rail_frames==0);
             return 0;
         }
     """))
@@ -158,4 +202,4 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
                     "-I",str(p),"-I",str(root/"main"),str(root/"main/mic_pcm.c"),
                     str(p/"test.c"),"-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)
-print("PASS: 24k TDM two-mic RMS, near-rail counts, silence, repeat reset, Stop/errors")
+print("PASS: two-mic rail-burst duration, cross-buffer continuity, simultaneous frames, sub-rail RMS, half-scale counts, silence, resets, Stop/errors")
