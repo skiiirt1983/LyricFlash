@@ -437,6 +437,17 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
     cJSON_AddBoolToObject(root, "weather_enabled", weather.enabled);
     cJSON_AddNumberToObject(root, "font_style", s.basic_font_style);
     cJSON_AddNumberToObject(root, "font_size", s.basic_font_size);
+    cJSON_AddNumberToObject(root, "basic_time_x", s.basic_time_x);
+    cJSON_AddNumberToObject(root, "basic_time_y", s.basic_time_y);
+    cJSON_AddNumberToObject(root, "basic_battery_x", s.basic_battery_x);
+    cJSON_AddNumberToObject(root, "basic_battery_y", s.basic_battery_y);
+    cJSON_AddNumberToObject(root, "basic_date_x", s.basic_date_x);
+    cJSON_AddNumberToObject(root, "basic_date_y", s.basic_date_y);
+    cJSON_AddNumberToObject(root, "basic_weather_x", s.basic_weather_x);
+    cJSON_AddNumberToObject(root, "basic_weather_y", s.basic_weather_y);
+    cJSON_AddNumberToObject(root, "basic_battery_size", s.basic_battery_size);
+    cJSON_AddNumberToObject(root, "basic_date_size", s.basic_date_size);
+    cJSON_AddNumberToObject(root, "basic_weather_size", s.basic_weather_size);
     cJSON_AddNumberToObject(root, "ring_mode", s.basic_ring_mode);
     cJSON_AddBoolToObject(root, "show_date", s.basic_show_date != 0);
     cJSON_AddBoolToObject(root, "weather", s.basic_weather != 0);
@@ -480,6 +491,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         return ESP_FAIL;
     }
     int face, font_style, font_size, ring_mode, bg, fg, a, b, c, interval;
+    int element[11]={0};
     uint8_t show_date, basic_weather, weather_enabled;
     const cJSON *city = cJSON_GetObjectItemCaseSensitive(root, "city");
     bool valid =
@@ -488,6 +500,17 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         number_in_range(root, "font_style", 0, 4, &font_style) &&
         number_in_range(root, "font_size", 0, 100, &font_size) &&
         number_in_range(root, "ring_mode", 0, 2, &ring_mode) &&
+        number_in_range(root,"basic_time_x",-100,100,&element[0]) &&
+        number_in_range(root,"basic_time_y",-150,150,&element[1]) &&
+        number_in_range(root,"basic_battery_x",-180,180,&element[2]) &&
+        number_in_range(root,"basic_battery_y",-180,180,&element[3]) &&
+        number_in_range(root,"basic_date_x",-180,180,&element[4]) &&
+        number_in_range(root,"basic_date_y",-180,180,&element[5]) &&
+        number_in_range(root,"basic_weather_x",-180,180,&element[6]) &&
+        number_in_range(root,"basic_weather_y",-180,180,&element[7]) &&
+        number_in_range(root,"basic_battery_size",0,100,&element[8]) &&
+        number_in_range(root,"basic_date_size",0,100,&element[9]) &&
+        number_in_range(root,"basic_weather_size",0,100,&element[10]) &&
         boolean_value(root, "show_date", &show_date) &&
         boolean_value(root, "weather", &basic_weather) &&
         number_in_range(root, "background", 0, 0xFFFFFF, &bg) &&
@@ -528,6 +551,17 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     current.clock_face = (uint8_t)face;
     current.basic_font_style = (uint8_t)font_style;
     current.basic_font_size = (uint8_t)font_size;
+    current.basic_time_x=(int32_t)element[0];
+    current.basic_time_y=(int32_t)element[1];
+    current.basic_battery_x=(int32_t)element[2];
+    current.basic_battery_y=(int32_t)element[3];
+    current.basic_date_x=(int32_t)element[4];
+    current.basic_date_y=(int32_t)element[5];
+    current.basic_weather_x=(int32_t)element[6];
+    current.basic_weather_y=(int32_t)element[7];
+    current.basic_battery_size=(uint8_t)element[8];
+    current.basic_date_size=(uint8_t)element[9];
+    current.basic_weather_size=(uint8_t)element[10];
     current.basic_ring_mode = (uint8_t)ring_mode;
     current.basic_show_date = show_date;
     current.basic_weather = basic_weather;
