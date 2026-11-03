@@ -14,6 +14,15 @@
 
 Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` and `0.8.29` failed screen/touch on physical hardware. `0.8.30` is the targeted display recovery candidate and is not hardware-proven until the user verifies it. Keep 0.8.26 as rollback. Do not merge or publish a stable v1.0 release until the device tests pass. Each functional milestone uses **one isolated change and one gated compile after preflight**, followed by a specific device acceptance test.
 
+## Hardware test PASS: Alpha 0.8.38 — AudD to LRCLIB timestamped lyrics
+
+- **User-confirmed on-device result:** `Identified: Mr. Jones — Counting Crows`; `Synchronized lyrics found: 83 timed lines.`
+- **Browser preview:** Four timestamped lines beginning at **0:06, 0:10, 0:11, and 0:14**, demonstrating successful lyric record retrieval, LRC timestamp parsing, line count, and Web UI display.
+- **Acceptance:** Manual 0.8.38 identification and LRCLIB timestamped preview **PASS** on real Waveshare hardware. Does **not** validate real-time synchronization, music playback offset, or rendering/scrolling lyrics on the round AMOLED.
+- **Next engineering milestone:** move lyrics to the device screen using the retrieved timed line cache; provide a clearly defined playback clock/offset. AudD song identification alone does not establish exact current playback position. Prefer calibrated/manual sync or a documented time estimate rather than presenting uncontrolled scrolling as verified synchronization.
+- **Keep working features:** AudD manual capture/Stop, independent physical MIC1/MIC2, 24kHz TDM 24dB, OTA current reinstall, clock and touch responsiveness, saved Wi-Fi/AudD token, no background listening or unwanted API calls.
+- No new firmware was compiled for recording this hardware result.
+
 ## Current milestone: Alpha 0.8.38 — manual song ID followed by synchronized lyrics lookup
 
 - **0.8.37 Stop test confirmed:** Device displayed `Recognition stopped` after user canceled during a manual scan. This confirms the UI/state path; a packet trace was not captured. The firmware checks cancellation before beginning the AudD request.
