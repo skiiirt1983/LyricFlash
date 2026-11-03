@@ -79,6 +79,8 @@ static lv_obj_t *home_play_hint;
 /* Overlay is owned by the existing Home pager, not a second LVGL root. */
 static lv_obj_t *home_record_layer;
 static lv_obj_t *home_record_wave;
+static lv_obj_t *home_record_centerline;
+static lv_obj_t *home_record_loading;
 static lv_obj_t *home_record_caption;
 static uint32_t home_record_attempt;
 static uint32_t home_record_last_frames;
@@ -791,6 +793,8 @@ static void make_base(void)
     home_play_hint=NULL;
     home_record_layer=NULL;
     home_record_wave=NULL;
+    home_record_centerline=NULL;
+    home_record_loading=NULL;
     home_record_caption=NULL;
     home_record_attempt=0;
     home_record_last_frames=0;
@@ -881,12 +885,29 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
     const bool capturing=song->state==LF_RECOG_CAPTURE;
     const bool working=song->state==LF_RECOG_UPLOAD ||
                        song->state==LF_RECOG_LYRICS;
-    if(!capturing&&!working){
+    const bool opening=song->state==LF_RECOG_MATCH &&
+                       song->lyric_lines>0 &&
+                       strcmp(song->lyrics_state,"synced")==0 &&
+                       song->attempts!=auto_open_attempt;
+    /* Hold LOADING on screen until deferred lyrics really open. */
+    if(!capturing&&!working&&!opening){
         lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
         return;
     }
     lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(home_record_layer);
+    if(home_record_wave){
+        if(capturing)lv_obj_remove_flag(home_record_wave,LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(home_record_wave,LV_OBJ_FLAG_HIDDEN);
+    }
+    if(home_record_centerline){
+        if(capturing)lv_obj_remove_flag(home_record_centerline,LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(home_record_centerline,LV_OBJ_FLAG_HIDDEN);
+    }
+    if(home_record_loading){
+        if(capturing)lv_obj_add_flag(home_record_loading,LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_remove_flag(home_record_loading,LV_OBJ_FLAG_HIDDEN);
+    }
     if(home_record_caption){
         const char *word=capturing?"LISTENING":
             song->state==LF_RECOG_UPLOAD?"IDENTIFYING":"FINDING LYRICS";
@@ -898,7 +919,7 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
         home_record_attempt=song->attempts;
         home_record_last_frames=UINT32_MAX;
         home_record_wave_count=1;
-        home_record_wave_points[0]=(lv_point_precise_t){0,72};
+        home_record_wave_points[0]=(lv_point_precise_t){0,130};
         lv_line_set_points(home_record_wave,home_record_wave_points,1);
         home_record_last_tick=0;
     }
@@ -915,7 +936,11 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
     const static int8_t phases[8]={0,-4,-8,-3,2,8,4,-2};
     const int8_t wave=phases[home_record_wave_count%8];
     const int amplitude=(int)song->capture_visual_level;
-    const int y=72+amplitude*wave/12;
+    /* Triple the visible gain, clamped to the ring interior (no overflow).
+       Old visual was 72 + amplitude*wave/12; now x3. */
+    int y=130+amplitude*wave/4;
+    if(y<10)y=10;
+    if(y>250)y=250;
     home_record_wave_points[home_record_wave_count++]=(lv_point_precise_t){
         (int32_t)(x>360U?360U:x),(int32_t)y};
     lv_line_set_points(home_record_wave,home_record_wave_points,
@@ -1195,29 +1220,29 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_align(record_ring,LV_ALIGN_CENTER,0,-4);
     lv_obj_set_style_radius(record_ring,LV_RADIUS_CIRCLE,0);
     lv_obj_set_style_border_color(record_ring,lv_color_hex(0x158F50),0);
-    lv_obj_set_style_border_width(record_ring,2,0);
+    lv_obj_set_style_border_width(record_ring,5,0);
     lv_obj_set_style_bg_opa(record_ring,LV_OPA_TRANSP,0);
     lv_obj_set_style_shadow_width(record_ring,0,0);
     lv_obj_remove_flag(record_ring,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(record_ring,LV_OBJ_FLAG_SCROLLABLE);
-    static const lv_point_precise_t baseline[]={{0,72},{360,72}};
-    lv_obj_t *centerline=lv_line_create(home_record_layer);
-    lv_line_set_points(centerline,baseline,2);
-    lv_obj_set_size(centerline,360,144);
-    lv_obj_align(centerline,LV_ALIGN_CENTER,0,-4);
-    lv_obj_set_style_bg_opa(centerline,LV_OPA_TRANSP,0);
-    lv_obj_set_style_line_color(centerline,lv_color_hex(0x258854),0);
-    lv_obj_set_style_line_width(centerline,1,0);
-    lv_obj_remove_flag(centerline,LV_OBJ_FLAG_CLICKABLE);
+    static const lv_point_precise_t baseline[]={{0,130},{360,130}};
+    home_record_centerline=lv_line_create(home_record_layer);
+    lv_line_set_points(home_record_centerline,baseline,2);
+    lv_obj_set_size(home_record_centerline,360,260);
+    lv_obj_align(home_record_centerline,LV_ALIGN_CENTER,0,-4);
+    lv_obj_set_style_bg_opa(home_record_centerline,LV_OPA_TRANSP,0);
+    lv_obj_set_style_line_color(home_record_centerline,lv_color_hex(0x258854),0);
+    lv_obj_set_style_line_width(home_record_centerline,3,0);
+    lv_obj_remove_flag(home_record_centerline,LV_OBJ_FLAG_CLICKABLE);
     home_record_wave=lv_line_create(home_record_layer);
-    lv_obj_set_size(home_record_wave,360,144);
+    lv_obj_set_size(home_record_wave,360,260);
     lv_obj_align(home_record_wave,LV_ALIGN_CENTER,0,-4);
     lv_obj_set_style_bg_opa(home_record_wave,LV_OPA_TRANSP,0);
     lv_obj_set_style_line_color(home_record_wave,lv_color_hex(0xFFD02C),0);
-    lv_obj_set_style_line_width(home_record_wave,3,0);
+    lv_obj_set_style_line_width(home_record_wave,6,0);
     lv_obj_set_style_line_rounded(home_record_wave,true,0);
     lv_obj_remove_flag(home_record_wave,LV_OBJ_FLAG_CLICKABLE);
-    home_record_wave_points[0]=(lv_point_precise_t){0,72};
+    home_record_wave_points[0]=(lv_point_precise_t){0,130};
     lv_line_set_points(home_record_wave,home_record_wave_points,1);
     home_record_wave_count=1;
     home_record_attempt=0;
@@ -1225,6 +1250,15 @@ static void primary_render_home_content(lv_obj_t *parent)
     home_record_last_tick=0;
     home_record_caption=home_caption(home_record_layer,"LISTENING",356,206,
                                     &lv_font_montserrat_16,0x4A946F);
+    home_record_loading=lv_label_create(home_record_layer);
+    lv_label_set_text(home_record_loading,"LOADING...");
+    lv_obj_set_width(home_record_loading,360);
+    lv_obj_set_style_text_align(home_record_loading,LV_TEXT_ALIGN_CENTER,0);
+    lv_obj_set_style_text_font(home_record_loading,&lv_font_montserrat_36,0);
+    lv_obj_set_style_text_color(home_record_loading,lv_color_hex(0xF0F7FF),0);
+    lv_obj_align(home_record_loading,LV_ALIGN_CENTER,0,-6);
+    lv_obj_remove_flag(home_record_loading,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(home_record_loading,LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
 
     /* Informational text is also the unobtrusive entry to the Lyrics page.
