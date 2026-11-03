@@ -22,6 +22,7 @@ idf_component_register(
         "lyric_sync.c"
         "song_cache.c"
         "image_policy.c"
+        "brand_icon.c"
         "service_errors.c"
         "power.c"
         "power_logic.c"

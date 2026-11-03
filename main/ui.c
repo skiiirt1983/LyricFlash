@@ -9,6 +9,7 @@
 #include "network.h"
 #include "diagnostics.h"
 #include "version.h"
+#include "brand_icon.h"
 #include "clock_face.h"
 #include "recognition.h"
 #include "lyric_clock.h"
@@ -1197,35 +1198,16 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_set_flex_flow(brand_row,LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(brand_row,LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+    /* The exact user-supplied LyricFlash icon, downsampled for the round
+       AMOLED, not another hand-drawn cloud/bolt approximation. */
     lv_obj_t *mark=lv_obj_create(brand_row);
     lv_obj_set_size(mark,84,84);
-    lv_obj_set_style_bg_color(mark,lv_color_hex(0x0A2859),0);
-    lv_obj_set_style_border_color(mark,lv_color_hex(0x3662A4),0);
-    lv_obj_set_style_border_width(mark,1,0);
-    lv_obj_set_style_radius(mark,17,0);
+    lv_obj_set_style_bg_opa(mark,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(mark,0,0);
     lv_obj_set_style_pad_all(mark,0,0);
     lv_obj_remove_flag(mark,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(mark,LV_OBJ_FLAG_CLICKABLE);
-    const int8_t cloud_x[3]={12,30,53},cloud_y[3]={27,15,29};
-    const int8_t cloud_d[3]={35,45,29};
-    for(int i=0;i<3;i++){
-        lv_obj_t *b=lv_obj_create(mark);
-        lv_obj_set_size(b,cloud_d[i],cloud_d[i]);
-        lv_obj_align(b,LV_ALIGN_TOP_LEFT,cloud_x[i],cloud_y[i]);
-        lv_obj_set_style_bg_color(b,lv_color_hex(0xFFFFFF),0);
-        lv_obj_set_style_radius(b,LV_RADIUS_CIRCLE,0);
-        lv_obj_set_style_border_width(b,0,0);
-        lv_obj_set_style_pad_all(b,0,0);
-        lv_obj_remove_flag(b,LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_remove_flag(b,LV_OBJ_FLAG_CLICKABLE);
-    }
-    static const lv_point_precise_t bolt_line[]={{43,43},{33,62},{46,58},{42,77},{66,50},{55,54}};
-    lv_obj_t *bolt=lv_line_create(mark);
-    lv_line_set_points(bolt,bolt_line,6);
-    lv_obj_set_style_line_color(bolt,lv_color_hex(0xFFD12B),0);
-    lv_obj_set_style_line_width(bolt,5,0);
-    lv_obj_set_style_line_rounded(bolt,true,0);
-    lv_obj_remove_flag(bolt,LV_OBJ_FLAG_CLICKABLE);
+    (void)lf_brand_icon_create(mark);
     /* Two stacked lines sit to the right of the enlarged cloud-and-bolt.
        Compact vertical flex keeps both words within the round display. */
     lv_obj_t *wordmark_col=lv_obj_create(brand_row);

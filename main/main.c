@@ -36,7 +36,7 @@ static void lyricflash_display_recovery_watchdog(void *arg)
             (song.state==LF_RECOG_UPLOAD ||
              song.state==LF_RECOG_LYRICS ||
              song.state==LF_RECOG_MATCH);
-        const bool song_page=ui.ui_page==0 || ui.ui_page==1;
+        const bool song_page=ui.ui_page==0 || ui.ui_page==1 || ui.ui_page==9;
         if(uptime_ms>60000 && scan_related && song_page &&
            ui.ui_tick_age_ms!=UINT32_MAX &&
            ui.ui_tick_age_ms>25000U){
