@@ -402,7 +402,7 @@ require('static lv_obj_t *primary_pager;' in ui and
         'primary_render_settings_content(primary_pager_pages[2]);' in pager_scene and
         'primary_pager_build_clock();' in pager_scene and
         'lv_obj_set_parent(clock_scene,screen);' in make_base and
-        'if(was_pager && primary_pager)return;' in nav_drain and
+        'if(was_pager && primary_pager){' in nav_drain and
         ui.count('lv_screen_load(screen);')==1,
         "Finger pager must contain 3 live pages inside single safe LVGL root")
 require('if(primary_pager && (page==0 || page==2 || page==6)' in ui and

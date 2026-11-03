@@ -10,10 +10,10 @@ assert "LF_CONFIG_SCHEMA 13U" in schema
 assert ".timing_offset_ms = 0" in settings
 assert "schema<13 && s->timing_offset_ms==-2000" in settings
 assert 'nvs_set_i32(h, "offset_ms", s->timing_offset_ms)' in settings
-assert ui.count("lf_lyric_clock_adjust(&timed_clock,prefs->timing_offset_ms);")==2
-assert "prefs->timing_offset_ms=timed_clock.correction_ms;" in ui
-assert "prefs->timing_offset_ms=previous;" in ui
-assert "const esp_err_t err=lf_settings_save(prefs);" in ui
+assert "lf_song_cache_load_profile(" in ui
+assert "lf_song_cache_store_profile(" in ui
+assert "timed_song_custom" in ui
+assert '"SAVE CUSTOM"' in ui and '"LOAD DEFAULT"' in ui
 for token in ("timed_line_label(0,LF_TIMED_TEXT_WIDTH","timed_line_label(1,LF_TIMED_TEXT_WIDTH",
               "timed_line_label(2,LF_TIMED_TEXT_WIDTH","timed_battery=lv_label_create(surface)",
               "timed_controls=lv_obj_create(surface)",
