@@ -1072,9 +1072,46 @@ static lv_obj_t *home_decor_ring(lv_obj_t *parent,int diameter,uint32_t color)
 }
 static void primary_render_home_content(lv_obj_t *parent)
 {
-    lv_obj_t *wordmark=home_caption(parent,"LYRICFLASH",27,235,
-                  &lv_font_montserrat_20,0xE6F2FF);
-    lv_obj_set_style_text_letter_space(wordmark,3,0);
+    /* Native LyricFlash wordmark: white LYRIC, ice-blue FLASH, small
+       cloud-and-bolt mark. This is ONLY on Home, never over song lyrics. */
+    lv_obj_t *mark=lv_obj_create(parent);
+    lv_obj_set_size(mark,43,43);
+    lv_obj_align(mark,LV_ALIGN_TOP_MID,-153,17);
+    lv_obj_set_style_bg_color(mark,lv_color_hex(0x0A2859),0);
+    lv_obj_set_style_border_color(mark,lv_color_hex(0x3662A4),0);
+    lv_obj_set_style_border_width(mark,1,0);
+    lv_obj_set_style_radius(mark,12,0);
+    lv_obj_set_style_pad_all(mark,0,0);
+    lv_obj_remove_flag(mark,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(mark,LV_OBJ_FLAG_CLICKABLE);
+    const int8_t cloud_x[3]={4,12,25},cloud_y[3]={16,9,17};
+    const int8_t cloud_d[3]={17,24,16};
+    for(int i=0;i<3;i++){
+        lv_obj_t *b=lv_obj_create(mark);
+        lv_obj_set_size(b,cloud_d[i],cloud_d[i]);
+        lv_obj_align(b,LV_ALIGN_TOP_LEFT,cloud_x[i],cloud_y[i]);
+        lv_obj_set_style_bg_color(b,lv_color_hex(0xFFFFFF),0);
+        lv_obj_set_style_radius(b,LV_RADIUS_CIRCLE,0);
+        lv_obj_set_style_border_width(b,0,0);
+        lv_obj_set_style_pad_all(b,0,0);
+        lv_obj_remove_flag(b,LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_remove_flag(b,LV_OBJ_FLAG_CLICKABLE);
+    }
+    static const lv_point_precise_t bolt_line[]={{21,23},{16,33},{23,31},{21,40},{34,27},{27,29}};
+    lv_obj_t *bolt=lv_line_create(mark);
+    lv_line_set_points(bolt,bolt_line,6);
+    lv_obj_set_style_line_color(bolt,lv_color_hex(0xFFD12B),0);
+    lv_obj_set_style_line_width(bolt,3,0);
+    lv_obj_set_style_line_rounded(bolt,true,0);
+    lv_obj_remove_flag(bolt,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *lyric_mark=home_caption(parent,"LYRIC",27,96,
+                                      &lv_font_montserrat_24,0xFFFFFF);
+    lv_obj_align(lyric_mark,LV_ALIGN_TOP_MID,-55,25);
+    lv_obj_set_style_text_letter_space(lyric_mark,2,0);
+    lv_obj_t *flash_mark=home_caption(parent,"FLASH",27,105,
+                                      &lv_font_montserrat_24,0x7BD3FF);
+    lv_obj_align(flash_mark,LV_ALIGN_TOP_MID,51,25);
+    lv_obj_set_style_text_letter_space(flash_mark,2,0);
     battery_status=home_caption(parent,"",56,196,
                                &lv_font_montserrat_16,0x9ACFEA);
     home_scan_status=home_caption(parent,"READY TO LISTEN",86,300,
