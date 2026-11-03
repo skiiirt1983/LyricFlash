@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/private-0.8.43-auto-lyrics
+      - feature/private-0.8.43-lyrics-layout
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
