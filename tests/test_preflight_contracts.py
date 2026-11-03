@@ -647,12 +647,15 @@ require('#include "recognition.h"' in ui and
         'lf_lyric_clock_line_at(timed_stamps,timed_line_count,ms)' in ui and
         'timed_render(current,false)' in ui,
         "0.8.39 real song and timestamp focused lyric viewport")
-require('MANUAL' in ui and 'START / RESTART' in ui and
+require('lf_sync_estimate_position_ms(' in ui and
+        'song->audd_timecode_valid' in ui and
+        'timed_toggle_controls' in ui and
+        'LV_EVENT_LONG_PRESSED' in ui and
         'PAUSE' in ui and 'RESUME' in ui and
         'timed_pause' in ui and 'timed_adjust' in ui and
         '(int32_t)(step*2000)' in ui and
         'timed_scan_attempt!=song->attempts' in ui,
-        "0.8.39 explicitly manual playback alignment and new scan reset")
+        "0.8.42 estimated sync, hidden alignment controls and new scan reset")
 require('lv_obj_delete_async(old_screen);' in ui and
         'lv_timer_create(on_tick, 50, NULL)' in ui and
         'timed_last_update_ms>=200' in ui and
