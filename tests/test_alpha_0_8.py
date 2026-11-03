@@ -39,10 +39,11 @@ assert 'lv_indev_get_state(gesture_indev) == LV_INDEV_STATE_RELEASED' in ui
 assert 'touch_held' in ui and 'on_touch_release' in ui
 assert 'lv_screen_load(screen);' in ui
 assert 'lv_obj_delete_async(old_screen);' in ui
-assert 'button(parent, "CONNECT / OTA"' in ui
+assert 'home_scan_button=lv_button_create(parent);' in ui
+assert 'lv_obj_add_event_cb(home_scan_button,on_home_scan,LV_EVENT_CLICKED,NULL)' in ui
 assert 'static void build_connection_help(void)' in ui
 assert 'lv_async_call(commit_swipe, NULL)' in ui
-assert 'network_status=label(parent, "Wi-Fi starting..."' in ui
+assert 'battery_status=home_caption(parent' in ui
 assert 'lv_obj_delete(old_screen);' not in ui
 assert 'build_debug();' in ui and 'page == 14' in ui
 assert 'lf_diag_snapshot(&d);' in ui and 'lf_ui_max_tick_gap_ms' in ui
@@ -60,8 +61,8 @@ for key in ['font_style','font_size','ring_mode','show_date','weather','backgrou
     assert key in web and key in net, key
 assert 'microphone' in net and 'recent_errors' in net
 assert 'uxTaskGetNumberOfTasks' in diag
-assert '0.8.39-alpha' in (p/'main/version.h').read_text()
-assert 'set(PROJECT_VER "0.8.39-alpha")' in (p/'CMakeLists.txt').read_text()
+assert '0.8.40-alpha' in (p/'main/version.h').read_text()
+assert 'set(PROJECT_VER "0.8.40-alpha")' in (p/'CMakeLists.txt').read_text()
 assert 'ESP-IDF image descriptor version' in (p/'tools/check_build.py').read_text()
 assert 'LyricFlash-Alpha-0.8.39-FULL-USB-and-OTA-UNTESTED' in workflow
 print('PASS: Alpha 0.8 diagnostics, PIN-free Web UI and navigation gates')
