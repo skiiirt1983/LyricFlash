@@ -1,5 +1,6 @@
 #include "basic_clock.h"
 #include <stdint.h>
+#include <string.h>
 
 static uint32_t lerp(uint32_t a, uint32_t b, unsigned x, unsigned maximum)
 {
@@ -62,6 +63,120 @@ static void basic_ring_draw(lv_event_t *e)
         lv_draw_arc(layer,&dsc);
     }
 }
+/* Original vector numerals: no third-party or proprietary font assets.
+   Digital 7 uses seven glowing segments; Retro 8 uses a blocky 5x7 bitmap;
+   Vintage uses thin serif-edged 5x7 strokes. They repaint at most once/min. */
+static lv_obj_t *custom_time_layer;
+static char custom_time[8]="--:--";
+void lf_basic_clock_clear(void){custom_time_layer=NULL;strcpy(custom_time,"--:--");}
+void lf_basic_clock_update_time(const char *value)
+{
+    if(!value||!custom_time_layer)return;
+    if(strcmp(custom_time,value)!=0){
+        snprintf(custom_time,sizeof custom_time,"%.5s",value);
+        lv_obj_invalidate(custom_time_layer);
+    }
+}
+static void draw_bar(lv_layer_t *layer,int x,int y,int w,int h,
+                     uint32_t rgb,int radius)
+{
+    if(w<1||h<1)return;
+    lv_draw_rect_dsc_t d;
+    lv_draw_rect_dsc_init(&d);
+    d.bg_opa=LV_OPA_COVER;
+    d.bg_color=lv_color_hex(rgb);
+    d.border_opa=LV_OPA_TRANSP;
+    d.radius=radius;
+    lv_area_t a={.x1=x,.y1=y,.x2=x+w-1,.y2=y+h-1};
+    lv_draw_rect(layer,&d,&a);
+}
+static uint8_t segments(char c)
+{
+    const uint8_t masks[10]={119,36,93,109,46,107,123,37,127,111};
+    if(c>='0'&&c<='9')return masks[c-'0'];
+    if(c=='-')return 8;
+    return 0;
+}
+static void segment_digit(lv_layer_t *layer,int x,int y,int w,int h,
+                          int thickness,char c,uint32_t color)
+{
+    if(c==':'){
+        draw_bar(layer,x+w/2-thickness/2,y+h/3,thickness,thickness,color,2);
+        draw_bar(layer,x+w/2-thickness/2,y+2*h/3,thickness,thickness,color,2);
+        return;
+    }
+    const uint8_t m=segments(c),half=h/2,interior=w-thickness;
+    if(m&1) draw_bar(layer,x+thickness/2,y,interior,thickness,color,thickness/3);
+    if(m&2) draw_bar(layer,x,y+thickness/2,thickness,half-thickness,color,thickness/3);
+    if(m&4) draw_bar(layer,x+w-thickness,y+thickness/2,thickness,half-thickness,color,thickness/3);
+    if(m&8) draw_bar(layer,x+thickness/2,y+half-thickness/2,interior,thickness,color,thickness/3);
+    if(m&16)draw_bar(layer,x,y+half+thickness/2,thickness,half-thickness,color,thickness/3);
+    if(m&32)draw_bar(layer,x+w-thickness,y+half+thickness/2,thickness,half-thickness,color,thickness/3);
+    if(m&64)draw_bar(layer,x+thickness/2,y+h-thickness,interior,thickness,color,thickness/3);
+}
+static const uint8_t grid_digits[10][7]={
+    {14,17,19,21,25,17,14}, /* 0 */
+    {4,12,4,4,4,4,14},     /* 1 */
+    {14,17,1,2,4,8,31},    /* 2 */
+    {30,1,1,14,1,1,30},    /* 3 */
+    {2,6,10,18,31,2,2},   /* 4 */
+    {31,16,16,30,1,1,30}, /* 5 */
+    {14,16,16,30,17,17,14},/* 6 */
+    {31,1,2,4,8,8,8},     /* 7 */
+    {14,17,17,14,17,17,14},/* 8 */
+    {14,17,17,15,1,1,14} /* 9 */
+};
+static void pixel_digit(lv_layer_t *layer,int x,int y,int cell,char c,
+                        uint32_t color,bool serif)
+{
+    if(c==':'){
+        draw_bar(layer,x+2*cell,y+2*cell,cell,cell,color,0);
+        draw_bar(layer,x+2*cell,y+4*cell,cell,cell,color,0);
+        return;
+    }
+    if(c=='-'){draw_bar(layer,x+cell,y+3*cell,3*cell,cell,color,0);return;}
+    if(c<'0'||c>'9')return;
+    const uint8_t *rows=grid_digits[c-'0'];
+    for(int row=0;row<7;row++)for(int col=0;col<5;col++){
+        if((rows[row]>>(4-col))&1){
+            /* Vintage numerals have narrow strokes with small serif feet,
+               distinct from Retro 8's square solid pixels. */
+            const int inset=serif?cell/4:0;
+            draw_bar(layer,x+col*cell+inset,y+row*cell,cell-2*inset,
+                     serif?cell-1:cell,color,serif?1:0);
+            if(serif&&(row==0||row==6))
+                draw_bar(layer,x+col*cell-1,y+row*cell+cell-2,cell+2,2,color,0);
+        }
+    }
+}
+static void basic_digits_draw(lv_event_t *e)
+{
+    const lf_settings_t *p=(const lf_settings_t *)lv_event_get_user_data(e);
+    lv_obj_t *obj=lv_event_get_target(e);
+    lv_layer_t *layer=lv_event_get_layer(e);
+    if(!p||!obj||!layer)return;
+    lv_area_t box;lv_obj_get_coords(obj,&box);
+    const int center_x=(box.x1+box.x2)/2,center_y=(box.y1+box.y2)/2;
+    const int length=5;
+    if(p->basic_font_style==1){
+        const int h=44+(int)p->basic_font_size/2;
+        const int w=h*54/100,gap=5+(int)p->basic_font_size/12;
+        const int total=length*w+(length-1)*gap;
+        const int start_x=center_x-total/2,start_y=center_y-h/2;
+        const int thick=h/9;
+        for(int i=0;i<length;i++)
+            segment_digit(layer,start_x+i*(w+gap),start_y,w,h,thick,
+                          custom_time[i],p->basic_foreground);
+    }else{
+        const int cell=4+(int)p->basic_font_size/18;
+        const int w=5*cell,gap=2*cell,total=length*w+(length-1)*gap;
+        const int start_x=center_x-total/2,start_y=center_y-7*cell/2;
+        for(int i=0;i<length;i++)
+            pixel_digit(layer,start_x+i*(w+gap),start_y,cell,
+                        custom_time[i],p->basic_foreground,p->basic_font_style==3);
+    }
+}
+
 lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
 {
     lv_obj_set_style_bg_color(parent, lv_color_hex(p->basic_background), 0);
@@ -84,5 +199,21 @@ lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
     lv_obj_set_style_text_color(time,lv_color_hex(p->basic_foreground),0);
     lv_obj_set_style_text_align(time,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_align(time,LV_ALIGN_CENTER,p->basic_time_x,p->basic_time_y);
+    if(p->basic_font_style>=1 && p->basic_font_style<=3){
+        lv_obj_add_flag(time,LV_OBJ_FLAG_HIDDEN);
+        custom_time_layer=lv_obj_create(parent);
+        lv_obj_set_size(custom_time_layer,412,132);
+        lv_obj_align(custom_time_layer,LV_ALIGN_CENTER,
+                     p->basic_time_x,p->basic_time_y);
+        lv_obj_set_style_bg_opa(custom_time_layer,LV_OPA_TRANSP,0);
+        lv_obj_set_style_border_width(custom_time_layer,0,0);
+        lv_obj_set_style_pad_all(custom_time_layer,0,0);
+        lv_obj_remove_flag(custom_time_layer,LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(custom_time_layer,LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_event_cb(custom_time_layer,basic_digits_draw,
+                            LV_EVENT_DRAW_MAIN,(void *)p);
+    }else{
+        custom_time_layer=NULL;
+    }
     return time;
 }
