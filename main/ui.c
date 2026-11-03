@@ -46,7 +46,11 @@ static uint64_t timed_last_update_ms;
 /* Four retained lyric rows: previous, active, next and approaching next.
  * Only their vertical positions update between timestamps. */
 static lv_obj_t *timed_rows[4];
-static int16_t timed_row_y[4]={INT16_MIN,INT16_MIN,INT16_MIN,INT16_MIN};
+/* A single retained parent moves every lyric row together, avoiding four
+ * separate QSPI invalidations on each animation frame. */
+static lv_obj_t *timed_scroll_group;
+static lv_timer_t *timed_scroll_timer;
+static int16_t timed_scroll_y=INT16_MIN;
 static lv_obj_t *timed_status;
 static lv_obj_t *timed_pause_button;
 static lv_obj_t *timed_controls;
@@ -694,6 +698,11 @@ static void show_clock_settings_popup(void)
    until LVGL finishes processing the callback that initiated navigation. */
 static void make_base(void)
 {
+    /* A timer that renders the retired lyric scene must NEVER outlive it. */
+    if(timed_scroll_timer){
+        lv_timer_delete(timed_scroll_timer);
+        timed_scroll_timer=NULL;
+    }
     /* One LVGL screen for the lifetime of the application. Rebuild its child
        tree ONLY in a deferred navigation callback. Unlike swapping screen
        roots, this cannot leave old framebuffer roots layered after touches. */
@@ -757,7 +766,9 @@ static void make_base(void)
     scroll_panel=NULL;
     lyrics_label=NULL;
     timed_lyrics_mode=false;
-    for(size_t i=0;i<4;i++){timed_rows[i]=NULL;timed_row_y[i]=INT16_MIN;}
+    for(size_t i=0;i<4;i++)timed_rows[i]=NULL;
+    timed_scroll_group=NULL;
+    timed_scroll_y=INT16_MIN;
     timed_status=NULL;
     timed_pause_button=NULL;
     timed_controls=NULL;
@@ -1256,11 +1267,10 @@ static void timed_set_row(int slot,const char *value)
     if(strcmp(lv_label_get_text(item),value)!=0)
         lv_label_set_text(item,value);
 }
+static void timed_render(uint64_t current,bool force);
 static void timed_layout_rows(uint32_t ms,int index)
 {
-    /* Each timestamp is the boundary: at the next timestamp the next line
-       has already reached the center. Motion is continuous across the index
-       transition. Pausing the timeline also freezes the visual positions. */
+    if(!timed_scroll_group)return;
     uint32_t progress=0;
     if(index>=0 && (size_t)(index+1)<timed_line_count){
         const uint32_t start=timed_stamps[index];
@@ -1268,22 +1278,27 @@ static void timed_layout_rows(uint32_t ms,int index)
         if(end>start && ms>start){
             const uint32_t duration=end-start;
             const uint32_t elapsed=ms-start;
-            progress=(elapsed>=duration)?1024U:
+            progress=elapsed>=duration?1024U:
                 (uint32_t)(((uint64_t)elapsed*1024U)/duration);
         }
     }
-    /* A whole row advances by 82px per lyric interval. The center line
-       stays onscreen as the upper line during the NEXT interval. */
-    const int travel=(int)(progress*82U/1024U);
-    const int centers[4]={-82,0,82,164};
-    for(int slot=0;slot<4;slot++){
-        if(!timed_rows[slot])continue;
-        int y=centers[slot]-travel;
-        if(timed_row_y[slot]!=(int16_t)y){
-            lv_obj_align(timed_rows[slot],LV_ALIGN_CENTER,0,y);
-            timed_row_y[slot]=(int16_t)y;
-        }
+    /* Ease at both ends, retaining AudD/LRC timing exactly. This prevents
+       each new word from appearing to snap at its timestamp, while the
+       incoming line glides steadily into focus between timestamps. */
+    const uint32_t p=progress;
+    const uint32_t eased=(uint32_t)(((uint64_t)p*p*(3072U-2U*p))/
+                                     (1024ULL*1024ULL));
+    const int16_t target=(int16_t)(-(int)(eased*82U/1024U));
+    if(target!=timed_scroll_y){
+        lv_obj_set_style_translate_y(timed_scroll_group,target,0);
+        timed_scroll_y=target;
     }
+}
+static void timed_scroll_frame(lv_timer_t *timer)
+{
+    (void)timer;
+    if(page==1 && timed_lyrics_mode && !asleep && !nav_transition_active)
+        timed_render(now_ms(),false);
 }
 static void timed_render(uint64_t current,bool force)
 {
@@ -1440,7 +1455,7 @@ static void timed_toggle_controls(lv_event_t *e)
 }
 static lv_obj_t *timed_line_label(int slot,int width,uint32_t color)
 {
-    lv_obj_t *line=lv_label_create(screen);
+    lv_obj_t *line=lv_label_create(timed_scroll_group);
     lv_label_set_text(line," ");
     lv_obj_set_width(line,width);
     lv_obj_set_height(line,LV_SIZE_CONTENT);
@@ -1452,67 +1467,6 @@ static lv_obj_t *timed_line_label(int slot,int width,uint32_t color)
     lv_obj_add_flag(line,LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_align(line,LV_ALIGN_CENTER,0,(slot-1)*82);
     return line;
-}
-/* Native rendering of the Device Studio's cloud + lightning icon. It uses
- * small solid shapes rather than loading a new external font or image file. */
-static lv_obj_t *lyric_logo_circle(lv_obj_t *parent,int x,int y,int diameter)
-{
-    lv_obj_t *c=lv_obj_create(parent);
-    lv_obj_set_size(c,diameter,diameter);
-    lv_obj_align(c,LV_ALIGN_TOP_LEFT,x,y);
-    lv_obj_set_style_bg_color(c,lv_color_hex(0xFFFFFF),0);
-    lv_obj_set_style_bg_opa(c,LV_OPA_COVER,0);
-    lv_obj_set_style_radius(c,LV_RADIUS_CIRCLE,0);
-    lv_obj_set_style_border_width(c,0,0);
-    lv_obj_set_style_pad_all(c,0,0);
-    lv_obj_remove_flag(c,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(c,LV_OBJ_FLAG_SCROLLABLE);
-    return c;
-}
-static void lyric_logo_at_top(lv_obj_t *parent)
-{
-    lv_obj_t *tile=lv_obj_create(parent);
-    lv_obj_set_size(tile,60,60);
-    lv_obj_align(tile,LV_ALIGN_TOP_MID,0,26);
-    lv_obj_set_style_bg_color(tile,lv_color_hex(0x0A2859),0);
-    lv_obj_set_style_bg_opa(tile,LV_OPA_COVER,0);
-    lv_obj_set_style_radius(tile,15,0);
-    lv_obj_set_style_border_width(tile,1,0);
-    lv_obj_set_style_border_color(tile,lv_color_hex(0x3662A4),0);
-    lv_obj_set_style_pad_all(tile,0,0);
-    lv_obj_remove_flag(tile,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(tile,LV_OBJ_FLAG_SCROLLABLE);
-    /* Cloud silhouette, matching the Web UI's logo proportions. */
-    lyric_logo_circle(tile,9,19,21);
-    lyric_logo_circle(tile,19,9,29);
-    lyric_logo_circle(tile,34,19,18);
-    lv_obj_t *cloud_base=lv_obj_create(tile);
-    lv_obj_set_size(cloud_base,38,14);
-    lv_obj_align(cloud_base,LV_ALIGN_TOP_LEFT,12,25);
-    lv_obj_set_style_bg_color(cloud_base,lv_color_hex(0xFFFFFF),0);
-    lv_obj_set_style_bg_opa(cloud_base,LV_OPA_COVER,0);
-    lv_obj_set_style_radius(cloud_base,6,0);
-    lv_obj_set_style_border_width(cloud_base,0,0);
-    lv_obj_set_style_pad_all(cloud_base,0,0);
-    lv_obj_remove_flag(cloud_base,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(cloud_base,LV_OBJ_FLAG_SCROLLABLE);
-    static const lv_point_precise_t bolt[]={
-        {31,27},{23,41},{31,38},{29,53},{46,32},{36,35},{39,26}
-    };
-    lv_obj_t *strike=lv_line_create(tile);
-    lv_line_set_points(strike,bolt,7);
-    lv_obj_set_style_line_color(strike,lv_color_hex(0xFFD12B),0);
-    lv_obj_set_style_line_width(strike,4,0);
-    lv_obj_set_style_line_rounded(strike,true,0);
-    lv_obj_set_style_bg_opa(strike,LV_OPA_TRANSP,0);
-    lv_obj_remove_flag(strike,LV_OBJ_FLAG_CLICKABLE);
-    static const lv_point_precise_t note[]={{48,41},{48,50},{53,48},{53,40},{48,41}};
-    lv_obj_t *music=lv_line_create(tile);
-    lv_line_set_points(music,note,5);
-    lv_obj_set_style_line_color(music,lv_color_hex(0x99D9FF),0);
-    lv_obj_set_style_line_width(music,2,0);
-    lv_obj_set_style_bg_opa(music,LV_OPA_TRANSP,0);
-    lv_obj_remove_flag(music,LV_OBJ_FLAG_CLICKABLE);
 }
 static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
 {
@@ -1562,7 +1516,8 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_style_pad_all(ring,0,0);
     lv_obj_remove_flag(ring,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(ring,LV_OBJ_FLAG_CLICKABLE);
-    lyric_logo_at_top(screen);
+    /* The lyric surface is deliberately sacred: no branding or title.
+       Battery stays compact in the corner; all controls stay hidden. */
     /* A compact icon + percent only; four-segment detail stays in Web UI. */
     timed_battery=lv_label_create(screen);
     lv_label_set_text(timed_battery,LV_SYMBOL_BATTERY_EMPTY " --%");
@@ -1573,6 +1528,18 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_align(timed_battery,LV_ALIGN_TOP_RIGHT,-24,42);
     lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    timed_scroll_group=lv_obj_create(screen);
+    lv_obj_set_size(timed_scroll_group,416,388);
+    lv_obj_align(timed_scroll_group,LV_ALIGN_CENTER,0,0);
+    lv_obj_set_style_bg_opa(timed_scroll_group,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(timed_scroll_group,0,0);
+    lv_obj_set_style_shadow_width(timed_scroll_group,0,0);
+    lv_obj_set_style_pad_all(timed_scroll_group,0,0);
+    lv_obj_remove_flag(timed_scroll_group,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(timed_scroll_group,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(timed_scroll_group,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(timed_scroll_group,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    timed_scroll_y=INT16_MIN;
     timed_rows[0]=timed_line_label(0,352,0x647A91);
     timed_rows[1]=timed_line_label(1,398,0xFFFFFF);
     timed_rows[2]=timed_line_label(2,370,0xA9C2D8);
@@ -1627,10 +1594,13 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_add_event_cb(screen,timed_toggle_controls,LV_EVENT_LONG_PRESSED,NULL);
     paused=!timed_clock.running;
     timed_active_index=-999;timed_last_second=UINT32_MAX;
-    for(size_t i=0;i<4;i++)timed_row_y[i]=INT16_MIN;
+    timed_scroll_y=INT16_MIN;
     timed_last_update_ms=0;
     timed_power_update_ms=0;
     timed_render(now_ms(),true);
+    /* Only this page gets the higher-rate lyric compositor. Other pages
+       retain their proven 50ms pager and clock timers. */
+    timed_scroll_timer=lv_timer_create(timed_scroll_frame,25,NULL);
 }
 
 static void build_preview_now(void)
@@ -2734,13 +2704,8 @@ static void on_tick(lv_timer_t *timer)
         sleep_display();
         return;
     }
-    if(page==1 && timed_lyrics_mode){
-        if(current-timed_last_update_ms>=65){
-            timed_last_update_ms=current;
-            timed_render(current,false);
-        }
-        return; /* The demo auto-scroller must never run on real LRC. */
-    }
+    if(page==1 && timed_lyrics_mode)
+        return; /* Dedicated 25ms lyric timer owns timestamp-paced movement. */
     if (page != 1 || paused || touch_held || user_dragging || finger_was_scrolling ||
         !scroll_panel || (touch_resume_at_ms && current < touch_resume_at_ms)) {
         last_scroll_ms = current;
