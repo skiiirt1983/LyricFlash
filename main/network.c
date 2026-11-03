@@ -722,6 +722,7 @@ static esp_err_t handle_song_status(httpd_req_t *req)
                             live.lyrics_auto_open_completed);
     cJSON_AddNumberToObject(reply,"lyrics_auto_open_recoveries",
                             live.lyrics_auto_open_recoveries);
+    cJSON_AddNumberToObject(reply,"lyrics_scene_phase",live.lyrics_scene_phase);
     /* The actual submitted stereo scan, not the separate 3-second PCM test.
      * Aggregate metrics only; no audio, credentials or remote response body. */
     cJSON_AddNumberToObject(reply,"audd_http_status",s.http_status);

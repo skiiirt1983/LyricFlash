@@ -57,11 +57,13 @@ active_version=(root / "main/version.h").read_text()
 # A successful compile does not prove hardware operation or catalog publication.
 assert any(f'"{ver}"' in active_version for ver in
            ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha")), "Unexpected alpha firmware version"
-if '"0.8.49-alpha"' in active_version or '"0.8.50-alpha"' in active_version:
+if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51")):
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
-    is_next='"0.8.50-alpha"' in active_version
-    version="0.8.50" if is_next else "0.8.49"
-    expected_branch=("feature/private-0.8.50-recognition-awake" if is_next
+    is_51='"0.8.51-alpha"' in active_version
+    is_50='"0.8.50-alpha"' in active_version
+    version="0.8.51" if is_51 else "0.8.50" if is_50 else "0.8.49"
+    expected_branch=("feature/private-0.8.51-lyrics-overlay" if is_51
+                     else "feature/private-0.8.50-recognition-awake" if is_50
                      else "feature/private-0.8.49-watchdog-header")
     assert expected_branch in private_workflow
     assert f"LyricFlash-Private-Alpha-{version}-ESP32S3-UNTESTED" in private_workflow

@@ -43,5 +43,6 @@ typedef struct {
     uint32_t lyrics_auto_open_queued;
     uint32_t lyrics_auto_open_completed;
     uint32_t lyrics_auto_open_recoveries;
+    uint32_t lyrics_scene_phase; /* 0 idle, 1..5 building, 6 committed */
 } lf_ui_display_stats_t;
 void lf_ui_display_stats(lf_ui_display_stats_t *out);

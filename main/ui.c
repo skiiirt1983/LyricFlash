@@ -48,6 +48,7 @@ static uint64_t timed_last_update_ms;
 static lv_obj_t *timed_rows[4];
 /* A single retained parent moves every lyric row together, avoiding four
  * separate QSPI invalidations on each animation frame. */
+static lv_obj_t *timed_overlay; /* removable child of the one LVGL root */
 static lv_obj_t *timed_viewport; /* fixed clipping boundary; never translated */
 static lv_obj_t *timed_scroll_group;
 static lv_timer_t *timed_scroll_timer;
@@ -158,6 +159,7 @@ static atomic_uint ui_last_tick_ms;
 static atomic_uint ui_last_page;
 static atomic_uint ui_nav_phase;
 static atomic_uint auto_open_recovery_count;
+static atomic_uint ui_lyrics_scene_phase; /* 0 idle, 1..5 building, 6 committed */
 
 void lf_ui_display_stats(lf_ui_display_stats_t *out)
 {
@@ -191,6 +193,7 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->lyrics_auto_open_queued=atomic_load(&auto_open_queued_count);
     out->lyrics_auto_open_completed=atomic_load(&auto_open_completed_count);
     out->lyrics_auto_open_recoveries=atomic_load(&auto_open_recovery_count);
+    out->lyrics_scene_phase=atomic_load(&ui_lyrics_scene_phase);
 }
 static void display_render_event(lv_event_t *e)
 {
@@ -722,6 +725,31 @@ static void show_clock_settings_popup(void)
 }
 /* Atomically swap a single full-screen root. Old screen cleanup is deferred
    until LVGL finishes processing the callback that initiated navigation. */
+/* A successful song keeps the working Home/Clock/Settings pager cached.
+   Close the lyrics child without tearing down that pager or its touch tree. */
+static void lyrics_overlay_close(void)
+{
+    if(!timed_overlay)return;
+    if(timed_scroll_timer){
+        lv_timer_delete(timed_scroll_timer);
+        timed_scroll_timer=NULL;
+    }
+    lv_obj_delete(timed_overlay);
+    timed_overlay=NULL;
+    timed_lyrics_mode=false;
+    timed_viewport=NULL;
+    timed_scroll_group=NULL;
+    for(size_t i=0;i<4;i++)timed_rows[i]=NULL;
+    timed_status=NULL;
+    timed_pause_button=NULL;
+    timed_controls=NULL;
+    timed_hint=NULL;
+    timed_battery=NULL;
+    timed_save_note=NULL;
+    timed_line_count=0;
+    atomic_store(&ui_lyrics_scene_phase,0U);
+    if(primary_pager)lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_HIDDEN);
+}
 static void make_base(void)
 {
     /* A timer that renders the retired lyric scene must NEVER outlive it. */
@@ -729,6 +757,8 @@ static void make_base(void)
         lv_timer_delete(timed_scroll_timer);
         timed_scroll_timer=NULL;
     }
+    /* This child is destroyed by the regular root cleanup below. */
+    timed_overlay=NULL;
     /* One LVGL screen for the lifetime of the application. Rebuild its child
        tree ONLY in a deferred navigation callback. Unlike swapping screen
        roots, this cannot leave old framebuffer roots layered after touches. */
@@ -1584,8 +1614,34 @@ static lv_obj_t *timed_line_label(int slot,int width,uint32_t color)
 }
 static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
 {
-    page=1;
-    make_base();
+    if(timed_overlay)lyrics_overlay_close();
+    atomic_store(&ui_lyrics_scene_phase,1U);
+    lv_obj_t *surface=NULL;
+    if(primary_pager && screen){
+        /* Preserve the existing Home pager and cached clock during auto-open.
+           A separate opaque child provides lyrics without deleting old pages. */
+        timed_overlay=lv_obj_create(screen);
+        surface=timed_overlay;
+        lv_obj_set_size(surface,466,466);
+        lv_obj_center(surface);
+        lv_obj_set_style_radius(surface,0,0);
+        lv_obj_set_style_bg_color(surface,lv_color_hex(0x070D16),0);
+        lv_obj_set_style_bg_opa(surface,LV_OPA_COVER,0);
+        lv_obj_set_style_border_width(surface,0,0);
+        lv_obj_set_style_shadow_width(surface,0,0);
+        lv_obj_set_style_pad_all(surface,0,0);
+        lv_obj_remove_flag(surface,LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(surface,LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(surface,LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_add_flag(surface,LV_OBJ_FLAG_GESTURE_BUBBLE);
+        lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_HIDDEN);
+        page=1;
+    }else{
+        page=1;
+        make_base();
+        surface=screen;
+    }
+    atomic_store(&ui_lyrics_scene_phase,2U);
     timed_lyrics_mode=true;
     /* Preserve a manually started clock across menus for the same song.
      * A new AudD attempt invalidates the previous alignment. */
@@ -1610,16 +1666,18 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
         if(!lf_recog_lyric_line((uint32_t)i,&line))break;
         timed_stamps[timed_line_count++]=line.start_ms;
     }
+    atomic_store(&ui_lyrics_scene_phase,3U);
     if(!timed_line_count){
+        atomic_store(&ui_lyrics_scene_phase,0U);
         timed_lyrics_mode=false;
-        label(screen,"No timed lyrics loaded",200,&lv_font_montserrat_20,prefs->text_color);
-        button(screen,"HOME",150,49,0,172,0xA8D6FF,on_home,NULL);
+        label(surface,"No timed lyrics loaded",200,&lv_font_montserrat_20,prefs->text_color);
+        button(surface,"HOME",150,49,0,172,0xA8D6FF,on_home,NULL);
         return;
     }
     /* Follow the supplied three-line circular reference: no song header,
        artist, time counter, focus panel or permanent transport controls. */
-    lv_obj_set_style_bg_color(screen,lv_color_hex(0x070D16),0);
-    lv_obj_t *ring=lv_obj_create(screen);
+    lv_obj_set_style_bg_color(surface,lv_color_hex(0x070D16),0);
+    lv_obj_t *ring=lv_obj_create(surface);
     lv_obj_set_size(ring,422,422);
     lv_obj_align(ring,LV_ALIGN_CENTER,0,0);
     lv_obj_set_style_radius(ring,LV_RADIUS_CIRCLE,0);
@@ -1633,7 +1691,7 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     /* The lyric surface is deliberately sacred: no branding or title.
        Battery stays compact in the corner; all controls stay hidden. */
     /* A compact icon + percent only; four-segment detail stays in Web UI. */
-    timed_battery=lv_label_create(screen);
+    timed_battery=lv_label_create(surface);
     lv_label_set_text(timed_battery,LV_SYMBOL_BATTERY_EMPTY " --%");
     lv_obj_set_style_text_font(timed_battery,&lv_font_montserrat_20,0);
     lv_obj_set_style_text_color(timed_battery,lv_color_hex(0xAFC6DC),0);
@@ -1644,7 +1702,7 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_GESTURE_BUBBLE);
     /* An unmoving parent clips line ends above/below the lyric field.
        The animated child may translate, but its clip boundary never does. */
-    timed_viewport=lv_obj_create(screen);
+    timed_viewport=lv_obj_create(surface);
     lv_obj_set_size(timed_viewport,408,360);
     lv_obj_align(timed_viewport,LV_ALIGN_CENTER,0,0);
     lv_obj_set_style_bg_opa(timed_viewport,LV_OPA_TRANSP,0);
@@ -1673,11 +1731,11 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     timed_rows[1]=timed_line_label(1,398,0xFFFFFF);
     timed_rows[2]=timed_line_label(2,370,0xA9C2D8);
     timed_rows[3]=timed_line_label(3,326,0x637E96);
-    timed_hint=label(screen,"Long-press for controls",374,&lv_font_montserrat_16,0x526B84);
+    timed_hint=label(surface,"Long-press for controls",374,&lv_font_montserrat_16,0x526B84);
     lv_obj_set_style_text_font(timed_hint,&lv_font_montserrat_16,0);
     lv_obj_set_width(timed_hint,260);
     timed_hint_until_ms=now_ms()+5000; /* Hint disappears after first five seconds. */
-    timed_controls=lv_obj_create(screen);
+    timed_controls=lv_obj_create(surface);
     lv_obj_set_size(timed_controls,362,212);
     lv_obj_align(timed_controls,LV_ALIGN_CENTER,0,0);
     lv_obj_set_style_radius(timed_controls,22,0);
@@ -1719,17 +1777,19 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_style_text_font(timed_save_note,&lv_font_montserrat_12,0);
     lv_obj_set_style_text_color(timed_save_note,lv_color_hex(0x8EAFC7),0);
     lv_obj_align(timed_save_note,LV_ALIGN_CENTER,0,94);
-    lv_obj_remove_event_cb(screen,timed_toggle_controls);
-    lv_obj_add_event_cb(screen,timed_toggle_controls,LV_EVENT_LONG_PRESSED,NULL);
+    lv_obj_remove_event_cb(surface,timed_toggle_controls);
+    lv_obj_add_event_cb(surface,timed_toggle_controls,LV_EVENT_LONG_PRESSED,NULL);
     paused=!timed_clock.running;
     timed_active_index=-999;timed_last_second=UINT32_MAX;
     timed_scroll_y=INT16_MIN;
     timed_last_update_ms=0;
     timed_power_update_ms=0;
+    atomic_store(&ui_lyrics_scene_phase,4U);
     timed_render(now_ms(),true);
+    atomic_store(&ui_lyrics_scene_phase,5U);
     /* Only this page gets the higher-rate lyric compositor. Other pages
        retain their proven 50ms pager and clock timers. */
-    timed_scroll_timer=lv_timer_create(timed_scroll_frame,25,NULL);
+    timed_scroll_timer=lv_timer_create(timed_scroll_frame,65,NULL);
 }
 
 static void build_preview_now(void)
@@ -2122,7 +2182,7 @@ static int primary_pager_target(int32_t x)
 }
 static void primary_pager_watchdog(uint64_t current)
 {
-    if(!primary_pager||primary_pager_initializing||asleep)return;
+    if(!primary_pager||primary_pager_initializing||asleep||timed_overlay)return;
     /* Never seize page position while the finger remains on the glass. */
     lv_indev_t *indev=lv_indev_get_next(NULL);
     while(indev){
@@ -2284,6 +2344,7 @@ static void primary_pager_create(int target_index)
 }
 static void primary_pager_enter(int index)
 {
+    if(timed_overlay)lyrics_overlay_close();
     if(index<0||index>2)index=1;
     if(!primary_pager){
         make_base(); /* Original permanent root, gesture dispatch preserved. */
@@ -2691,7 +2752,7 @@ static void on_tick(lv_timer_t *timer)
     last_ui_tick_ms = current;
     atomic_store(&ui_last_tick_ms,(uint32_t)current);
     atomic_store(&ui_last_page,(uint32_t)page);
-    if(primary_pager)primary_pager_watchdog(current);
+    if(primary_pager && !timed_overlay)primary_pager_watchdog(current);
     if (nav_transition_active) return; /* No UI activity until reveal completes. */
     /* Manual song identification continues after microphone capture,
        including AudD response and lyric lookup. Preserve the OLED until
@@ -2802,6 +2863,7 @@ static void on_tick(lv_timer_t *timer)
             if(page==1 && timed_lyrics_mode && timed_line_count>0){
                 auto_open_attempt=ready.attempts;
                 atomic_fetch_add(&auto_open_completed_count,1);
+                atomic_store(&ui_lyrics_scene_phase,6U);
                 lv_obj_update_layout(screen);
                 lv_obj_invalidate(screen);
             }
@@ -3052,12 +3114,15 @@ static void nav_drain(void *arg)
                     ? LV_SCR_LOAD_ANIM_OVER_RIGHT : LV_SCR_LOAD_ANIM_OVER_LEFT;
     lv_display_t *disp=lv_display_get_default();
     atomic_store(&ui_nav_phase,1U);
-    if(disp&&screen)lv_display_enable_invalidation(disp,false);
+    /* Do not mute the very first lyrics-frame invalidations. All drawing
+       still occurs on the single LVGL task, without another screen root. */
+    const bool mute_invalidation=disp&&screen&&!recognition_open;
+    if(mute_invalidation)lv_display_enable_invalidation(disp,false);
     target();
     atomic_store(&ui_nav_phase,2U);
     if(disp&&screen){
         lv_obj_update_layout(screen);
-        lv_display_enable_invalidation(disp,true);
+        if(mute_invalidation)lv_display_enable_invalidation(disp,true);
     }
     atomic_fetch_add(&ui_nav_count,1);
     atomic_store(&ui_nav_phase,3U);
@@ -3066,6 +3131,7 @@ static void nav_drain(void *arg)
         if(page==1 && timed_lyrics_mode && timed_line_count>0){
             auto_open_attempt=timed_scan_attempt;
             atomic_fetch_add(&auto_open_completed_count,1);
+            atomic_store(&ui_lyrics_scene_phase,6U);
             ESP_LOGI(TAG,"Automatic lyrics scene confirmed for attempt %lu",
                      (unsigned long)auto_open_attempt);
         }else{

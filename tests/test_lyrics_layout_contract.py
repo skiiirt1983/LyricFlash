@@ -32,7 +32,7 @@ assert "timed_viewport=lv_obj_create(screen);" in ui
 assert "LV_OBJ_FLAG_OVERFLOW_VISIBLE" in ui
 assert "lv_obj_set_style_text_opa(row,opacity,0);" in ui
 assert "const int16_t target=(int16_t)(-(int)(progress*82U/1024U));" in ui
-assert "timed_scroll_timer=lv_timer_create(timed_scroll_frame,25,NULL)" in ui
+assert "timed_scroll_timer=lv_timer_create(timed_scroll_frame,65,NULL)" in ui
 assert "song->title,38" not in scene and "song->artist,77" not in scene
 assert "lv_obj_t *focus=lv_obj_create(screen)" not in scene
 print("PASS: fixed clipped/faded lyric viewport and neutral timing offset persisted")
