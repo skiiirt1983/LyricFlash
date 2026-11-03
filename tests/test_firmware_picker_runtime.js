@@ -61,7 +61,7 @@ async function fetchStub(url,opts={}){
 }
 const safe=script.replace("loadInstalled().then(loadBuilds);","");
 const runtime=new Function("document","fetch","Option","confirm","setTimeout",
- safe+"\nreturn {loadInstalled,loadBuilds,versionCompare,versionParts,selectFirmwareRows,selectedNew,getEntries:()=>entries};")(
+ safe+"\nreturn {loadInstalled,loadBuilds,versionCompare,versionParts,selectFirmwareRows,selectedInstall,getEntries:()=>entries};")(
  {getElementById:el},fetchStub,Option,()=>{confirmations++;return false;},()=>{});
 function rows(){
  return el("builds").options.map(x=>({label:x.label,value:x.value,disabled:x.disabled}));
@@ -71,8 +71,7 @@ function checkAtMostThree(){
  assert.deepEqual(rows().map(x=>x.label.split(" — ")[0]).filter(x=>["Old","Current","New"].includes(x)),
   rows().map(x=>x.label.split(" — ")[0]),"Every option must be Old, Current or New");
  for(const r of rows()){
-  if(r.label.startsWith("Old — ")||r.label.startsWith("Current — "))
-    assert(r.disabled,"Old/Current options must be disabled");
+  if(r.label.startsWith("Old — ")) assert(r.disabled,"Old firmware must never be installable");
  }
 }
 (async()=>{
@@ -85,12 +84,18 @@ function checkAtMostThree(){
  assert.equal(rows().length,2,"No newer build: only Old and Current");
  assert.match(rows()[0].label,/^Old — 0\.8\.3-alpha/);
  assert.match(rows()[1].label,/^Current — 0\.8\.4-alpha/);
- assert.equal(el("builds").disabled,true,"No New must disable picker");
- assert.equal(el("install").disabled,true);
+ assert.equal(el("builds").disabled,false,"Published Current should enable picker even when New is unavailable");
+ assert.equal(rows()[1].disabled,false,"A matching, published Current is reinstallable");
+ assert.equal(el("install").disabled,false,"Current reinstall button must be available");
+ assert.match(el("install").textContent,/Reinstall current firmware/);
+ assert.equal(runtime.selectedInstall().kind,"Current");
+ await el("install").onclick();
+ assert.equal(confirmations,1,"Reinstall requires confirmation");
+ assert.equal(requests.filter(x=>x==="/api/install").length,0,"Cancelled reinstall must not flash");
  el("builds").value="0";el("builds").onchange();
  assert.equal(el("install").disabled,true,"Old must not allow installation");
  await el("install").onclick();
- assert.match(el("fwstatus").textContent,/Select New/i,"Old click must fail closed");
+ assert.match(el("fwstatus").textContent,/Only a verified Current reinstall or a New update/i,"Old click must fail closed");
  assert.equal(requests.filter(x=>x==="/api/install").length,0,"No OTA request allowed from Old");
  assert.equal(requests.filter(x=>x.includes("catalog.json")).length,1);
 
@@ -103,6 +108,7 @@ function checkAtMostThree(){
  assert.match(rows()[2].label,/^New — 0\.8\.5-alpha/);
  assert.equal(rows()[2].disabled,false);
  assert.equal(el("builds").value,"1","Default selection is installed version, not New");
+ assert.equal(rows()[1].disabled,true,"Current must be disabled if its exact published image is unavailable");
  assert.equal(el("install").disabled,true,"No automatic approval of new build");
  el("builds").value="2";el("builds").onchange();
  assert.equal(el("install").disabled,false,"Only selected New enables installation");
@@ -120,7 +126,7 @@ function checkAtMostThree(){
  el("builds").value="2";el("builds").onchange();
  assert.equal(el("install").disabled,false);
  await el("install").onclick();
- assert.equal(confirmations,1,"New installation should require manual confirmation");
+ assert.equal(confirmations,2,"New installation should require its own confirmation");
  assert.equal(requests.filter(x=>x==="/api/install").length,0,"Cancelled confirmation must not download");
 
  phase=3;installed="0.8.8-alpha";
@@ -128,24 +134,33 @@ function checkAtMostThree(){
  assert.equal(rows().length,2,"Installed equals latest: Old/Current only");
  assert.match(rows()[0].label,/^Old — 0\.8\.5-alpha/);
  assert.match(rows()[1].label,/^Current — 0\.8\.8-alpha/);
- assert.equal(el("install").disabled,true);
+ assert.equal(el("install").disabled,false,"Current must remain reinstallable when no newer release exists");
+ assert.equal(rows()[1].disabled,false);
+ assert.match(el("install").textContent,/Reinstall current firmware/);
+ assert.equal(runtime.selectedInstall().version,"0.8.8-alpha");
+ await el("install").onclick();
+ assert.equal(confirmations,3,"Current version reinstall needs explicit confirmation");
+ assert.equal(requests.filter(x=>x==="/api/install").length,0);
 
  phase=4;installed="0.6.0-alpha";
  await el("refresh-builds").onclick();checkAtMostThree();
  assert.equal(rows().length,2,"No older published build: Current/New only");
  assert.match(rows()[0].label,/^Current — 0\.6\.0-alpha/);
+ assert.equal(rows()[0].disabled,true,"Unpublished currently running image cannot be reinstalled");
  assert.match(rows()[1].label,/^New — 0\.8\.8-alpha/);
 
  phase=5;installed="legacy-private-build";
  await el("refresh-builds").onclick();checkAtMostThree();
  assert.equal(rows().length,1,"Unparseable installed version cannot offer New");
  assert.match(rows()[0].label,/^Current — legacy-private-build/);
+ assert.equal(rows()[0].disabled,true);
  assert.equal(el("install").disabled,true);
 
  phase=6;installed="0.8.8-alpha";
  await el("refresh-builds").onclick();checkAtMostThree();
  assert.equal(rows().length,1,"Empty catalog still displays Current");
  assert.match(rows()[0].label,/^Current — 0\.8\.8-alpha/);
+ assert.equal(rows()[0].disabled,true,"Unpublished Current must not have a guessed OTA URL");
  assert.equal(el("install").disabled,true);
 
  phase=7;
@@ -159,5 +174,14 @@ function checkAtMostThree(){
         "Firmware page must retain progress diagnostics");
  assert(script.includes("xhr.upload.onprogress")&&script.includes("xhr.onerror"),
         "Manual application-only OTA upload must remain intact");
- console.log("PASS: Firmware 3-version picker: old/current/new; no old install, safe default, exact version dedupe, newer-only, missing/invalid/unreachable catalog, direct GitHub alpha image, refresh, OTA diagnostics");
+ const source=fs.readFileSync("main/network.c","utf8");
+ assert(source.includes('strcmp(descriptor.version,job->version)!=0'),
+        "Device must validate the downloaded image is the selected version");
+ assert(source.includes('esp_https_ota_finish(handle)'),
+        "Device must validate firmware before activating it");
+ assert(!source.includes('strcmp(job->version,LF_VERSION)==0'),
+        "Device must not reject reinstallation of the same version");
+ assert(script.includes("reinstall is NOT a factory reset"),
+        "Confirmation must not misrepresent reinstall as factory reset");
+ console.log("PASS: 3-version OTA picker: Old disabled, verified Current reinstallable, New selectable, matching OTA descriptor, safe missing/current-only/empty catalogs, explicit confirmation, refresh and diagnostics");
 })().catch(e=>{console.error(e);process.exitCode=1});

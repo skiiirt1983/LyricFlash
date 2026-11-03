@@ -14,7 +14,15 @@
 
 Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` and `0.8.29` failed screen/touch on physical hardware. `0.8.30` is the targeted display recovery candidate and is not hardware-proven until the user verifies it. Keep 0.8.26 as rollback. Do not merge or publish a stable v1.0 release until the device tests pass. Each functional milestone uses **one isolated change and one gated compile after preflight**, followed by a specific device acceptance test.
 
-## Current milestone: Alpha 0.8.34 — 3-option OTA Web UI selector
+## Current milestone: Alpha 0.8.35 — allow exact Current firmware reinstallation
+
+- **User feedback after 0.8.34 hardware verification:** Current can be the latest published firmware, so an OTA picker that only enables New makes it impossible to reinstall a functioning published version. Requirement revised: Old stays disabled, Current is selectable for an explicit reinstallation, and New remains selectable if a newer release exists. No more than three entries.
+- **Verified-image prerequisite:** Current only enables when the release catalog offers an **exact** matching published application OTA version and known-approved URL; otherwise Current is displayed but disabled, and no guessed link is generated. The selected device-image descriptor must match the requested firmware version. The backend already permits the same-version request and independently checks HTTPS, project name, image version and ESP-IDF image integrity. Previous old-version/invalid-catalog restrictions remain intact.
+- **Reinstall is not factory reset:** reinstalling the application preserves Wi-Fi and stored settings; for clearing user configuration use a separate, explicit reset action. The UI confirmation explains this distinction.
+- **Test gates:** browser mocks cover Current available with no New, Current available while newer, current image unpublished, unknown installed version, empty/unreachable catalog, no downgrades, correct manual confirmation and OTA metadata verification. Physical test is viewing selector with Current enabled, then optionally confirming re-install, checking firmware boots with saved settings.
+- **Isolation:** exact same 24kHz 4-slot MIC1/MIC2 audio driver/24 dB input, LCD QSPI refresh, clock navigation, NVS and OTA transport as 0.8.34. No audio gain changes in this release.
+
+## Previous milestone: Alpha 0.8.34 — 3-option OTA Web UI selector
 
 - **User priority:** replace long GitHub firmware release list with a maximum of three items relative to the version installed on-device: **Old** (closest strictly older published version, disabled), **Current** (device-reported installed version, disabled) and **New** (newest strictly newer validated published OTA, only actionable option). If one category is absent, omit it. Never offer a fourth placeholder entry.
 - **Failure safety:** if installed version cannot be read or parsed, display Current/Unknown only and disable OTA installation. Unknown/prerelease version formats fail closed. Deduplicate identical versions across alpha prereleases, beta catalog and manifest while preserving verified direct GitHub asset preference. Preserve HTTPS remote OTA, local OTA upload, update progress and errors.
@@ -89,7 +97,7 @@ Implementation sequence may be reprioritized after a failed hardware prerequisit
 **Status: NOT implemented. Keep this in the queue; do not modify the recovery build.**
 
 - Replace the long OTA firmware dropdown with **at most three clearly labeled entries**: **Old** (one immediately previous published alpha relative to the installed device version), **Current** (actually installed firmware), **New** (latest published version newer than the installed one, when available).
-- The old version remains **information-only/disabled** while OTA downgrades are unsupported; the installed current version is also not offered as an install action. Only a valid newer image can be installed via the existing verified OTA mechanism. Never imply the dropdown supports rollback.
+- The old version remains **information-only/disabled** while OTA downgrades are unsupported; Current is reinstallable only when the exact published image exists. New is installable only when it is newer. Neither action erases settings. Never imply the dropdown supports rollback or factory reset.
 - Use the device's `/api/info` installed version and version-aware release metadata to select the three entries; **do not simply take the newest three overall**. Omit an entry when it does not exist and avoid duplicating versions. Display no more than three entries and preserve refresh/status/error handling.
 - Acceptance checks: test with installed version older than latest, equal to latest, with no preceding release, with a non-numeric/prerelease version, and with an empty or unreachable catalog. Keep local OTA upload and update safety guards unaffected.
 

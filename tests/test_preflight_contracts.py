@@ -114,11 +114,11 @@ require('"/firmware"' in network and '"/api/install"' in network
 require("/api/install" in pages["firmware"]
         and "skiiirt1983.github.io/LyricFlash/beta/" in pages["firmware"] and "catalog.json" in pages["firmware"],
         "GitHub build selector not linked to install endpoint")
-require("selector.disabled=!hasNew;" in pages["firmware"]
-        and "el('install').disabled=true;" in pages["firmware"]
-        and "const b=selectedNew();" in pages["firmware"]
-        and "if(!b)return info('Select New" in pages["firmware"],
-        "OTA install must require explicit newer-version selection")
+require("selector.disabled=!hasInstallable;" in pages["firmware"]
+        and "el('install').disabled=!choice;" in pages["firmware"]
+        and "const b=selectedInstall();" in pages["firmware"]
+        and "if(!b)return info('Only a verified Current reinstall" in pages["firmware"],
+        "OTA install must require verified Current or newer New and user confirmation")
 require("lf_weather_save_config" in network and "xTaskNotifyGive(weather_task)" in weather,
         "Weather refresh on save missing")
 require("weather_numeric_valid = false;" in weather and
@@ -200,8 +200,9 @@ require('id="refresh-builds"' in pages["firmware"] and 'loadBuilds(true)' in pag
         and "kind:'Old'" in pages["firmware"]
         and "kind:'New'" in pages["firmware"]
         and 'option.disabled=!!b.disabled;' in pages["firmware"]
+        and 'b.version===installed' in pages["firmware"]
         and 'versionCompare(b.version,installed)>0' in pages["firmware"],
-        "OTA picker must show only Old/Current/New with disabled downgrade/current and verified newer version")
+        "OTA picker must show only Old/Current/New with disabled downgrade and verified Current reinstall/newer update")
 require("esp_sleep_enable_ext0_wakeup(GPIO_NUM_11,0)" in ui and
         "deep_sleep_retry_after_ms=current+60000ULL" in ui and
         "esp_deep_sleep_start();" in ui,
@@ -549,5 +550,17 @@ require('mic1_rms' in network and 'mic2_rms' in network and
 require('selectFirmwareRows' in pages['firmware'] and
         'versionParts(installed)' in pages['firmware'] and
         'Latest newer version:' in pages['firmware'] and
-        'Only a newer verified OTA image can be installed' in pages['firmware'],
-        "0.8.34 conservative three-version OTA selector")
+        'currentImage=known?unique.find(b=>b.version===current):null' in pages['firmware'] and
+        "kind:'Current'" in pages['firmware'] and 'disabled:!currentImage' in pages['firmware'] and
+        "b.kind==='Current'&&b.version===installed" in pages['firmware'] and
+        'a reinstall is NOT a factory reset' in pages['firmware'] and
+        'selector.disabled=!hasInstallable;' in pages['firmware'],
+        "0.8.35 three-row picker, exact published Current reinstall safety")
+
+# 0.8.35 permits only a signed/verified same-version image on re-install,
+# preserving explicit user confirmation and ESP-IDF binary project/version check.
+require('strcmp(descriptor.project_name,"lyricflash")!=0' in network and
+        'strcmp(descriptor.version,job->version)!=0' in network and
+        'esp_https_ota_finish(handle)' in network and
+        'allowed_github_ota_url(url->valuestring)' in network,
+        "0.8.35 retain device-side OTA project, version, URL and image integrity")
