@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-#define LF_CONFIG_SCHEMA 11U
+#define LF_CONFIG_SCHEMA 12U
 #define LF_CONFIG_NS "lyric_ui"
 
 typedef struct {
@@ -42,6 +42,9 @@ typedef struct {
     uint8_t face_show_date[6];
     uint8_t face_show_seconds[6];
     uint8_t face_show_battery[6];
+    /* Face-local draggable battery placement, centered in 466px dial. */
+    int32_t face_battery_x[6];
+    int32_t face_battery_y[6];
     uint8_t face_24h[6];
     uint32_t charging_color;  // customizable when USB connected
     uint8_t show_progress;    // 0 .. 1
