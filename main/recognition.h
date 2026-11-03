@@ -17,6 +17,9 @@ typedef struct {
     bool audd_timecode_valid;
     uint32_t capture_seconds;
     uint32_t attempts;
+    uint64_t stage_started_ms; /* monotonic, when latest state began */
+    uint32_t upload_bytes_sent; /* bounded diagnostics; never contains WAV */
+    uint32_t upload_bytes_total;
     int http_status; /* AudD HTTP status, including legitimate no-match replies */
     int audd_api_error_code;
     int audd_transport_error_code; /* ESP-IDF negative error; 0 if none */
