@@ -86,7 +86,9 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
         BaseType_t xTaskCreate(void(*fn)(void*),const char *name,unsigned stack,
                               void *arg,int priority,void *out)
         {(void)name;(void)stack;(void)priority;(void)out;
-         if(!spawn_ok)return 0;fn(arg);return pdPASS;}
+         if(!spawn_ok){return 0;}
+         fn(arg);
+         return pdPASS;}
         void vTaskDelete(void *arg){(void)arg;}
         int main(void){
             lf_pcm_snapshot_t s={0};lf_pcm_snapshot(&s);
