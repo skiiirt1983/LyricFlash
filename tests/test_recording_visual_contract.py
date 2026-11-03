@@ -30,7 +30,7 @@ assert "song->state==LF_RECOG_LYRICS" in ui
 assert "lv_style_set_transform_width(&press_style,24)" in ui
 assert "No Song Lyrics Available" in ui
 assert "auto_open_lyrics_deferred" in ui
-assert "lyric_logo_at_top(screen);" in ui
+assert "lyric_logo_at_top(screen);" not in ui
 assert "lv_line_set_points(strike,bolt,7)" in ui
 assert "LV_SYMBOL_CHARGE" in ui
 assert "ESTIMATED SYNC" not in ui
