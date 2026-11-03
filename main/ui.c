@@ -48,9 +48,11 @@ static uint64_t timed_last_update_ms;
 static lv_obj_t *timed_rows[4];
 /* A single retained parent moves every lyric row together, avoiding four
  * separate QSPI invalidations on each animation frame. */
+static lv_obj_t *timed_viewport; /* fixed clipping boundary; never translated */
 static lv_obj_t *timed_scroll_group;
 static lv_timer_t *timed_scroll_timer;
 static int16_t timed_scroll_y=INT16_MIN;
+static uint8_t timed_row_opa[4]={255,255,255,255};
 static lv_obj_t *timed_status;
 static lv_obj_t *timed_pause_button;
 static lv_obj_t *timed_controls;
@@ -767,8 +769,10 @@ static void make_base(void)
     lyrics_label=NULL;
     timed_lyrics_mode=false;
     for(size_t i=0;i<4;i++)timed_rows[i]=NULL;
+    timed_viewport=NULL;
     timed_scroll_group=NULL;
     timed_scroll_y=INT16_MIN;
+    for(size_t i=0;i<4;i++)timed_row_opa[i]=255;
     timed_status=NULL;
     timed_pause_button=NULL;
     timed_controls=NULL;
@@ -1263,14 +1267,15 @@ static void timed_set_row(int slot,const char *value)
         n>62?&lv_font_montserrat_20:
         n>39?&lv_font_montserrat_24:
         slot==1?&lv_font_montserrat_28:&lv_font_montserrat_24;
-    lv_obj_set_style_text_font(item,font,0);
+    if(lv_obj_get_style_text_font(item,0)!=font)
+        lv_obj_set_style_text_font(item,font,0);
     if(strcmp(lv_label_get_text(item),value)!=0)
         lv_label_set_text(item,value);
 }
 static void timed_render(uint64_t current,bool force);
 static void timed_layout_rows(uint32_t ms,int index)
 {
-    if(!timed_scroll_group)return;
+    if(!timed_viewport||!timed_scroll_group)return;
     uint32_t progress=0;
     if(index>=0 && (size_t)(index+1)<timed_line_count){
         const uint32_t start=timed_stamps[index];
@@ -1282,16 +1287,29 @@ static void timed_layout_rows(uint32_t ms,int index)
                 (uint32_t)(((uint64_t)elapsed*1024U)/duration);
         }
     }
-    /* Ease at both ends, retaining AudD/LRC timing exactly. This prevents
-       each new word from appearing to snap at its timestamp, while the
-       incoming line glides steadily into focus between timestamps. */
-    const uint32_t p=progress;
-    const uint32_t eased=(uint32_t)(((uint64_t)p*p*(3072U-2U*p))/
-                                     (1024ULL*1024ULL));
-    const int16_t target=(int16_t)(-(int)(eased*82U/1024U));
+    /* Linear clock-paced motion. The previous smoothstep slowed motion
+       around each timecode, visually resembling a late lyric. The clock,
+       highlighted index and text position now agree at every LRC boundary. */
+    const int16_t target=(int16_t)(-(int)(progress*82U/1024U));
     if(target!=timed_scroll_y){
         lv_obj_set_style_translate_y(timed_scroll_group,target,0);
         timed_scroll_y=target;
+    }
+    /* Fade lyric lines only near the fixed viewport edges. Quantization
+       avoids repainting labels every 25ms on the 466px QSPI display. */
+    static const int16_t centers[4]={-82,0,82,164};
+    for(int slot=0;slot<4;slot++){
+        lv_obj_t *row=timed_rows[slot];
+        if(!row)continue;
+        const int center=centers[slot]+target;
+        const int distance=center<0?-center:center;
+        const int room=180-distance;
+        uint8_t opacity=room>=72?255:
+            room<=0?0:(uint8_t)((room*255/72)&~15);
+        if(timed_row_opa[slot]!=opacity){
+            lv_obj_set_style_text_opa(row,opacity,0);
+            timed_row_opa[slot]=opacity;
+        }
     }
 }
 static void timed_scroll_frame(lv_timer_t *timer)
@@ -1528,7 +1546,22 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_align(timed_battery,LV_ALIGN_TOP_RIGHT,-24,42);
     lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_GESTURE_BUBBLE);
-    timed_scroll_group=lv_obj_create(screen);
+    /* An unmoving parent clips line ends above/below the lyric field.
+       The animated child may translate, but its clip boundary never does. */
+    timed_viewport=lv_obj_create(screen);
+    lv_obj_set_size(timed_viewport,408,360);
+    lv_obj_align(timed_viewport,LV_ALIGN_CENTER,0,0);
+    lv_obj_set_style_bg_opa(timed_viewport,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(timed_viewport,0,0);
+    lv_obj_set_style_shadow_width(timed_viewport,0,0);
+    lv_obj_set_style_radius(timed_viewport,0,0);
+    lv_obj_set_style_pad_all(timed_viewport,0,0);
+    lv_obj_remove_flag(timed_viewport,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(timed_viewport,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(timed_viewport,LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    lv_obj_add_flag(timed_viewport,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(timed_viewport,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    timed_scroll_group=lv_obj_create(timed_viewport);
     lv_obj_set_size(timed_scroll_group,416,388);
     lv_obj_align(timed_scroll_group,LV_ALIGN_CENTER,0,0);
     lv_obj_set_style_bg_opa(timed_scroll_group,LV_OPA_TRANSP,0);
