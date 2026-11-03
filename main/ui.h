@@ -36,5 +36,12 @@ typedef struct {
     uint32_t render_cycle_last_ms;
     uint32_t render_cycle_max_ms;
     uint32_t clock_repaint_recoveries;
+    /* Safe cross-thread evidence if the OLED stops while Device Studio lives. */
+    uint32_t ui_tick_age_ms;
+    uint32_t ui_page;
+    uint32_t ui_navigation_phase;
+    uint32_t lyrics_auto_open_queued;
+    uint32_t lyrics_auto_open_completed;
+    uint32_t lyrics_auto_open_recoveries;
 } lf_ui_display_stats_t;
 void lf_ui_display_stats(lf_ui_display_stats_t *out);
