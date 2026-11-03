@@ -13,6 +13,7 @@
 #include "recognition.h"
 #include "lyric_clock.h"
 #include "lyric_sync.h"
+#include "recognition_audio.h"
 #include "weather.h"
 #include "weather_visual.h"
 #include "char_wheel.h"
@@ -1133,11 +1134,21 @@ static void timed_pause(lv_event_t *e)
     if(caption)lv_label_set_text(caption,timed_clock.running?"PAUSE":"RESUME");
     activity();timed_render(now,true);
 }
+static void timed_toggle_controls(lv_event_t *e)
+{
+    (void)e;
+    if(timed_controls){
+        if(lv_obj_has_flag(timed_controls,LV_OBJ_FLAG_HIDDEN))
+            lv_obj_remove_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
+    }
+    activity();
+}
 static lv_obj_t *timed_line_label(int y,const lv_font_t *font,uint32_t color)
 {
     lv_obj_t *line=label(screen," ",y,font,color);
     lv_obj_set_size(line,344,54);
-    lv_label_set_long_mode(line,LV_LABEL_LONG_DOT);
+    lv_label_set_long_mode(line,LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(line,font,0);
     lv_obj_remove_flag(line,LV_OBJ_FLAG_CLICKABLE);
     return line;
@@ -1187,8 +1198,8 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     /* Only the current line receives a shaded focus surface; nothing
      * animates all 83 line widgets or changes the QSPI clock strategy. */
     lv_obj_t *focus=lv_obj_create(screen);
-    lv_obj_set_size(focus,364,67);
-    lv_obj_align(focus,LV_ALIGN_TOP_MID,0,200);
+    lv_obj_set_size(focus,370,112);
+    lv_obj_align(focus,LV_ALIGN_TOP_MID,0,180);
     lv_obj_set_style_radius(focus,24,0);
     lv_obj_set_style_border_width(focus,1,0);
     lv_obj_set_style_border_color(focus,lv_color_hex(prefs->accent_color),0);
@@ -1196,9 +1207,12 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_style_bg_opa(focus,LV_OPA_COVER,0);
     lv_obj_remove_flag(focus,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(focus,LV_OBJ_FLAG_CLICKABLE);
-    timed_rows[0]=timed_line_label(144,&lv_font_montserrat_18,0x8198AB);
-    timed_rows[1]=timed_line_label(207,&lv_font_montserrat_24,prefs->text_color);
-    timed_rows[2]=timed_line_label(268,&lv_font_montserrat_18,0x8198AB);
+    timed_rows[0]=timed_line_label(115,&lv_font_montserrat_18,0x8198AB);
+    timed_rows[1]=timed_line_label(190,&lv_font_montserrat_24,prefs->text_color);
+    timed_rows[2]=timed_line_label(310,&lv_font_montserrat_18,0x8198AB);
+    lv_obj_set_height(timed_rows[0],70);
+    lv_obj_set_height(timed_rows[1],110);
+    lv_obj_set_height(timed_rows[2],90);
     button(screen,"-2 SEC",96,48,-122,119,0xA6BED1,timed_adjust,(void *)(intptr_t)-1);
     button(screen,"START / RESTART",139,48,0,119,0xA8D6FF,timed_start,NULL);
     button(screen,"+2 SEC",96,48,122,119,0xA6BED1,timed_adjust,(void *)(intptr_t)1);
