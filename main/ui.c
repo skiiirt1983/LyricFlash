@@ -2700,6 +2700,17 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
     prefs->clock_face = basic->clock_face;
     prefs->basic_font_style = basic->basic_font_style;
     prefs->basic_font_size = basic->basic_font_size;
+    prefs->basic_time_x=basic->basic_time_x;
+    prefs->basic_time_y=basic->basic_time_y;
+    prefs->basic_battery_x=basic->basic_battery_x;
+    prefs->basic_battery_y=basic->basic_battery_y;
+    prefs->basic_date_x=basic->basic_date_x;
+    prefs->basic_date_y=basic->basic_date_y;
+    prefs->basic_weather_x=basic->basic_weather_x;
+    prefs->basic_weather_y=basic->basic_weather_y;
+    prefs->basic_battery_size=basic->basic_battery_size;
+    prefs->basic_date_size=basic->basic_date_size;
+    prefs->basic_weather_size=basic->basic_weather_size;
     prefs->basic_ring_mode = basic->basic_ring_mode;
     prefs->basic_show_date = basic->basic_show_date;
     prefs->basic_weather = basic->basic_weather;
