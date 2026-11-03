@@ -2956,6 +2956,8 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
     memcpy(prefs->face_show_date,basic->face_show_date,sizeof(prefs->face_show_date));
     memcpy(prefs->face_show_seconds,basic->face_show_seconds,sizeof(prefs->face_show_seconds));
     memcpy(prefs->face_show_battery,basic->face_show_battery,sizeof(prefs->face_show_battery));
+    memcpy(prefs->face_battery_x,basic->face_battery_x,sizeof(prefs->face_battery_x));
+    memcpy(prefs->face_battery_y,basic->face_battery_y,sizeof(prefs->face_battery_y));
     memcpy(prefs->face_24h,basic->face_24h,sizeof(prefs->face_24h));
     err = lf_settings_save(prefs);
     if (err == ESP_OK) {
