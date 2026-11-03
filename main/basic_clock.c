@@ -24,17 +24,24 @@ static uint32_t ring_colour(const lf_settings_t *p, int segment)
 }
 static const lv_font_t *time_font(const lf_settings_t *p)
 {
-    /* Five onboard typography presets with separately adjustable sizes.
-       Different font families can be added later as embedded LVGL assets. */
-    uint8_t v=p->basic_font_size;
-    switch(p->basic_font_style) {
-        case 1: return v>70 ? &lv_font_montserrat_48 : &lv_font_montserrat_40;
-        case 2: return v>70 ? &lv_font_montserrat_40 : &lv_font_montserrat_32;
-        case 3: return v>70 ? &lv_font_montserrat_48 : &lv_font_montserrat_36;
-        case 4: return v>70 ? &lv_font_montserrat_40 : &lv_font_montserrat_28;
-        default: return v>80 ? &lv_font_montserrat_48 :
-                        v>45 ? &lv_font_montserrat_40 : &lv_font_montserrat_32;
-    }
+    (void)p;
+    /* Standard vector label uses the largest available bundled font and
+       LVGL's static transform scale. No new font assets or redraw loop. */
+    return &lv_font_montserrat_48;
+}
+static uint32_t basic_digit_height(uint8_t v)
+{
+    /* 0=22px, 60=74px, 100=104px, 200=136px. More range
+       without painting outside the 466px round screen. */
+    return v<=60?22U+52U*v/60U:
+           v<=100?74U+30U*(v-60U)/40U:
+                  104U+32U*(v-100U)/100U;
+}
+static uint32_t basic_digit_cell(uint8_t v)
+{
+    return v<=60?2U+5U*v/60U:
+           v<=100?7U+2U*(v-60U)/40U:
+                  9U+2U*(v-100U)/100U;
 }
 /* Static ring as ONE LVGL object, not 30 separate arc widgets. Each segment
    is drawn directly into the current LVGL layer, preserving the same RGB
@@ -203,7 +210,7 @@ static void basic_digits_draw(lv_event_t *e)
     const int center_x=(box.x1+box.x2)/2,center_y=(box.y1+box.y2)/2;
     const int length=5;
     if(p->basic_font_style==1 || p->basic_font_style==12){
-        const int h=44+(int)p->basic_font_size/2;
+        const int h=(int)basic_digit_height(p->basic_font_size);
         const int w=h*54/100,gap=5+(int)p->basic_font_size/12;
         const int total=length*w+(length-1)*gap;
         const int start_x=center_x-total/2,start_y=center_y-h/2;
@@ -212,7 +219,7 @@ static void basic_digits_draw(lv_event_t *e)
             segment_digit(layer,start_x+i*(w+gap),start_y,w,h,thick,
                           custom_time[i],p->basic_foreground);
     }else{
-        const int cell=4+(int)p->basic_font_size/18;
+        const int cell=(int)basic_digit_cell(p->basic_font_size);
         const int w=5*cell,gap=2*cell,total=length*w+(length-1)*gap;
         const int start_x=center_x-total/2,start_y=center_y-7*cell/2;
         for(int i=0;i<length;i++){
@@ -243,6 +250,14 @@ lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
     lv_obj_set_width(time,346);
     lv_label_set_long_mode(time,LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(time,time_font(p),0);
+    /* 0% is now genuinely small (~18px), 200% roughly 96px. The
+       preexisting 60% default stays around the previous visual size. */
+    if(p->basic_font_style==0 || p->basic_font_style==4){
+        const int32_t zoom=96+(int32_t)p->basic_font_size*416/200;
+        lv_obj_set_style_transform_scale(time,zoom,0);
+        lv_obj_set_style_transform_pivot_x(time,173,0);
+        lv_obj_set_style_transform_pivot_y(time,28,0);
+    }
     const int letter_spacing[5]={0,3,1,6,2};
     lv_obj_set_style_text_letter_space(time,
          letter_spacing[p->basic_font_style<5?p->basic_font_style:0],0);
