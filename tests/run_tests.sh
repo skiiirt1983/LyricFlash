@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 python3 tests/test_partitions.py
 python3 tests/test_static_safety.py
 python3 tests/test_preflight_contracts.py
+python3 tests/test_home_song_contract.py
 python3 tests/test_mic_probe_contract.py
 python3 tests/test_mic_pcm_contract.py
 python3 tests/test_recognition_contract.py
