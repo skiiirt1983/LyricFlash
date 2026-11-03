@@ -239,7 +239,8 @@ static void open_face_digit(lv_layer_t *layer,int x,int y,int scale,
             if(style==7 || style==13 || style==15)
                 draw_bar(layer,xx+2,yy+2,w,h,
                          style==15?0x246DA7:0x2D4659,1);
-            if(style==8)w+=1; /* bold block display */
+            if(style==8)w+=1;
+            if(style==17)w+=scale; /* bold Gothic strokes, even with empty outer glyph rows */ /* bold block display */
             if(style==9 || style==14)w=w>1?w-1:1;
             if(style==19){w=w>2?w-2:1;h=h>1?h-1:1;xx++;}
             if(style==17&&(row==0 || row==20))
