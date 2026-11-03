@@ -538,6 +538,9 @@ static void queue_swipe(int target, lv_screen_load_anim_t animation)
 
 static void swipe_intent(lv_dir_t direction)
 {
+    /* Moving the timing controls must never navigate away by accident. */
+    if(page==1 && timed_controls &&
+       !lv_obj_has_flag(timed_controls,LV_OBJ_FLAG_HIDDEN))return;
     if (clock_settings_popup || swipe_candidate_page >= 0) return;
     /* Horizontal Clock/Home/Settings navigation belongs exclusively to the
        scrolling pager, not the old on-release page-rebuild mechanism. */
@@ -748,6 +751,9 @@ static void show_clock_settings_popup(void)
 static void lyrics_overlay_close(void)
 {
     if(!timed_overlay)return;
+    auto_open_pending=false;
+    auto_open_transition=false;
+    if(home_record_layer)lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
     if(timed_scroll_timer){
         lv_timer_delete(timed_scroll_timer);
         timed_scroll_timer=NULL;
@@ -774,6 +780,7 @@ static void lyrics_overlay_close(void)
 }
 static void make_base(void)
 {
+    if(timed_overlay)lyrics_overlay_close();
     /* A timer that renders the retired lyric scene must NEVER outlive it. */
     if(timed_scroll_timer){
         lv_timer_delete(timed_scroll_timer);
@@ -1600,7 +1607,7 @@ static void timed_start(lv_event_t *e)
     timed_rate_clock_anchor_ms=lf_lyric_clock_position(&timed_clock,now);
     timed_rate_song_anchor_ms=timed_rate_clock_anchor_ms;
     timed_estimated=false; /* Restart is deliberately manual alignment. */
-    timed_controls_until_ms=now+15000;
+    timed_controls_until_ms=0; /* user closes with DONE */
     timed_active_index=-999;timed_last_second=UINT32_MAX;
     paused=false;activity();
     if(timed_pause_button){
@@ -1721,7 +1728,7 @@ static void timed_pause(lv_event_t *e)
     if(timed_clock.running)lf_lyric_clock_pause(&timed_clock,now);
     else lf_lyric_clock_resume(&timed_clock,now);
     paused=!timed_clock.running;
-    timed_controls_until_ms=now+15000;
+    timed_controls_until_ms=0;
     lv_obj_t *caption=timed_pause_button?lv_obj_get_child(timed_pause_button,0):NULL;
     if(caption)lv_label_set_text(caption,timed_clock.running?"PAUSE":"RESUME");
     activity();timed_render(now,true);
@@ -1994,8 +2001,8 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_style_text_align(timed_save_note,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_set_style_text_font(timed_save_note,&lv_font_montserrat_12,0);
     lv_obj_set_style_text_color(timed_save_note,lv_color_hex(0x8EAFC7),0);
-    lv_obj_align(timed_save_note,LV_ALIGN_CENTER,0,153);
-    button(timed_controls,"DONE",108,36,0,176,0x8BCCFF,timed_controls_done,NULL);
+    lv_obj_align(timed_save_note,LV_ALIGN_CENTER,0,150);
+    button(timed_controls,"DONE",108,31,0,171,0x8BCCFF,timed_controls_done,NULL);
     lv_obj_remove_event_cb(surface,timed_toggle_controls);
     lv_obj_add_event_cb(surface,timed_toggle_controls,LV_EVENT_LONG_PRESSED,NULL);
     lv_obj_add_event_cb(surface,timed_double_tap_home,LV_EVENT_SHORT_CLICKED,NULL);
@@ -2902,6 +2909,12 @@ static void wake_finish_async(void *arg)
     lv_obj_t *cover=sleep_overlay;
     sleep_overlay=NULL;
     if(cover)lv_obj_delete(cover);
+    if(primary_pager && page==0 && home_record_layer){
+        lf_recog_snapshot_t song={0};lf_recog_snapshot(&song);
+        if(song.state!=LF_RECOG_CAPTURE && song.state!=LF_RECOG_UPLOAD &&
+           song.state!=LF_RECOG_LYRICS)
+            lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
+    }
     invalidate_full_screen();
 }
 static void on_wake(lv_event_t *e)
@@ -3161,7 +3174,7 @@ static void on_tick(lv_timer_t *timer)
     /* Check deep-sleep deadline even after the screen has already turned off.
        Never deep sleep during diagnostics, onboarding, or active lyric play. */
     static uint64_t deep_sleep_retry_after_ms;
-    if (prefs->deep_sleep_minutes && !(page == 1 && !paused) &&
+    if (prefs->deep_sleep_minutes && !(page == 1 && timed_lyrics_mode) &&
         page != 14 && page != 15 &&
         current-last_activity_ms >= (uint64_t)prefs->deep_sleep_minutes*60000ULL &&
         current >= deep_sleep_retry_after_ms) {
@@ -3181,7 +3194,10 @@ static void on_tick(lv_timer_t *timer)
         clock_last_refresh = current;
         lf_clock_update();
     }
-    if (prefs->sleep_seconds && !(page == 1 && !paused) && page != 14 && page != 15 && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
+    /* Preserve the live song and alignment modal during calibration.
+       The old paused-song sleep blacked out controls without restoration. */
+    if(page==1 && timed_lyrics_mode)last_activity_ms=current;
+    if (prefs->sleep_seconds && !(page == 1 && timed_lyrics_mode) && page != 14 && page != 15 && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
         sleep_display();
         return;
     }
@@ -3334,9 +3350,10 @@ static void nav_drain(void *arg)
                     ? LV_SCR_LOAD_ANIM_OVER_RIGHT : LV_SCR_LOAD_ANIM_OVER_LEFT;
     lv_display_t *disp=lv_display_get_default();
     atomic_store(&ui_nav_phase,1U);
-    /* Do not mute the very first lyrics-frame invalidations. All drawing
-       still occurs on the single LVGL task, without another screen root. */
-    const bool mute_invalidation=disp&&screen&&!recognition_open;
+    /* Removing an opaque lyrics overlay requires real invalidations, not
+       the stale panel GRAM from the previous recording screen. */
+    const bool exiting_lyrics=timed_overlay!=NULL;
+    const bool mute_invalidation=disp&&screen&&!recognition_open&&!exiting_lyrics;
     if(mute_invalidation)lv_display_enable_invalidation(disp,false);
     target();
     atomic_store(&ui_nav_phase,2U);
@@ -3360,9 +3377,11 @@ static void nav_drain(void *arg)
         if(screen && !asleep)lv_obj_invalidate(screen);
         return; /* Never run the old panel-wipe after automatic lyrics. */
     }
-    /* Native pager already moves the real sibling pages with the finger;
-       never overlay the old post-release panel-wipe transition on top. */
-    if(was_pager && primary_pager)return;
+    /* Cached pager needs an explicit redraw after the lyric child exits. */
+    if(was_pager && primary_pager){
+        if(screen && !asleep)lv_obj_invalidate(screen);
+        return;
+    }
     if(disp&&screen&&previous_page!=page&&!asleep)nav_transition_begin(direction);
     else if(screen)lv_obj_invalidate(screen);
 }
