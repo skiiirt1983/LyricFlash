@@ -43,7 +43,10 @@ static uint32_t timed_scan_attempt;
 static int timed_active_index=-999;
 static uint32_t timed_last_second=UINT32_MAX;
 static uint64_t timed_last_update_ms;
-static lv_obj_t *timed_rows[3];
+/* Four retained lyric rows: previous, active, next and approaching next.
+ * Only their vertical positions update between timestamps. */
+static lv_obj_t *timed_rows[4];
+static int16_t timed_row_y[4]={INT16_MIN,INT16_MIN,INT16_MIN,INT16_MIN};
 static lv_obj_t *timed_status;
 static lv_obj_t *timed_pause_button;
 static lv_obj_t *timed_controls;
@@ -54,6 +57,7 @@ static uint64_t timed_hint_until_ms;
 static uint64_t timed_controls_until_ms;
 static bool timed_estimated;
 static uint32_t auto_open_attempt;
+static bool auto_open_pending;
 /* Home now reflects the same explicitly triggered recognition session and
  * manual LRC timeline as the Lyrics viewer. These pointers are never used
  * after make_base() destroys its child pager. */
@@ -742,7 +746,7 @@ static void make_base(void)
     scroll_panel=NULL;
     lyrics_label=NULL;
     timed_lyrics_mode=false;
-    for(size_t i=0;i<3;i++)timed_rows[i]=NULL;
+    for(size_t i=0;i<4;i++){timed_rows[i]=NULL;timed_row_y[i]=INT16_MIN;}
     timed_status=NULL;
     timed_pause_button=NULL;
     timed_controls=NULL;
@@ -824,10 +828,15 @@ static void auto_open_lyrics_deferred(void *unused)
     (void)unused;
     lf_recog_snapshot_t latest={0};
     lf_recog_snapshot(&latest);
-    if(latest.state==LF_RECOG_MATCH && latest.attempts==auto_open_attempt &&
+    auto_open_pending=false;
+    if(latest.state==LF_RECOG_MATCH && latest.attempts!=auto_open_attempt &&
        latest.lyric_lines>0 && strcmp(latest.lyrics_state,"synced")==0 &&
-       page==0 && !touch_held && !asleep)
+       page==0 && !touch_held && !asleep){
+        /* Mark handled only when navigation is actually safe. A callback
+           during a touch or swipe retries on the following Home refresh. */
+        auto_open_attempt=latest.attempts;
         build_preview();
+    }
 }
 static void home_refresh(uint64_t current)
 {
@@ -929,9 +938,11 @@ static void home_refresh(uint64_t current)
     }
     home_last_refresh_ms=current;
     if(song.state==LF_RECOG_MATCH && song.lyric_lines>0 &&
-       strcmp(song.lyrics_state,"synced")==0 && song.attempts!=auto_open_attempt){
-        /* Defer rebuilding the LVGL scene until after the current UI tick. */
-        auto_open_attempt=song.attempts;
+       strcmp(song.lyrics_state,"synced")==0 && song.attempts!=auto_open_attempt &&
+       !auto_open_pending){
+        /* Do not lose this auto-open if the asynchronous callback finds a
+           touch/gesture still active: it will retry after touch release. */
+        auto_open_pending=true;
         lv_async_call(auto_open_lyrics_deferred,NULL);
     }
 }
@@ -1072,26 +1083,58 @@ static void on_touch_scroll(lv_event_t *e)
     }
 }
 
-/* AudD estimates playback position: saved corrections refine that estimate.
- * Change only the three active lyric rows, never the entire screen per tick. */
+/* The AudD/LRC clock remains the ONLY timing source. Rather than replacing
+ * three lyric lines abruptly on timestamps, shift a retained four-line
+ * viewport steadily upwards between two LRC timestamps. This moves each
+ * line from "next" through "current" to "previous", allowing the listener
+ * to anticipate words and still read the completed line above. No new
+ * audio capture, network fetch, background thread, or display root. */
 static void timed_set_row(int slot,const char *value)
 {
     lv_obj_t *item=timed_rows[slot];
     if(!item)return;
     if(!value)value=" ";
     const size_t n=strlen(value);
-    const lv_font_t *font=slot==1?
-        (n>100?&lv_font_montserrat_18:n>75?&lv_font_montserrat_20:
-         n>55?&lv_font_montserrat_24:n>32?&lv_font_montserrat_28:
-         &lv_font_montserrat_32):
-        (n>90?&lv_font_montserrat_16:n>60?&lv_font_montserrat_18:
-         &lv_font_montserrat_20);
+    const lv_font_t *font=
+        n>115?&lv_font_montserrat_16:
+        n>90?&lv_font_montserrat_18:
+        n>62?&lv_font_montserrat_20:
+        n>39?&lv_font_montserrat_24:
+        slot==1?&lv_font_montserrat_28:&lv_font_montserrat_24;
     lv_obj_set_style_text_font(item,font,0);
-    if(strcmp(lv_label_get_text(item),value)!=0)lv_label_set_text(item,value);
-    /* Content-height labels automatically center even when lyrics wrap. */
-    lv_obj_align(item,LV_ALIGN_CENTER,0,slot==0?-78:slot==1?0:82);
+    if(strcmp(lv_label_get_text(item),value)!=0)
+        lv_label_set_text(item,value);
 }
-static void timed_render(uint64_t current, bool force)
+static void timed_layout_rows(uint32_t ms,int index)
+{
+    /* Each timestamp is the boundary: at the next timestamp the next line
+       has already reached the center. Motion is continuous across the index
+       transition. Pausing the timeline also freezes the visual positions. */
+    uint32_t progress=0;
+    if(index>=0 && (size_t)(index+1)<timed_line_count){
+        const uint32_t start=timed_stamps[index];
+        const uint32_t end=timed_stamps[index+1];
+        if(end>start && ms>start){
+            const uint32_t duration=end-start;
+            const uint32_t elapsed=ms-start;
+            progress=(elapsed>=duration)?1024U:
+                (uint32_t)(((uint64_t)elapsed*1024U)/duration);
+        }
+    }
+    /* A whole row advances by 82px per lyric interval. The center line
+       stays onscreen as the upper line during the NEXT interval. */
+    const int travel=(int)(progress*82U/1024U);
+    const int centers[4]={-82,0,82,164};
+    for(int slot=0;slot<4;slot++){
+        if(!timed_rows[slot])continue;
+        int y=centers[slot]-travel;
+        if(timed_row_y[slot]!=(int16_t)y){
+            lv_obj_align(timed_rows[slot],LV_ALIGN_CENTER,0,y);
+            timed_row_y[slot]=(int16_t)y;
+        }
+    }
+}
+static void timed_render(uint64_t current,bool force)
 {
     if(!timed_lyrics_mode||!timed_status)return;
     if(timed_hint && timed_hint_until_ms && current>=timed_hint_until_ms){
@@ -1103,7 +1146,7 @@ static void timed_render(uint64_t current, bool force)
         lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
         timed_controls_until_ms=0;
     }
-    /* Read cached AXP2101 state (never I2C from the UI task); repaint only on changes. */
+    /* Cached AXP2101 status only: no I2C on the UI task. */
     if(timed_battery){
         lf_power_state_t battery={0};
         char battery_text[40];
@@ -1129,9 +1172,6 @@ static void timed_render(uint64_t current, bool force)
     if(state.attempts!=timed_scan_attempt || state.state!=LF_RECOG_MATCH ||
        strcmp(state.lyrics_state,"synced")!=0){
         timed_lyrics_mode=false;
-        timed_set_row(0," ");
-        timed_set_row(1,"New scan started");
-        timed_set_row(2,"Open lyrics after recognition");
         return;
     }
     const uint32_t ms=lf_lyric_clock_position(&timed_clock,current);
@@ -1141,34 +1181,38 @@ static void timed_render(uint64_t current, bool force)
         if(!timed_clock.started)
             snprintf(info,sizeof info,"HOLD TO OPEN ALIGNMENT CONTROLS");
         else{
-            const int64_t a=timed_clock.correction_ms<0?
+            const int64_t offset=timed_clock.correction_ms<0?
                 -(int64_t)timed_clock.correction_ms:(int64_t)timed_clock.correction_ms;
             snprintf(info,sizeof info,"%s %02lu:%02lu  |  offset %c%ld.%01lds",
                 timed_estimated?"ESTIMATED":"MANUAL",
                 (unsigned long)(second/60),(unsigned long)(second%60),
                 timed_clock.correction_ms<0?'-':'+',
-                (long)(a/1000),(long)((a%1000)/100));
+                (long)(offset/1000),(long)((offset%1000)/100));
         }
-        lv_label_set_text(timed_status,info);
+        if(strcmp(lv_label_get_text(timed_status),info)!=0)
+            lv_label_set_text(timed_status,info);
         timed_last_second=second;
     }
     const int index=timed_clock.started?
         lf_lyric_clock_line_at(timed_stamps,timed_line_count,ms):-1;
     if(force||index!=timed_active_index){
-        for(int slot=0;slot<3;slot++){
+        for(int slot=0;slot<4;slot++){
             const int line_index=index+slot-1;
             lf_lyric_line_t line={0};
             if(line_index>=0 && (size_t)line_index<timed_line_count &&
                lf_recog_lyric_line((uint32_t)line_index,&line))
                 timed_set_row(slot,line.text[0]?line.text:" ");
             else if(slot==1 && index<0)
-                timed_set_row(slot,"Waiting for first lyric");
+                timed_set_row(slot,timed_clock.started?
+                    "Waiting for first lyric":"Hold for sync controls");
             else
                 timed_set_row(slot," ");
         }
         timed_active_index=index;
     }
+    if(timed_clock.started)timed_layout_rows(ms,index);
 }
+
 static void timed_start(lv_event_t *e)
 {
     (void)e;
@@ -1254,7 +1298,7 @@ static lv_obj_t *timed_line_label(int slot,int width,uint32_t color)
     lv_obj_set_style_text_line_space(line,3,0);
     lv_obj_add_flag(line,LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_flag(line,LV_OBJ_FLAG_GESTURE_BUBBLE);
-    lv_obj_align(line,LV_ALIGN_CENTER,0,slot==0?-78:slot==1?0:82);
+    lv_obj_align(line,LV_ALIGN_CENTER,0,(slot-1)*82);
     return line;
 }
 static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
@@ -1319,9 +1363,10 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_align(timed_battery,LV_ALIGN_TOP_MID,0,47);
     lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_GESTURE_BUBBLE);
-    timed_rows[0]=timed_line_label(0,352,0x7187A1);
+    timed_rows[0]=timed_line_label(0,352,0x647A91);
     timed_rows[1]=timed_line_label(1,398,0xFFFFFF);
-    timed_rows[2]=timed_line_label(2,352,0x7187A1);
+    timed_rows[2]=timed_line_label(2,370,0xA9C2D8);
+    timed_rows[3]=timed_line_label(3,326,0x637E96);
     timed_hint=label(screen,"Long-press for controls",374,&lv_font_montserrat_16,0x526B84);
     lv_obj_set_style_text_font(timed_hint,&lv_font_montserrat_16,0);
     lv_obj_set_width(timed_hint,260);
@@ -1372,6 +1417,7 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_add_event_cb(screen,timed_toggle_controls,LV_EVENT_LONG_PRESSED,NULL);
     paused=!timed_clock.running;
     timed_active_index=-999;timed_last_second=UINT32_MAX;
+    for(size_t i=0;i<4;i++)timed_row_y[i]=INT16_MIN;
     timed_last_update_ms=0;
     timed_render(now_ms(),true);
 }
@@ -2469,7 +2515,7 @@ static void on_tick(lv_timer_t *timer)
         return;
     }
     if(page==1 && timed_lyrics_mode){
-        if(current-timed_last_update_ms>=200){
+        if(current-timed_last_update_ms>=65){
             timed_last_update_ms=current;
             timed_render(current,false);
         }
