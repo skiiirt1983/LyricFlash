@@ -1,6 +1,7 @@
 #include "network.h"
 #include "ui.h"
 #include "settings.h"
+#include "power.h"
 #include "weather.h"
 #include "diagnostics.h"
 #include "mic_probe.h"
@@ -242,6 +243,23 @@ static esp_err_t send_json(httpd_req_t *req, cJSON *root)
     esp_err_t result = httpd_resp_sendstr(req, body);
     free(body);
     return result;
+}
+
+/* Lightweight cache-only endpoint: never run a slow hardware/diagnostics
+ * probe just to paint the battery icon in the Device Studio header. */
+static esp_err_t handle_power_cached(httpd_req_t *req)
+{
+    lf_power_state_t battery={0};
+    const bool valid=lf_power_cached(&battery);
+    cJSON *root=cJSON_CreateObject();
+    if(!root)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddBoolToObject(root,"valid",valid);
+    if(valid){
+        cJSON_AddNumberToObject(root,"percentage",battery.percentage);
+        cJSON_AddBoolToObject(root,"charging",battery.charging);
+        cJSON_AddBoolToObject(root,"usb_connected",battery.usb_connected);
+    }
+    return send_json(req,root);
 }
 
 static esp_err_t handle_settings_page(httpd_req_t *req)
@@ -1293,7 +1311,7 @@ static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
-    cfg.max_uri_handlers=25; /* Includes three dedicated Weather routes. */
+    cfg.max_uri_handlers=26; /* Three Weather routes + fast cached power endpoint. */
     cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
@@ -1305,6 +1323,7 @@ static bool serve(void)
         {.uri="/weather",.method=HTTP_GET,.handler=handle_weather_page},
         {.uri="/api/weather",.method=HTTP_GET,.handler=handle_weather_get},
         {.uri="/api/weather",.method=HTTP_POST,.handler=handle_weather_post},
+        {.uri="/api/power",.method=HTTP_GET,.handler=handle_power_cached},
         {.uri="/api/preferences",.method=HTTP_GET,.handler=handle_preferences_get},
         {.uri="/api/preferences",.method=HTTP_POST,.handler=handle_preferences_post},
         {.uri="/api/basic",.method=HTTP_GET,.handler=handle_basic_get},
