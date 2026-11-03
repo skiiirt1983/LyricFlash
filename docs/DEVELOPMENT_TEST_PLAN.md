@@ -14,6 +14,15 @@
 
 Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` and `0.8.29` failed screen/touch on physical hardware. `0.8.30` is the targeted display recovery candidate and is not hardware-proven until the user verifies it. Keep 0.8.26 as rollback. Do not merge or publish a stable v1.0 release until the device tests pass. Each functional milestone uses **one isolated change and one gated compile after preflight**, followed by a specific device acceptance test.
 
+## Physical hardware result: Alpha 0.8.37 — first successful real AudD song recognition
+
+- **PASS (user-confirmed):** Manual 10-second song identification through the Waveshare 1.75-inch ESP32-S3's two-microphone capture → stereo WAV → HTTPS AudD request → parsed title/artist → device Web UI succeeded.
+- **Observed response:** `Identified: A Holly Jolly Christmas (Single Version) — Burl Ives`.
+- **Implications:** Actual captured audio is sufficiently recognizable for at least one genuine song. The rare near-rail events observed in 0.8.33–0.8.36 did not prevent this recognition; their electrical origin remains unconfirmed. This is not proof of perfect PCM fidelity or universal recognition.
+- **Next acceptance gate:** During an additional explicit scan, tap **Stop** while capture is active and confirm capture ends with no upload/result from that canceled attempt. Do not repeat the mic amplitude diagnostics.
+- **After Stop verification:** Integrate identified title/artist into LRCLIB query and synced lyrics while preserving manual mic activation, opt-in AudD upload, saved token, clock/render performance, OTA current reinstall and Wi-Fi/NVS. API quota/error handling remains important.
+- **No firmware change or compilation triggered** by recording this hardware result.
+
 ## Current milestone: Alpha 0.8.37 — first manual AudD song identification
 
 - **Scope:** one explicit Start in Device Settings Web UI records up to 10 seconds of 24kHz, 16-bit, two-channel stereo audio (physical MIC1 and MIC2, TDM slots 0 and 2). WAV stays temporarily in ESP32 PSRAM and is sent directly to `https://api.audd.io/` only after manual confirmation. AudD requires a personal API token entered in the local Web UI; token is persisted in a separate NVS namespace but never returned via GET, logged, compiled in firmware, or published. No background recording, local audio download URL, automatic retries, proxy through Pi or GitHub, or changes to gain and display. Audio and key buffers are cleared before being freed.
