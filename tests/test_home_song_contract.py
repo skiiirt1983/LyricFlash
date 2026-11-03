@@ -18,7 +18,7 @@ end=ui.index("\nstatic void render_home(void)",start)
 home=ui[start:end]
 refresh=ui[ui.index("static void home_refresh(uint64_t current)\n{"):start]
 on_click=ui[ui.index("static void on_home_scan(lv_event_t *e)\n{"):ui.index("static lv_obj_t *home_decor_ring")]
-check('LF_VERSION "0.8.40-alpha"' in version,"0.8.40 alpha version not set")
+check('LF_VERSION "0.8.41-alpha"' in version,"0.8.41 alpha version not set")
 check('home_scan_button=lv_button_create(parent);' in home,"Missing single circular play surface")
 check(home.count('lv_button_create(')==1,"Home must expose only one visual control")
 check('button(parent,' not in home,"Old rectangular navigation buttons still on Home")
@@ -56,4 +56,4 @@ check('if(song.state==LF_RECOG_MATCH && song.lyric_lines>0' in ui and
 check('No background listening' in recognition or
       'lf_recog_start(void)' in recognition,
       "Manual recognition entrypoint missing")
-print("PASS: LyricFlash 0.8.40 large Play Home source contracts")
+print("PASS: LyricFlash 0.8.41 large Play Home source contracts")
