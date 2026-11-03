@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-#define LF_CONFIG_SCHEMA 9U
+#define LF_CONFIG_SCHEMA 10U
 #define LF_CONFIG_NS "lyric_ui"
 
 typedef struct {
