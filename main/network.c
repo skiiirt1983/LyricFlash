@@ -9,6 +9,7 @@
 #include "recognition.h"
 #include "version.h"
 #include "web_basic_html.h"
+#include "basic_open_face.h"
 #include "web_device_html.h"
 #include "web_weather_html.h"
 #include "esp_https_ota.h"
@@ -247,6 +248,20 @@ static esp_err_t send_json(httpd_req_t *req, cJSON *root)
 
 /* Lightweight cache-only endpoint: never run a slow hardware/diagnostics
  * probe just to paint the battery icon in the Device Studio header. */
+/* The Clock Studio requests the SAME low-resolution, open-licensed digit
+ * glyphs used by firmware. Rendering them from this endpoint prevents the
+ * phone preview and AMOLED from showing different typeface families. */
+static esp_err_t handle_clock_font_bitmaps(httpd_req_t *req)
+{
+    cJSON *payload=cJSON_CreateObject();
+    if(!payload)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddNumberToObject(payload,"width",LF_OPEN_FACE_W);
+    cJSON_AddNumberToObject(payload,"height",LF_OPEN_FACE_H);
+    cJSON_AddNumberToObject(payload,"families",LF_OPEN_FACE_FAMILIES);
+    cJSON_AddStringToObject(payload,"digits",lf_open_face_b64);
+    httpd_resp_set_hdr(req,"Cache-Control","max-age=3600");
+    return send_json(req,payload);
+}
 static esp_err_t handle_power_cached(httpd_req_t *req)
 {
     lf_power_state_t battery={0};
@@ -1326,7 +1341,7 @@ static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
-    cfg.max_uri_handlers=26; /* Three Weather routes + fast cached power endpoint. */
+    cfg.max_uri_handlers=27; /* Weather, cached power and shared clock-glyph lookup. */
     cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
@@ -1339,6 +1354,7 @@ static bool serve(void)
         {.uri="/api/weather",.method=HTTP_GET,.handler=handle_weather_get},
         {.uri="/api/weather",.method=HTTP_POST,.handler=handle_weather_post},
         {.uri="/api/power",.method=HTTP_GET,.handler=handle_power_cached},
+        {.uri="/api/clock-fonts",.method=HTTP_GET,.handler=handle_clock_font_bitmaps},
         {.uri="/api/preferences",.method=HTTP_GET,.handler=handle_preferences_get},
         {.uri="/api/preferences",.method=HTTP_POST,.handler=handle_preferences_post},
         {.uri="/api/basic",.method=HTTP_GET,.handler=handle_basic_get},
