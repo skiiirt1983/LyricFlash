@@ -22,6 +22,7 @@ Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` an
 - **Field acceptance:** Install 0.8.39, confirm clock/swipes/Wi-Fi still responsive, run one manual recognition from Device Settings Web UI, then on the round screen tap **LYRICS**. Confirm recognized title/artist and real lyric lines (not demo text), tap START at 0:00 on external player, watch highlight advance at the LRCLIB times, check ±2s shift, Pause/Resume, and HOME return with no black screen or frozen input. Send results or photo. Real synchronization is still manual.
 - **Privacy and OTA:** no background microphone reads, no extra AudD/LRCLIB calls when opening the viewer, no raw audio/token exposure, and preserve saved settings, HTTPS OTA and Current reinstall. No stable version without on-device acceptance.
 - **Preflight gate:** native clock start/pause/seek/line selection tests and existing recognition/LRCLIB/OTA/UI suite. Only one firmware compile after all green.
+- **Preflight PASS (source-only commit 89164a6febb0d7d25e9039a8a9acde49e81de8a6):** 702 source assertions, native 0.8.39 clock and 0.8.38 LRC tests, source/display/OTA and firmware picker/browser runtime, all prior microphone/AudD power/NVS safety checks. One firmware compile requested with a documentation-only trigger; no C source modifications.
 
 ## Hardware test PASS: Alpha 0.8.38 — AudD to LRCLIB timestamped lyrics
 
