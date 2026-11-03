@@ -1453,6 +1453,67 @@ static lv_obj_t *timed_line_label(int slot,int width,uint32_t color)
     lv_obj_align(line,LV_ALIGN_CENTER,0,(slot-1)*82);
     return line;
 }
+/* Native rendering of the Device Studio's cloud + lightning icon. It uses
+ * small solid shapes rather than loading a new external font or image file. */
+static lv_obj_t *lyric_logo_circle(lv_obj_t *parent,int x,int y,int diameter)
+{
+    lv_obj_t *c=lv_obj_create(parent);
+    lv_obj_set_size(c,diameter,diameter);
+    lv_obj_align(c,LV_ALIGN_TOP_LEFT,x,y);
+    lv_obj_set_style_bg_color(c,lv_color_hex(0xFFFFFF),0);
+    lv_obj_set_style_bg_opa(c,LV_OPA_COVER,0);
+    lv_obj_set_style_radius(c,LV_RADIUS_CIRCLE,0);
+    lv_obj_set_style_border_width(c,0,0);
+    lv_obj_set_style_pad_all(c,0,0);
+    lv_obj_remove_flag(c,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(c,LV_OBJ_FLAG_SCROLLABLE);
+    return c;
+}
+static void lyric_logo_at_top(lv_obj_t *parent)
+{
+    lv_obj_t *tile=lv_obj_create(parent);
+    lv_obj_set_size(tile,60,60);
+    lv_obj_align(tile,LV_ALIGN_TOP_MID,0,26);
+    lv_obj_set_style_bg_color(tile,lv_color_hex(0x0A2859),0);
+    lv_obj_set_style_bg_opa(tile,LV_OPA_COVER,0);
+    lv_obj_set_style_radius(tile,15,0);
+    lv_obj_set_style_border_width(tile,1,0);
+    lv_obj_set_style_border_color(tile,lv_color_hex(0x3662A4),0);
+    lv_obj_set_style_pad_all(tile,0,0);
+    lv_obj_remove_flag(tile,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(tile,LV_OBJ_FLAG_SCROLLABLE);
+    /* Cloud silhouette, matching the Web UI's logo proportions. */
+    lyric_logo_circle(tile,9,19,21);
+    lyric_logo_circle(tile,19,9,29);
+    lyric_logo_circle(tile,34,19,18);
+    lv_obj_t *cloud_base=lv_obj_create(tile);
+    lv_obj_set_size(cloud_base,38,14);
+    lv_obj_align(cloud_base,LV_ALIGN_TOP_LEFT,12,25);
+    lv_obj_set_style_bg_color(cloud_base,lv_color_hex(0xFFFFFF),0);
+    lv_obj_set_style_bg_opa(cloud_base,LV_OPA_COVER,0);
+    lv_obj_set_style_radius(cloud_base,6,0);
+    lv_obj_set_style_border_width(cloud_base,0,0);
+    lv_obj_set_style_pad_all(cloud_base,0,0);
+    lv_obj_remove_flag(cloud_base,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(cloud_base,LV_OBJ_FLAG_SCROLLABLE);
+    static const lv_point_precise_t bolt[]={
+        {31,27},{23,41},{31,38},{29,53},{46,32},{36,35},{39,26}
+    };
+    lv_obj_t *strike=lv_line_create(tile);
+    lv_line_set_points(strike,bolt,7);
+    lv_obj_set_style_line_color(strike,lv_color_hex(0xFFD12B),0);
+    lv_obj_set_style_line_width(strike,4,0);
+    lv_obj_set_style_line_rounded(strike,true,0);
+    lv_obj_set_style_bg_opa(strike,LV_OPA_TRANSP,0);
+    lv_obj_remove_flag(strike,LV_OBJ_FLAG_CLICKABLE);
+    static const lv_point_precise_t note[]={{48,41},{48,50},{53,48},{53,40},{48,41}};
+    lv_obj_t *music=lv_line_create(tile);
+    lv_line_set_points(music,note,5);
+    lv_obj_set_style_line_color(music,lv_color_hex(0x99D9FF),0);
+    lv_obj_set_style_line_width(music,2,0);
+    lv_obj_set_style_bg_opa(music,LV_OPA_TRANSP,0);
+    lv_obj_remove_flag(music,LV_OBJ_FLAG_CLICKABLE);
+}
 static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
 {
     page=1;
@@ -1501,18 +1562,15 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_style_pad_all(ring,0,0);
     lv_obj_remove_flag(ring,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(ring,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *wordmark=label(screen,"LYRICFLASH",106,&lv_font_montserrat_16,0x65829D);
-    lv_obj_set_style_text_font(wordmark,&lv_font_montserrat_16,0);
-    lv_obj_set_style_text_letter_space(wordmark,3,0);
-    lv_obj_set_width(wordmark,270);
+    lyric_logo_at_top(screen);
     /* A compact icon + percent only; four-segment detail stays in Web UI. */
     timed_battery=lv_label_create(screen);
     lv_label_set_text(timed_battery,LV_SYMBOL_BATTERY_EMPTY " --%");
     lv_obj_set_style_text_font(timed_battery,&lv_font_montserrat_20,0);
     lv_obj_set_style_text_color(timed_battery,lv_color_hex(0xAFC6DC),0);
-    lv_obj_set_width(timed_battery,150);
-    lv_obj_set_style_text_align(timed_battery,LV_TEXT_ALIGN_CENTER,0);
-    lv_obj_align(timed_battery,LV_ALIGN_TOP_MID,0,47);
+    lv_obj_set_width(timed_battery,116);
+    lv_obj_set_style_text_align(timed_battery,LV_TEXT_ALIGN_RIGHT,0);
+    lv_obj_align(timed_battery,LV_ALIGN_TOP_RIGHT,-24,42);
     lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_GESTURE_BUBBLE);
     timed_rows[0]=timed_line_label(0,352,0x647A91);
