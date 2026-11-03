@@ -43,10 +43,10 @@ print("PASS: direct OTA host and release picker contract")
 # An older version can be present on-device with working Web UI.
 # The recovery build must be DISCOVERABLE as a direct OTA update, not only an
 # Actions artifact; do not accidentally skip alpha publication again.
-assert "feature/0.8.35-three-version-ota-picker" in workflow, "Recovery branch not listed in build rules"
+assert "feature/0.8.35-current-ota-reinstall" in workflow, "Recovery branch not listed in build rules"
 assert "Publish and verify direct HTTPS alpha OTA image" in workflow
 assert "Publish validated development OTA as an alpha prerelease" in workflow
-assert "github.ref == 'refs/heads/feature/0.8.35-three-version-ota-picker'" in workflow
+assert "github.ref == 'refs/heads/feature/0.8.35-current-ota-reinstall'" in workflow
 assert "--prerelease --latest=false" in workflow
 assert "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin" in workflow
 assert "gh release create" in workflow
