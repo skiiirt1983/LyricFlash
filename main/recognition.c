@@ -53,11 +53,22 @@ static void status(lf_recog_state_t state,const char *message)
     portEXIT_CRITICAL(&result_mux);
     atomic_store(&active_state,state);
 }
-static void set_count(uint32_t frames)
+/* Feed only a bounded scalar envelope to the screen, not PCM. The actual
+ * explicit AudD recording remains unchanged and never runs in the UI task. */
+static void set_count(uint32_t frames,const int16_t *tdm)
 {
+    uint32_t total=0;
+    for(size_t i=0;i<LF_SCAN_TDM_SAMPLES;i+=4){
+        int32_t a=tdm[i],b=tdm[i+2];
+        total+=(uint32_t)(a<0?-a:a);
+        total+=(uint32_t)(b<0?-b:b);
+    }
+    const uint32_t average=total/(2*LF_SCAN_TDM_FRAMES);
+    const uint8_t level=(uint8_t)(average/14U>100U?100U:average/14U);
     portENTER_CRITICAL(&result_mux);
     result.captured_frames=frames;
     result.capture_seconds=frames/LF_SCAN_RATE;
+    result.capture_visual_level=level;
     portEXIT_CRITICAL(&result_mux);
 }
 bool lf_recog_busy(void)
@@ -367,9 +378,12 @@ static void worker(void *arg)
         }
         lf_scan_audio_metrics_add(&metrics,tdm,LF_SCAN_TDM_SAMPLES);
         frames+=LF_SCAN_TDM_FRAMES;
-        set_count(frames);
+        set_count(frames,tdm);
     }
     (void)esp_codec_dev_close(codec);opened=false;
+    portENTER_CRITICAL(&result_mux);
+    result.capture_visual_level=0; /* no level after manual capture ends */
+    portEXIT_CRITICAL(&result_mux);
     publish_capture_metrics(&metrics);metrics_published=true;
     if(atomic_load(&stop_flag))goto done;
     if(frames<LF_RECOG_MIN_FRAMES){
