@@ -23,7 +23,7 @@ for condition in ("current-song->stage_started_ms>30000U",
                   "current-song->stage_started_ms>80000U",
                   "current-song->stage_started_ms>40000U"):
     assert condition in ui,condition
-assert 'home_warning="Identification timed out";' in ui
+assert 'home_warning=upload_stalled?"Upload stalled - retry":"Identification timed out";' in ui
 assert "lf_recog_stop(); /* cooperative cancel" in ui
 assert "home_stalled_attempt==song->attempts" in ui
 assert "lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN)" in ui
