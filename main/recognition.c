@@ -5,6 +5,7 @@
 #include "service_errors.h"
 #include "lrclib_client.h"
 #include "lyrics.h"
+#include "lyric_sync.h"
 #include "bsp/esp32_s3_touch_amoled_1_75.h"
 #include "esp_codec_dev.h"
 #include "esp_http_client.h"
@@ -243,6 +244,10 @@ static void parse_recognition(int http_code,const char *json)
         strcmp(status_field->valuestring,"success")==0;
     const cJSON *title=cJSON_IsObject(song)?cJSON_GetObjectItemCaseSensitive(song,"title"):NULL;
     const cJSON *artist=cJSON_IsObject(song)?cJSON_GetObjectItemCaseSensitive(song,"artist"):NULL;
+    const cJSON *timecode=cJSON_IsObject(song)?cJSON_GetObjectItemCaseSensitive(song,"timecode"):NULL;
+    uint32_t position_ms=0;
+    const bool has_timecode=cJSON_IsString(timecode)&&
+        lf_sync_parse_timecode_ms(timecode->valuestring,&position_ms);
     const bool has_match=success&&cJSON_IsString(title)&&cJSON_IsString(artist)&&
         title->valuestring[0]&&artist->valuestring[0];
     const lf_service_error_t mapped=lf_recognition_status(http_code,provider_code,has_match);
@@ -252,6 +257,8 @@ static void parse_recognition(int http_code,const char *json)
     if(has_match){
         snprintf(result.title,sizeof result.title,"%s",title->valuestring);
         snprintf(result.artist,sizeof result.artist,"%s",artist->valuestring);
+        result.audd_timecode_valid=has_timecode;
+        result.audd_timecode_ms=has_timecode?position_ms:0;
     }
     portEXIT_CRITICAL(&result_mux);
     if(has_match)status(LF_RECOG_MATCH,"Song identified");
@@ -345,6 +352,9 @@ static void worker(void *arg)
         status(LF_RECOG_ERROR,"Microphone gain setup failed");goto done;
     }
     const int64_t start=esp_timer_get_time();
+    portENTER_CRITICAL(&result_mux);
+    result.capture_start_ms=(uint64_t)(start/1000LL);
+    portEXIT_CRITICAL(&result_mux);
     while(!atomic_load(&stop_flag)&&frames+LF_SCAN_TDM_FRAMES<=LF_SCAN_MAX_FRAMES &&
           esp_timer_get_time()-start<(int64_t)LF_SCAN_SECONDS*1000000LL){
         int16_t tdm[LF_SCAN_TDM_SAMPLES]={0};
