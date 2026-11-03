@@ -17,6 +17,9 @@ int main(void)
     /* Virgin NVS must use the NEW default (70), not migrate a nonexistent
        legacy preference as if it came from alpha 0.8.4. */
     assert(initial.face_background[0]==0x070F14);
+    assert(initial.face_battery_y[0]==-137);
+    assert(initial.face_battery_y[2]==-109);
+
     assert(initial.charging_color==0x42DC89);
     initial.brightness=77;
     initial.scroll_speed=0;
@@ -36,6 +39,9 @@ int main(void)
     initial.face_accent[2]=0xF0AC22;
     initial.face_show_seconds[0]=0;
     initial.face_24h[1]=1;
+    initial.face_battery_x[2]=39;
+    initial.face_battery_y[2]=-72;
+
     assert(lf_settings_save(&initial)==ESP_OK);
     assert(mock_nvs_count()>=10);
     // Simulated reboot or app-slot switch: new struct, same NVS storage.
@@ -49,6 +55,8 @@ int main(void)
     assert(next.face_background[0]==0x445566);
     assert(next.face_accent[2]==0xF0AC22);
     assert(next.face_show_seconds[0]==0 && next.face_24h[1]==1);
+    assert(next.face_battery_x[2]==39 && next.face_battery_y[2]==-72);
+
     // Corrupt/out-of-range values must be normalized, never require erasing NVS.
     nvs_handle_t h; assert(nvs_open(LF_CONFIG_NS,NVS_READWRITE,&h)==ESP_OK);
     assert(nvs_set_u8(h,"brightness",255)==ESP_OK);
