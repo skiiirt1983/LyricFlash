@@ -580,19 +580,23 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     current.basic_background=current.face_background[5];
     current.basic_foreground=current.face_foreground[5];
     current.basic_show_date=current.face_show_date[5];
-    /* If Clock Studio changed a place name without selecting coordinates,
-       discard stale coordinates rather than silently forecasting elsewhere. */
-    if(strcmp(weather.city,city->valuestring)!=0){
-        weather.has_coordinates=false;
-        weather.latitude_e5=0;
-        weather.longitude_e5=0;
+    /* Weather is independently managed at /weather. Clock Studio may
+       still submit its hidden legacy fields, but must NEVER revert a newer
+       Weather page selection. Only explicit legacy clients opting in can
+       update weather together with clocks. */
+    const bool update_weather=cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root,"update_weather"));
+    if(update_weather) {
+        if(strcmp(weather.city,city->valuestring)!=0){
+            weather.has_coordinates=false;
+            weather.latitude_e5=0;
+            weather.longitude_e5=0;
+        }
+        strlcpy(weather.city, city->valuestring, sizeof weather.city);
+        weather.interval_minutes = (uint16_t)interval;
+        weather.enabled = weather_enabled != 0;
     }
-    strlcpy(weather.city, city->valuestring, sizeof weather.city);
-    weather.interval_minutes = (uint16_t)interval;
-    weather.enabled = weather_enabled != 0;
     cJSON_Delete(root);
-
-    if (!lf_weather_save_config(&weather)) {
+    if(update_weather && !lf_weather_save_config(&weather)) {
         lf_diag_error("settings", "Weather NVS save failed");
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot save weather settings");
         return ESP_FAIL;
