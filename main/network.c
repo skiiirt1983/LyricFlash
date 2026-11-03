@@ -9,6 +9,7 @@
 #include "version.h"
 #include "web_basic_html.h"
 #include "web_device_html.h"
+#include "web_weather_html.h"
 #include "esp_https_ota.h"
 #include "esp_crt_bundle.h"
 #include <stdatomic.h>
@@ -250,6 +251,88 @@ static esp_err_t handle_settings_page(httpd_req_t *req)
     return httpd_resp_send(req, lf_basic_settings_html, HTTPD_RESP_USE_STRLEN);
 }
 
+/* Weather has its own page and its own NVS write path. Selecting a
+ * geocoding result persists exact coordinates for mountain resort names. */
+static esp_err_t handle_weather_page(httpd_req_t *req)
+{
+    httpd_resp_set_type(req,"text/html; charset=utf-8");
+    httpd_resp_set_hdr(req,"Cache-Control","no-store");
+    return httpd_resp_send(req,lf_weather_settings_html,HTTPD_RESP_USE_STRLEN);
+}
+static esp_err_t handle_weather_get(httpd_req_t *req)
+{
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    char strip[80]={0};
+    lf_weather_get_strip(strip,sizeof strip);
+    cJSON *root=cJSON_CreateObject();
+    if(!root)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddBoolToObject(root,"enabled",cfg.enabled);
+    cJSON_AddStringToObject(root,"city",cfg.city);
+    cJSON_AddNumberToObject(root,"interval_minutes",cfg.interval_minutes);
+    cJSON_AddBoolToObject(root,"has_coordinates",cfg.has_coordinates);
+    cJSON_AddNumberToObject(root,"latitude_e5",cfg.has_coordinates?cfg.latitude_e5:0);
+    cJSON_AddNumberToObject(root,"longitude_e5",cfg.has_coordinates?cfg.longitude_e5:0);
+    cJSON_AddStringToObject(root,"forecast",strip);
+    return send_json(req,root);
+}
+static esp_err_t handle_weather_post(httpd_req_t *req)
+{
+    if(req->content_len<2 || req->content_len>480)
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid weather request length");
+    char body[481]={0};
+    int total=0,retries=0;
+    while(total<req->content_len){
+        int n=httpd_req_recv(req,body+total,req->content_len-total);
+        if(n==HTTPD_SOCK_ERR_TIMEOUT && ++retries<4)continue;
+        if(n<=0)return httpd_resp_send_err(req,HTTPD_408_REQ_TIMEOUT,"Weather request timeout");
+        total+=n;
+        retries=0;
+    }
+    cJSON *json=cJSON_Parse(body);
+    const cJSON *city=json?cJSON_GetObjectItemCaseSensitive(json,"city"):NULL;
+    const cJSON *enabled=json?cJSON_GetObjectItemCaseSensitive(json,"enabled"):NULL;
+    const cJSON *exact=json?cJSON_GetObjectItemCaseSensitive(json,"has_coordinates"):NULL;
+    const cJSON *interval=json?cJSON_GetObjectItemCaseSensitive(json,"interval_minutes"):NULL;
+    const cJSON *lat=json?cJSON_GetObjectItemCaseSensitive(json,"latitude_e5"):NULL;
+    const cJSON *lon=json?cJSON_GetObjectItemCaseSensitive(json,"longitude_e5"):NULL;
+    bool valid=cJSON_IsObject(json)&&cJSON_IsString(city)&&city->valuestring &&
+        strlen(city->valuestring)>0 && strlen(city->valuestring)<=LF_WEATHER_CITY_MAX &&
+        cJSON_IsBool(enabled)&&cJSON_IsBool(exact)&&cJSON_IsNumber(interval)&&
+        (interval->valueint==15||interval->valueint==30||
+         interval->valueint==60||interval->valueint==120)&&
+        interval->valuedouble==(double)interval->valueint;
+    if(valid){
+        for(const char *p=city->valuestring;*p;p++)
+            if((unsigned char)*p<32)valid=false;
+    }
+    const bool has=valid&&cJSON_IsTrue(exact);
+    if(has)valid=cJSON_IsNumber(lat)&&cJSON_IsNumber(lon)&&
+        lat->valuedouble==(double)lat->valueint &&
+        lon->valuedouble==(double)lon->valueint &&
+        lat->valueint>=-9000000 && lat->valueint<=9000000 &&
+        lon->valueint>=-18000000 && lon->valueint<=18000000;
+    if(!valid){
+        cJSON_Delete(json);
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid weather settings");
+    }
+    lf_weather_config_t cfg={0};
+    cfg.enabled=cJSON_IsTrue(enabled);
+    cfg.interval_minutes=(uint16_t)interval->valueint;
+    strlcpy(cfg.city,city->valuestring,sizeof cfg.city);
+    cfg.has_coordinates=has;
+    if(has){
+        cfg.latitude_e5=lat->valueint;
+        cfg.longitude_e5=lon->valueint;
+    }
+    cJSON_Delete(json);
+    if(!lf_weather_save_config(&cfg))
+        return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Could not save weather");
+    cJSON *ack=cJSON_CreateObject();
+    cJSON_AddBoolToObject(ack,"saved",true);
+    return send_json(req,ack);
+}
+
 static bool number_in_range(const cJSON *root, const char *name,
                             int minimum, int maximum, int *out)
 {
@@ -463,6 +546,13 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     current.basic_background=current.face_background[5];
     current.basic_foreground=current.face_foreground[5];
     current.basic_show_date=current.face_show_date[5];
+    /* If Clock Studio changed a place name without selecting coordinates,
+       discard stale coordinates rather than silently forecasting elsewhere. */
+    if(strcmp(weather.city,city->valuestring)!=0){
+        weather.has_coordinates=false;
+        weather.latitude_e5=0;
+        weather.longitude_e5=0;
+    }
     strlcpy(weather.city, city->valuestring, sizeof weather.city);
     weather.interval_minutes = (uint16_t)interval;
     weather.enabled = weather_enabled != 0;
@@ -1165,7 +1255,7 @@ static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
-    cfg.max_uri_handlers=22; /* Four additional manual song-recognition routes. */
+    cfg.max_uri_handlers=25; /* Includes three dedicated Weather routes. */
     cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
@@ -1174,6 +1264,9 @@ static bool serve(void)
         {.uri="/api/install",.method=HTTP_POST,.handler=handle_github_install},
         {.uri="/api/info",.method=HTTP_GET,.handler=handle_info},
         {.uri="/settings",.method=HTTP_GET,.handler=handle_settings_page},
+        {.uri="/weather",.method=HTTP_GET,.handler=handle_weather_page},
+        {.uri="/api/weather",.method=HTTP_GET,.handler=handle_weather_get},
+        {.uri="/api/weather",.method=HTTP_POST,.handler=handle_weather_post},
         {.uri="/api/preferences",.method=HTTP_GET,.handler=handle_preferences_get},
         {.uri="/api/preferences",.method=HTTP_POST,.handler=handle_preferences_post},
         {.uri="/api/basic",.method=HTTP_GET,.handler=handle_basic_get},
