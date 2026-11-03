@@ -6,6 +6,7 @@ python3 tests/test_static_safety.py
 python3 tests/test_preflight_contracts.py
 python3 tests/test_home_song_contract.py
 python3 tests/test_recording_visual_contract.py
+python3 tests/test_recognition_stall_recovery_contract.py
 python3 tests/test_lyrics_layout_contract.py
 python3 tests/test_weather_studio_contract.py
 python3 tests/test_clock_layout_contract.py
