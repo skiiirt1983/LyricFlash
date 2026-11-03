@@ -894,8 +894,10 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
         lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
         return;
     }
-    lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
-    lv_obj_move_foreground(home_record_layer);
+    if(lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN)){
+        lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(home_record_layer);
+    }
     if(home_record_wave){
         if(capturing)lv_obj_remove_flag(home_record_wave,LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(home_record_wave,LV_OBJ_FLAG_HIDDEN);
@@ -938,113 +940,48 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
     const int amplitude=(int)song->capture_visual_level;
     /* Triple the visible gain, clamped to the ring interior (no overflow).
        Old visual was 72 + amplitude*wave/12; now x3. */
-    int y=130+amplitude*wave/4;
-    if(y<10)y=10;
-    if(y>250)y=250;
+    /* Quiet recordings previously moved just 5-12px: use a bounded
+       nonlinear visual gain so ordinary music makes obvious 50-100px arcs.
+       This changes display pixels only, never AudD audio or gain. */
+    int swing=amplitude>0?30+amplitude*4:0;
+    if(swing>115)swing=115;
+    int y=130+swing*wave/8;
+    if(y<12)y=12;
+    if(y>248)y=248;
     home_record_wave_points[home_record_wave_count++]=(lv_point_precise_t){
         (int32_t)(x>360U?360U:x),(int32_t)y};
     lv_line_set_points(home_record_wave,home_record_wave_points,
                        home_record_wave_count);
 }
 
+/* The Home screen is intentionally sparse. The Play symbol conveys idle,
+ * recording/stop and ready states; duplicate TAP PLAY/READY/MIC OFF captions
+ * caused overlap on the round AMOLED. Show only actionable errors beneath
+ * the large button, leaving recognized lyrics to open automatically. */
 static void home_refresh(uint64_t current)
 {
-    if(!home_scan_status||!home_song_title||!home_song_artist||
-       !home_lyric_line||!home_scan_button||!home_play_symbol||
-       !home_play_hint)return;
+    if(!home_song_title||!home_scan_button||!home_play_symbol)return;
     lf_recog_snapshot_t song={0};
     lf_recog_snapshot(&song);
     const bool busy=lf_recog_busy();
     home_recording_update(&song,current);
-    const char *status="READY TO LISTEN";
-    const char *title="Find your music";
-    const char *artist="One tap to identify the song";
-    const char *lyric="MIC OFF  /  TAP PLAY";
-    const char *hint="TAP TO IDENTIFY";
-
-    switch(song.state){
-    case LF_RECOG_CAPTURE:
-        status="LISTENING";
-        title="Finding your song";
-        artist="Microphone is active";
-        lyric="Recording up to 10 seconds";
-        hint="TAP TO STOP";
-        break;
-    case LF_RECOG_UPLOAD:
-        status="IDENTIFYING";
-        title="Recognizing audio";
-        artist="Microphone is off";
-        lyric="Checking the song...";
-        hint="TAP TO CANCEL";
-        break;
-    case LF_RECOG_LYRICS:
-        status="FINDING LYRICS";
-        title=song.title[0]?song.title:"Song identified";
-        artist=song.artist[0]?song.artist:"Checking synchronized lyrics";
-        lyric="Finding the timed lyric lines";
-        hint="TAP TO CANCEL";
-        break;
-    case LF_RECOG_MATCH:
-        status="SONG FOUND";
-        title=song.title[0]?song.title:"Song identified";
-        artist=song.artist[0]?song.artist:"";
-        hint="TAP TO SCAN AGAIN";
-        if(song.lyric_lines>0 && strcmp(song.lyrics_state,"synced")==0){
-            lyric="OPENING LYRICS";
-            status="TIMED LYRICS READY";
-            if(timed_clock.started && timed_scan_attempt==song.attempts &&
-               timed_line_count>0){
-                const uint32_t pos=lf_lyric_clock_position(&timed_clock,current);
-                const int index=lf_lyric_clock_line_at(timed_stamps,timed_line_count,pos);
-                status=timed_clock.running?"LYRICS PLAYING":"LYRICS PAUSED";
-                if(index>=0 && (size_t)index<timed_line_count){
-                    lf_lyric_line_t line={0};
-                    if(lf_recog_lyric_line((uint32_t)index,&line) && line.text[0])
-                        home_set_text(home_lyric_line,line.text);
-                    else home_set_text(home_lyric_line,"LYRICS LOADING");
-                }else home_set_text(home_lyric_line,"WAITING FOR FIRST LINE");
-                lyric=NULL;
-            }
-        }else{
-            lyric=" ";
-            hint="No Song Lyrics Available";
-            status="LYRICS UNAVAILABLE";
-        }
-        break;
-    case LF_RECOG_NO_MATCH:
-        status="NO MATCH";
-        title="Song not recognized";
-        artist="Try again closer to the music";
-        lyric=" ";
-        hint="Song Not Recognized";
-        break;
-    case LF_RECOG_ERROR:
-        status="SCAN UNAVAILABLE";
-        title="Couldn't identify this song";
-        artist=song.message[0]?song.message:"Check network and AudD settings";
-        lyric=" ";
-        hint="Identification Error";
-        break;
-    case LF_RECOG_STOPPED:
-        status="SCAN STOPPED";
-        title="Find your music";
-        artist="Tap play when you're ready";
-        lyric="MIC OFF";
-        break;
-    default:break;
+    const char *message="";
+    if(home_warning && current<home_warning_until_ms)
+        message=home_warning;
+    else {
+        home_warning=NULL;
+        if(song.state==LF_RECOG_MATCH &&
+           !(song.lyric_lines>0 && strcmp(song.lyrics_state,"synced")==0))
+            message="No Song Lyrics Available";
+        else if(song.state==LF_RECOG_NO_MATCH)
+            message="Song Not Recognized";
+        else if(song.state==LF_RECOG_ERROR)
+            message="Identification Error";
     }
-    if(home_warning && current<home_warning_until_ms){
-        status="CHECK CONNECTION";
-        artist=home_warning;
-    }else home_warning=NULL;
-    home_set_text(home_scan_status,status);
-    home_set_text(home_song_title,title);
-    home_set_text(home_song_artist,artist);
-    if(lyric)home_set_text(home_lyric_line,lyric);
-    home_set_text(home_play_hint,hint);
+    home_set_text(home_song_title,message);
+    if(message[0])lv_obj_remove_flag(home_song_title,LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(home_song_title,LV_OBJ_FLAG_HIDDEN);
     home_set_text(home_play_symbol,busy?LV_SYMBOL_STOP:LV_SYMBOL_PLAY);
-    /* A color change is cheap and conveys that the control now cancels
-     * the session; never continuously animate the circular background. */
     if(home_visual_busy!=(int)busy){
         home_visual_busy=(int)busy;
         lv_obj_set_style_bg_color(home_scan_button,
@@ -1054,10 +991,8 @@ static void home_refresh(uint64_t current)
     }
     home_last_refresh_ms=current;
     if(song.state==LF_RECOG_MATCH && song.lyric_lines>0 &&
-       strcmp(song.lyrics_state,"synced")==0 && song.attempts!=auto_open_attempt &&
-       !auto_open_pending){
-        /* Do not lose this auto-open if the asynchronous callback finds a
-           touch/gesture still active: it will retry after touch release. */
+       strcmp(song.lyrics_state,"synced")==0 &&
+       song.attempts!=auto_open_attempt && !auto_open_pending){
         auto_open_pending=true;
         lv_async_call(auto_open_lyrics_deferred,NULL);
     }
@@ -1084,7 +1019,7 @@ static lv_obj_t *home_decor_ring(lv_obj_t *parent,int diameter,uint32_t color)
 {
     lv_obj_t *ring=lv_obj_create(parent);
     lv_obj_set_size(ring,diameter,diameter);
-    lv_obj_align(ring,LV_ALIGN_CENTER,0,-15);
+    lv_obj_align(ring,LV_ALIGN_CENTER,0,12);
     lv_obj_set_style_radius(ring,LV_RADIUS_CIRCLE,0);
     lv_obj_set_style_bg_opa(ring,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(ring,2,0);
@@ -1100,8 +1035,8 @@ static void primary_render_home_content(lv_obj_t *parent)
     /* Native LyricFlash wordmark: white LYRIC, ice-blue FLASH, small
        cloud-and-bolt mark. This is ONLY on Home, never over song lyrics. */
     lv_obj_t *mark=lv_obj_create(parent);
-    lv_obj_set_size(mark,43,43);
-    lv_obj_align(mark,LV_ALIGN_TOP_MID,-153,17);
+    lv_obj_set_size(mark,58,58);
+    lv_obj_align(mark,LV_ALIGN_TOP_MID,-111,68);
     lv_obj_set_style_bg_color(mark,lv_color_hex(0x0A2859),0);
     lv_obj_set_style_border_color(mark,lv_color_hex(0x3662A4),0);
     lv_obj_set_style_border_width(mark,1,0);
@@ -1109,8 +1044,8 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_set_style_pad_all(mark,0,0);
     lv_obj_remove_flag(mark,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(mark,LV_OBJ_FLAG_CLICKABLE);
-    const int8_t cloud_x[3]={4,12,25},cloud_y[3]={16,9,17};
-    const int8_t cloud_d[3]={17,24,16};
+    const int8_t cloud_x[3]={8,21,36},cloud_y[3]={18,10,19};
+    const int8_t cloud_d[3]={24,31,20};
     for(int i=0;i<3;i++){
         lv_obj_t *b=lv_obj_create(mark);
         lv_obj_set_size(b,cloud_d[i],cloud_d[i]);
@@ -1122,32 +1057,30 @@ static void primary_render_home_content(lv_obj_t *parent)
         lv_obj_remove_flag(b,LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_remove_flag(b,LV_OBJ_FLAG_CLICKABLE);
     }
-    static const lv_point_precise_t bolt_line[]={{21,23},{16,33},{23,31},{21,40},{34,27},{27,29}};
+    static const lv_point_precise_t bolt_line[]={{30,30},{23,44},{32,40},{29,54},{46,35},{38,38}};
     lv_obj_t *bolt=lv_line_create(mark);
     lv_line_set_points(bolt,bolt_line,6);
     lv_obj_set_style_line_color(bolt,lv_color_hex(0xFFD12B),0);
-    lv_obj_set_style_line_width(bolt,3,0);
+    lv_obj_set_style_line_width(bolt,4,0);
     lv_obj_set_style_line_rounded(bolt,true,0);
     lv_obj_remove_flag(bolt,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *lyric_mark=home_caption(parent,"LYRIC",27,96,
-                                      &lv_font_montserrat_24,0xFFFFFF);
-    lv_obj_align(lyric_mark,LV_ALIGN_TOP_MID,-55,25);
+    lv_obj_t *lyric_mark=home_caption(parent,"LYRIC",71,80,
+                                      &lv_font_montserrat_20,0xFFFFFF);
+    lv_obj_align(lyric_mark,LV_ALIGN_TOP_MID,-12,79);
     lv_obj_set_style_text_letter_space(lyric_mark,2,0);
-    lv_obj_t *flash_mark=home_caption(parent,"FLASH",27,105,
-                                      &lv_font_montserrat_24,0x7BD3FF);
-    lv_obj_align(flash_mark,LV_ALIGN_TOP_MID,51,25);
+    lv_obj_t *flash_mark=home_caption(parent,"FLASH",71,90,
+                                      &lv_font_montserrat_20,0x7BD3FF);
+    lv_obj_align(flash_mark,LV_ALIGN_TOP_MID,76,79);
     lv_obj_set_style_text_letter_space(flash_mark,2,0);
-    battery_status=home_caption(parent,"",56,196,
+    battery_status=home_caption(parent,"",416,160,
                                &lv_font_montserrat_16,0x9ACFEA);
-    home_scan_status=home_caption(parent,"READY TO LISTEN",86,300,
-                                  &lv_font_montserrat_18,0x79C6FF);
     /* Static concentric rings give the circular AMOLED a device-player
      * look without the continuous redraw cost of pulsing gradients. */
     (void)home_decor_ring(parent,216,0x163C65);
     (void)home_decor_ring(parent,202,0x23578D);
     home_scan_button=lv_button_create(parent);
     lv_obj_set_size(home_scan_button,184,184);
-    lv_obj_align(home_scan_button,LV_ALIGN_CENTER,0,-15);
+    lv_obj_align(home_scan_button,LV_ALIGN_CENTER,0,12);
     lv_obj_set_style_radius(home_scan_button,LV_RADIUS_CIRCLE,0);
     lv_obj_set_style_bg_color(home_scan_button,lv_color_hex(0x2884EA),0);
     lv_obj_set_style_bg_opa(home_scan_button,LV_OPA_COVER,0);
@@ -1194,14 +1127,9 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_set_style_text_color(home_play_symbol,lv_color_hex(0xFFFFFF),0);
     lv_obj_align(home_play_symbol,LV_ALIGN_CENTER,3,0);
     lv_obj_remove_flag(home_play_symbol,LV_OBJ_FLAG_CLICKABLE);
-    home_play_hint=home_caption(parent,"TAP TO IDENTIFY",329,265,
-                                &lv_font_montserrat_16,0x8AC8FC);
-    home_song_title=home_caption(parent,"Find your music",352,326,
-                                 &lv_font_montserrat_24,0xFFFFFF);
-    home_song_artist=home_caption(parent,"One tap to identify the song",
-                                  382,280,&lv_font_montserrat_16,0xB1C8DE);
-    home_lyric_line=home_caption(parent,"MIC OFF  /  TAP PLAY",411,248,
-                                 &lv_font_montserrat_16,0x76BDEB);
+    home_song_title=home_caption(parent,"",355,326,
+                                 &lv_font_montserrat_18,0xB4DAFC);
+    lv_obj_add_flag(home_song_title,LV_OBJ_FLAG_HIDDEN);
     /* Recording occupies the round AMOLED screen only after an explicit
        Play tap. It is also an invisible click target to STOP on demand. */
     home_record_layer=lv_obj_create(parent);
@@ -1220,7 +1148,7 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_align(record_ring,LV_ALIGN_CENTER,0,-4);
     lv_obj_set_style_radius(record_ring,LV_RADIUS_CIRCLE,0);
     lv_obj_set_style_border_color(record_ring,lv_color_hex(0x158F50),0);
-    lv_obj_set_style_border_width(record_ring,5,0);
+    lv_obj_set_style_border_width(record_ring,6,0);
     lv_obj_set_style_bg_opa(record_ring,LV_OPA_TRANSP,0);
     lv_obj_set_style_shadow_width(record_ring,0,0);
     lv_obj_remove_flag(record_ring,LV_OBJ_FLAG_CLICKABLE);
@@ -1239,7 +1167,7 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_align(home_record_wave,LV_ALIGN_CENTER,0,-4);
     lv_obj_set_style_bg_opa(home_record_wave,LV_OPA_TRANSP,0);
     lv_obj_set_style_line_color(home_record_wave,lv_color_hex(0xFFD02C),0);
-    lv_obj_set_style_line_width(home_record_wave,6,0);
+    lv_obj_set_style_line_width(home_record_wave,7,0);
     lv_obj_set_style_line_rounded(home_record_wave,true,0);
     lv_obj_remove_flag(home_record_wave,LV_OBJ_FLAG_CLICKABLE);
     home_record_wave_points[0]=(lv_point_precise_t){0,130};
@@ -1263,11 +1191,7 @@ static void primary_render_home_content(lv_obj_t *parent)
 
     /* Informational text is also the unobtrusive entry to the Lyrics page.
      * Swipes beginning on it still bubble through the primary pager. */
-    lv_obj_t *details[]={home_song_title,home_song_artist,home_lyric_line};
-    for(size_t i=0;i<sizeof details/sizeof details[0];i++){
-        lv_obj_add_flag(details[i],LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(details[i],on_preview,LV_EVENT_CLICKED,NULL);
-    }
+    /* The physical Play button is the only Home control. */
     /* Battery and connection details remain in Device Studio and Settings.
      * Their previous Home labels and rectangular shortcut buttons are gone. */
     home_last_refresh_ms=0;
