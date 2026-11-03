@@ -43,15 +43,15 @@ print("PASS: direct OTA host and release picker contract")
 # An older version can be present on-device with working Web UI.
 # The recovery build must be DISCOVERABLE as a direct OTA update, not only an
 # Actions artifact; do not accidentally skip alpha publication again.
-assert "feature/0.8.40-ondevice-timed-lyrics" in workflow, "Recovery branch not listed in build rules"
+assert "feature/0.8.40-home-song-status" in workflow, "Recovery branch not listed in build rules"
 assert "Publish and verify direct HTTPS alpha OTA image" in workflow
 assert "Publish validated development OTA as an alpha prerelease" in workflow
-assert "github.ref == 'refs/heads/feature/0.8.40-ondevice-timed-lyrics'" in workflow
+assert "github.ref == 'refs/heads/feature/0.8.40-home-song-status'" in workflow
 assert "--prerelease --latest=false" in workflow
 assert "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin" in workflow
 assert "gh release create" in workflow
-# The established 0.8.40 release remains the last published firmware.
-# Source-only 0.8.40 Home development does not publish a new OTA image.
+# The previously validated 0.8.39 release remains published.
+# The 0.8.40 branch may publish a new OTA only after a validated compile-once gate.
 active_version=(root / "main/version.h").read_text()
 assert '"0.8.40-alpha"' in active_version
-print("PASS: 0.8.40 recovery OTA selector will receive a published alpha release")
+print("PASS: 0.8.40 manual alpha build is eligible for direct OTA publishing")
