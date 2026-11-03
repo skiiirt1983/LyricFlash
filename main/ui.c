@@ -536,8 +536,19 @@ static void queue_swipe(int target, lv_screen_load_anim_t animation)
     lv_async_call(commit_swipe, NULL);
 }
 
+/* The recording screen owns the glass until manual capture and network
+   recognition finish. No pager navigation may race its completion. */
+static bool recognition_touch_locked(void)
+{
+    if(page!=0)return false;
+    lf_recog_snapshot_t scan={0};
+    lf_recog_snapshot(&scan);
+    return scan.state==LF_RECOG_CAPTURE ||
+           scan.state==LF_RECOG_UPLOAD || scan.state==LF_RECOG_LYRICS;
+}
 static void swipe_intent(lv_dir_t direction)
 {
+    if(recognition_touch_locked())return;
     /* Moving the timing controls must never navigate away by accident. */
     if(page==1 && timed_controls &&
        !lv_obj_has_flag(timed_controls,LV_OBJ_FLAG_HIDDEN))return;
@@ -554,7 +565,7 @@ static void swipe_intent(lv_dir_t direction)
             swipe_candidate_page = 6;
             swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
         } else if (direction == LV_DIR_BOTTOM) {
-            swipe_candidate_page = 14;
+            swipe_candidate_page = 1; /* Lyrics panel sits above Home. */
             swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_BOTTOM;
         }
     } else if (page == 2) {
@@ -574,6 +585,9 @@ static void swipe_intent(lv_dir_t direction)
             swipe_candidate_page = 11;
             swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_TOP;
         }
+    } else if (page == 1 && direction == LV_DIR_TOP) {
+        swipe_candidate_page = 0;
+        swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_TOP;
     } else if (page == 14 && (direction == LV_DIR_TOP || direction == LV_DIR_RIGHT)) {
         swipe_candidate_page = 0;
         swipe_candidate_animation = LV_SCR_LOAD_ANIM_OVER_RIGHT;
@@ -600,6 +614,7 @@ static void swipe_intent(lv_dir_t direction)
 
 static void observe_touch_position(void)
 {
+    if(recognition_touch_locked())return;
     if (!touch_held || !gesture_origin_valid || !gesture_indev) return;
     lv_point_t current={0};
     lv_indev_get_point(gesture_indev, &current);
@@ -626,14 +641,16 @@ static void finish_touch(void)
     touch_pressed_at_ms=0;
     swipe_candidate_page=-1;
     swipe_candidate_animation=LV_SCR_LOAD_ANIM_NONE;
-    if (target >= 0) queue_swipe(target, animation);
+    if (target >= 0 && !recognition_touch_locked())
+        queue_swipe(target, animation);
     activity();
 }
 
 static void on_gesture_press(lv_event_t *e)
 {
     (void)e;
-    if (!is_swipe_page() || clock_settings_popup || touch_held) return;
+    if (recognition_touch_locked() || !is_swipe_page() ||
+        clock_settings_popup || touch_held) return;
     lv_indev_t *indev=lv_indev_active();
     if (!indev || lv_indev_get_type(indev)!=LV_INDEV_TYPE_POINTER) return;
     atomic_fetch_add(&ui_touch_count,1);
@@ -654,7 +671,8 @@ static void on_touch_pressing(lv_event_t *e)
 static void on_lvgl_gesture(lv_event_t *e)
 {
     (void)e;
-    if (!touch_held || !gesture_origin_valid || clock_settings_popup) return;
+    if (recognition_touch_locked() || !touch_held ||
+        !gesture_origin_valid || clock_settings_popup) return;
     lv_indev_t *indev=lv_indev_active();
     if (!indev || indev!=gesture_indev) return;
     /* A button can generate LV_EVENT_GESTURE after just a small move.
@@ -3019,7 +3037,8 @@ static void on_tick(lv_timer_t *timer)
     }
     /* Collect touch directly from the hardware input device, including
        gestures beginning over Weather's scrolling forecast children. */
-    if (!touch_held && is_swipe_page() && !clock_settings_popup) {
+    if (!touch_held && !recognition_touch_locked() &&
+        is_swipe_page() && !clock_settings_popup) {
         lv_indev_t *ptr=lv_indev_get_next(NULL);
         while(ptr) {
             if(lv_indev_get_type(ptr)==LV_INDEV_TYPE_POINTER &&
