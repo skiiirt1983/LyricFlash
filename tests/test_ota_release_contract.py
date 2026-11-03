@@ -43,10 +43,10 @@ print("PASS: direct OTA host and release picker contract")
 # Broken 0.8.11 firmware remains on-device with working Web UI.
 # The recovery build must be DISCOVERABLE as a direct OTA update, not only an
 # Actions artifact; do not accidentally skip alpha publication again.
-assert "feature/0.8.32-manual-mic-pcm-test" in workflow, "Recovery branch not listed in build rules"
+assert "fix/0.8.32-es7210-four-slot-tdm" in workflow, "Recovery branch not listed in build rules"
 assert "Publish and verify direct HTTPS alpha OTA image" in workflow
 assert "Publish validated development OTA as an alpha prerelease" in workflow
-assert "github.ref == 'refs/heads/feature/0.8.32-manual-mic-pcm-test'" in workflow
+assert "github.ref == 'refs/heads/fix/0.8.32-es7210-four-slot-tdm'" in workflow
 assert "--prerelease --latest=false" in workflow
 assert "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin" in workflow
 assert "gh release create" in workflow
