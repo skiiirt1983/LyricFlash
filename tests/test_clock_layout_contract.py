@@ -16,7 +16,15 @@ for component in ("time","battery","date","weather"):
 for name in ("basic_battery_size","basic_date_size","basic_weather_size"):
     assert name in config and name in settings and name in api and name in ui and name in html,name
 assert "basic_battery_size = 85" in settings
-assert "LF_CONFIG_SCHEMA 12U" in config
+for source in (settings,api):
+    assert "basic_font_size" in source and "200" in source
+assert "lv_obj_set_style_transform_scale(time,zoom,0)" in basic
+assert "lv_obj_set_style_transform_scale(item,zoom,0)" in clock
+assert "basic_digit_height(" in basic and "basic_digit_cell(" in basic
+assert "0..200" in config
+assert 'max="200"' in html
+
+assert "LF_CONFIG_SCHEMA 13U" in config
 for source in (settings,config,clock,api,ui):
     assert "face_battery_x" in source and "face_battery_y" in source
 assert "styled_digit(" in basic and "p->basic_font_style>=5" in basic
