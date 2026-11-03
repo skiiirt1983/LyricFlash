@@ -111,10 +111,24 @@ static lv_obj_t *round_panel(lv_obj_t *parent, int diameter, uint32_t fill,
 /* Use only enabled LVGL fonts; these remain within the 466px display. */
 static const lv_font_t *basic_element_font(uint8_t size)
 {
-    return size>=85?&lv_font_montserrat_32:
-           size>=66?&lv_font_montserrat_28:
-           size>=46?&lv_font_montserrat_24:
-           size>=26?&lv_font_montserrat_20:&lv_font_montserrat_18;
+    /* Wider native range: 12px at 0%, 40px at 100%, 48px before
+       higher-scale styling from 130% through 200%. */
+    return size>=130?&lv_font_montserrat_48:
+           size>=94?&lv_font_montserrat_40:
+           size>=74?&lv_font_montserrat_32:
+           size>=54?&lv_font_montserrat_28:
+           size>=32?&lv_font_montserrat_24:
+           size>=15?&lv_font_montserrat_18:&lv_font_montserrat_12;
+}
+static void basic_scale_element(lv_obj_t *item,uint8_t size)
+{
+    if(!item)return;
+    /* 200% is up to ~78px; at 0% the 12px base stays readable. */
+    const int32_t zoom=size<=100?256:
+        256+((int32_t)size-100)*160/100;
+    lv_obj_set_style_transform_scale(item,zoom,0);
+    lv_obj_set_style_transform_pivot_x(item,lv_obj_get_width(item)/2,0);
+    lv_obj_set_style_transform_pivot_y(item,20,0);
 }
 static lv_obj_t *face_text(lv_obj_t *parent, const char *text, int x, int y,
                            const lv_font_t *font, uint32_t colour)
@@ -428,11 +442,13 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
                                   settings->basic_battery_x, settings->basic_battery_y,
                                   basic_element_font(settings->basic_battery_size),
                                   settings->basic_foreground);
+        basic_scale_element(battery_label,settings->basic_battery_size);
         if (settings->basic_show_date)
             date_label = face_text(parent, "--",
                                    settings->basic_date_x, settings->basic_date_y,
                                    basic_element_font(settings->basic_date_size),
                                    settings->basic_foreground);
+        basic_scale_element(date_label,settings->basic_date_size);
         info_label = face_text(parent, "", 0, 109, &lv_font_montserrat_16,
                                settings->basic_foreground);
     }
@@ -458,6 +474,7 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
                    current_style==5?settings->basic_weather_y:138,
                    current_style==5?basic_element_font(settings->basic_weather_size):
                                     &lv_font_montserrat_24,colour);
+        if(current_style==5)basic_scale_element(weather_label,settings->basic_weather_size);
     }
     if(battery_label && current_style!=5){
         /* User-adjustable battery location on EVERY non-Basic dial. */
