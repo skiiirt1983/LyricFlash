@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/private-0.8.50-watchdog-header
+      - feature/private-0.8.50-recognition-awake
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
