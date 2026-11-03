@@ -19,7 +19,6 @@ assert 'lv_label_set_text(flash_mark,"FLASH")' in ui
 assert "lv_obj_align(mark,LV_ALIGN_TOP_MID,-111,68)" not in ui
 # Keep normal UI responsive on slow AudD / LRCLIB connections.
 assert "static uint32_t home_stalled_attempt;" in ui
-assert "song->stage_started_ms>80000U" not in ui
 for condition in ("current-song->stage_started_ms>30000U",
                   "current-song->stage_started_ms>80000U",
                   "current-song->stage_started_ms>40000U"):
