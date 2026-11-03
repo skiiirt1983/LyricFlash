@@ -31,7 +31,7 @@ assert "lv_style_set_transform_width(&press_style,24)" in ui
 assert "No Song Lyrics Available" in ui
 assert "auto_open_lyrics_deferred" in ui
 assert "lyric_logo_at_top(screen);" not in ui
-assert "lv_line_set_points(strike,bolt,7)" in ui
+assert "lv_line_set_points(strike,bolt,7)" not in ui  # no logo on sacred lyrics page
 assert "LV_SYMBOL_CHARGE" in ui
 assert "ESTIMATED SYNC" not in ui
 assert '"SYNC %02lu:%02lu  |  offset %c%ld.%01lds"' in ui
