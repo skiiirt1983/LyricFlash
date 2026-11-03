@@ -8,8 +8,49 @@
 #include "diagnostics.h"
 #include "version.h"
 #include "weather.h"
+#include "recognition.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_timer.h"
+#include "esp_system.h"
 
 static const char *TAG = "LyricFlash";
+
+/* A physically frozen AMOLED with a responsive Web UI is an LVGL worker
+ * stall, not proof that AudD failed. An independent, low-priority task
+ * monitors the existing lock-free UI heartbeat. During a song scan only,
+ * a >25 second heartbeat loss causes a clean firmware restart, preserving
+ * NVS, Wi-Fi, API credentials and OTA partitions. No new microphone access.
+ * Never reset merely because the external AudD/LRCLIB service is slow. */
+static void lyricflash_display_recovery_watchdog(void *arg)
+{
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(20000));
+    for(;;){
+        lf_ui_display_stats_t ui={0};
+        lf_ui_display_stats(&ui); /* atomics only: no LVGL mutex */
+        lf_recog_snapshot_t song={0};
+        lf_recog_snapshot(&song);
+        const int64_t uptime_ms=esp_timer_get_time()/1000LL;
+        const bool scan_related=song.attempts>0 &&
+            (song.state==LF_RECOG_UPLOAD ||
+             song.state==LF_RECOG_LYRICS ||
+             song.state==LF_RECOG_MATCH);
+        const bool song_page=ui.ui_page==0 || ui.ui_page==1;
+        if(uptime_ms>60000 && scan_related && song_page &&
+           ui.ui_tick_age_ms!=UINT32_MAX &&
+           ui.ui_tick_age_ms>25000U){
+            ESP_LOGE(TAG,"LVGL heartbeat lost for %lu ms while recognition "
+                     "state=%s, page=%lu; restarting without wiping settings",
+                     (unsigned long)ui.ui_tick_age_ms,
+                     lf_recog_state_name(song.state),
+                     (unsigned long)ui.ui_page);
+            vTaskDelay(pdMS_TO_TICKS(150));
+            esp_restart();
+        }
+        vTaskDelay(pdMS_TO_TICKS(3000));
+    }
+}
 
 void app_main(void)
 {
@@ -64,4 +105,8 @@ void app_main(void)
     // Confirm only after display, settings, and local update server initialize.
     // This guards early boot failures, NOT future Wi-Fi/touch failures.
     lf_ota_guard_confirm_startup();
+    /* Do not impede boot or OTA if this optional recovery task cannot start. */
+    if(xTaskCreate(lyricflash_display_recovery_watchdog,
+                   "lf_ui_heartbeat",3072,NULL,tskIDLE_PRIORITY+1,NULL)!=pdPASS)
+        ESP_LOGW(TAG,"Display recovery monitor unavailable");
 }
