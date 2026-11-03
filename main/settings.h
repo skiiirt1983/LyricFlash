@@ -19,7 +19,7 @@ typedef struct {
     uint8_t line_spacing_px;  // 0 .. 24
     uint8_t clock_face;       // 0 diver, 1 midnight, 2 classic, 3 retro LCD, 4 sundial, 5 basic
     /* Basic face is an additional independent, persistently styled option. */
-    uint8_t basic_font_style;    // 0 .. 4 typographic presets
+    uint8_t basic_font_style;    // 0 .. 19 original numeral styles
     uint8_t basic_font_size;     // 0 .. 100 slider
     /* Custom Basic dial element geometry, relative to its 466px center. */
     int32_t basic_time_x, basic_time_y;
