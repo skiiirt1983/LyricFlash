@@ -51,13 +51,22 @@ static void put16(unsigned char **p,uint16_t n){memcpy(*p,&n,2);*p+=2;}
 static void put32(unsigned char **p,uint32_t n){memcpy(*p,&n,4);*p+=4;}
 static void put64(unsigned char **p,uint64_t n){memcpy(*p,&n,8);*p+=8;}
 static bool get16(const unsigned char **p,const unsigned char *end,uint16_t *n){
-    if((size_t)(end-*p)<2)return false;memcpy(n,*p,2);*p+=2;return true;
+    if((size_t)(end-*p)<2)return false;
+    memcpy(n,*p,2);
+    *p+=2;
+    return true;
 }
 static bool get32(const unsigned char **p,const unsigned char *end,uint32_t *n){
-    if((size_t)(end-*p)<4)return false;memcpy(n,*p,4);*p+=4;return true;
+    if((size_t)(end-*p)<4)return false;
+    memcpy(n,*p,4);
+    *p+=4;
+    return true;
 }
 static bool get64(const unsigned char **p,const unsigned char *end,uint64_t *n){
-    if((size_t)(end-*p)<8)return false;memcpy(n,*p,8);*p+=8;return true;
+    if((size_t)(end-*p)<8)return false;
+    memcpy(n,*p,8);
+    *p+=8;
+    return true;
 }
 static bool valid_name(const char *s){return s && s[0] && strlen(s)<128;}
 bool lf_song_cache_load_lyrics(const char *title,const char *artist,lf_lyrics_t *out){
@@ -67,7 +76,7 @@ bool lf_song_cache_load_lyrics(const char *title,const char *artist,lf_lyrics_t 
     if(nvs_open(LF_CACHE_NS,NVS_READONLY,&n)!=ESP_OK)return false;
     size_t bytes=0;
     esp_err_t err=nvs_get_blob(n,k,NULL,&bytes);
-    if(err!=ESP_OK||bytes<30||bytes>LF_CACHE_LIMIT){nvs_close(n);return false;}
+    if(err!=ESP_OK||bytes<24||bytes>LF_CACHE_LIMIT){nvs_close(n);return false;}
     unsigned char *data=heap_caps_malloc(bytes,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
     if(!data){nvs_close(n);return false;}
     err=nvs_get_blob(n,k,data,&bytes);nvs_close(n);
