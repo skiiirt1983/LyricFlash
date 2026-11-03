@@ -1,9 +1,11 @@
 #pragma once
-/* 0.8.30: revert the untested 96-row LVGL render-buffer experiment
- * after physical 0.8.29 testing showed white screen/no touch and first
- * display refresh stalled (2 starts, 1 finish, 0 refresh-ready).
- * Exact 0.8.26 hardware-proven display-driver file is restored.
- * Keep ES7210 on-demand hardware probe and Web UI (detected on board).
- * No changes to mic capture (remains off), OTA, Wi-Fi, NVS or power. */
-#define LF_VERSION "0.8.30-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.30"
+/* 0.8.31: independently test local microphone audio input after 0.8.30's
+ * physical display/touch recovery and ES7210 I2C detection passed.
+ * User-initiated, 3-second bounded PCM amplitude check with early stop;
+ * no raw audio persistence or network uploads. This stage uses existing
+ * 22050 Hz mono Waveshare BSP codec path and reports aggregate levels only.
+ * BSP keeps I2S allocated after codec close; idle clock power requires
+ * a separate later teardown milestone. Preserve exact 0.8.26 display
+ * driver, OTA and all saved settings. Hardware audio still unverified. */
+#define LF_VERSION "0.8.31-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.31"

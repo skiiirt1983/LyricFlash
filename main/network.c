@@ -4,6 +4,7 @@
 #include "weather.h"
 #include "diagnostics.h"
 #include "mic_probe.h"
+#include "mic_pcm.h"
 #include "version.h"
 #include "web_basic_html.h"
 #include "web_device_html.h"
@@ -502,6 +503,48 @@ static esp_err_t handle_mic_check(httpd_req_t *req)
     return send_json(req,reply);
 }
 
+/* On-demand 3s audio amplitude probe; never sends raw PCM to the browser. */
+static esp_err_t handle_mic_pcm_status(httpd_req_t *req)
+{
+    lf_pcm_snapshot_t s={0};
+    lf_pcm_snapshot(&s);
+    cJSON *reply=cJSON_CreateObject();
+    if(!reply)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddStringToObject(reply,"state",lf_pcm_state_name(s.state));
+    cJSON_AddStringToObject(reply,"error",lf_pcm_error_name(s.error));
+    cJSON_AddNumberToObject(reply,"attempts",s.attempts);
+    cJSON_AddNumberToObject(reply,"sample_count",s.sample_count);
+    cJSON_AddNumberToObject(reply,"peak_abs",s.peak_abs);
+    cJSON_AddNumberToObject(reply,"mean_abs",s.mean_abs);
+    cJSON_AddNumberToObject(reply,"elapsed_ms",s.elapsed_ms);
+    cJSON_AddBoolToObject(reply,"stop_requested",s.stop_requested);
+    cJSON_AddBoolToObject(reply,"audio_uploaded",false);
+    cJSON_AddBoolToObject(reply,"audio_saved",false);
+    return send_json(req,reply);
+}
+static esp_err_t handle_mic_pcm_start(httpd_req_t *req)
+{
+    /* A non-simple custom header makes cross-origin browser POSTs fail their
+       preflight; an unrelated website must never trigger microphone input. */
+    char manual[8]={0};
+    if(httpd_req_get_hdr_value_str(req,"X-LyricFlash-Manual-Test",
+                                  manual,sizeof(manual))!=ESP_OK ||
+       strcmp(manual,"1")!=0)
+        return httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,
+                                   "Manual local UI trigger required");
+    if(!lf_pcm_start()) {
+        httpd_resp_set_status(req,"409 Conflict");
+        return httpd_resp_sendstr(req,"Audio test already active or task unavailable");
+    }
+    httpd_resp_set_status(req,"202 Accepted");
+    return httpd_resp_sendstr(req,"Microphone sound-level test started");
+}
+static esp_err_t handle_mic_pcm_stop(httpd_req_t *req)
+{
+    lf_pcm_stop();
+    return httpd_resp_sendstr(req,"Stop requested");
+}
+
 static esp_err_t handle_diagnostics(httpd_req_t *req)
 {
     lf_diag_snapshot_t d;
@@ -529,7 +572,15 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     /* Electrical presence test only; no audio capture is enabled. */
     lf_mic_probe_snapshot_t mic={0};
     lf_mic_probe_snapshot(&mic);
-    cJSON_AddStringToObject(root, "microphone", "inactive (manual ADC probe only)");
+    lf_pcm_snapshot_t pcm={0};
+    lf_pcm_snapshot(&pcm);
+    cJSON_AddStringToObject(root, "microphone",
+       pcm.state==LF_PCM_RUNNING ? "manual sound-level test active" : "inactive (manual tests only)");
+    cJSON_AddStringToObject(root,"microphone_pcm_status",lf_pcm_state_name(pcm.state));
+    cJSON_AddStringToObject(root,"microphone_pcm_error",lf_pcm_error_name(pcm.error));
+    cJSON_AddNumberToObject(root,"microphone_pcm_samples",pcm.sample_count);
+    cJSON_AddNumberToObject(root,"microphone_pcm_peak",pcm.peak_abs);
+    cJSON_AddNumberToObject(root,"microphone_pcm_mean_abs",pcm.mean_abs);
     cJSON_AddStringToObject(root, "microphone_adc_status", lf_mic_probe_result_text(mic.result));
     cJSON_AddNumberToObject(root, "microphone_adc_test_count", mic.attempts);
     cJSON_AddNumberToObject(root, "microphone_adc_error_code", mic.error_code);
@@ -973,6 +1024,9 @@ static bool serve(void)
         {.uri="/api/basic",.method=HTTP_POST,.handler=handle_basic_post},
         {.uri="/api/diagnostics",.method=HTTP_GET,.handler=handle_diagnostics},
         {.uri="/api/hardware/mic-check",.method=HTTP_POST,.handler=handle_mic_check},
+        {.uri="/api/hardware/mic-test",.method=HTTP_GET,.handler=handle_mic_pcm_status},
+        {.uri="/api/hardware/mic-test/start",.method=HTTP_POST,.handler=handle_mic_pcm_start},
+        {.uri="/api/hardware/mic-test/stop",.method=HTTP_POST,.handler=handle_mic_pcm_stop},
         {.uri="/api/device",.method=HTTP_GET,.handler=handle_device},
         {.uri="/wifi",.method=HTTP_POST,.handler=handle_wifi},
         {.uri="/api/wifi-scan",.method=HTTP_GET,.handler=handle_scan},

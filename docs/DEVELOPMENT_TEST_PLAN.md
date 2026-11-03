@@ -14,12 +14,22 @@
 
 Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` and `0.8.29` failed screen/touch on physical hardware. `0.8.30` is the targeted display recovery candidate and is not hardware-proven until the user verifies it. Keep 0.8.26 as rollback. Do not merge or publish a stable v1.0 release until the device tests pass. Each functional milestone uses **one isolated change and one gated compile after preflight**, followed by a specific device acceptance test.
 
+## Current milestone: Alpha 0.8.31 manual PCM sound-level test
+
+- **0.8.30 hardware: DISPLAY/TOUCH PASS**, and ES7210 ADC I2C 0x40 ACK PASS. This is the physical stability baseline. Do not change the display-driver file.
+- 0.8.31 adds one Start/Stop audio test to /settings; its ESP codec device is only opened after Start, reads mono 22,050 Hz 16-bit PCM for at most 3 seconds, then closes.
+- No audio files, raw samples, audio HTTP data or cloud requests are retained or sent; a small transient PCM RAM buffer is processed for aggregate sound levels. The Start POST requires a custom header from the local Web UI, reducing cross-site activation risk. Only aggregate peak/mean/sample count and error state are returned to browser.
+- **Hardware pending:** on 0.8.31, verify normal screen, Clock swipe, Wi-Fi, battery, OTA page. Run once in quiet room and once while speaking/clapping near microphones; compare `mean_abs`/`peak_abs`. Confirm Stop and repeat are responsive. Report `microphone_pcm_status` and `microphone_pcm_error` if failed.
+- If samples are zero, values fixed, or the codec cannot open, do not interpret as passed. The bundled BSP's legacy standard-I2S mono path may need to be upgraded to the board-verified 24 kHz four-slot TDM path in a **separate** milestone; hardware reference serializes MIC1, MIC3/reference, MIC2, MIC4.
+- **Known limitation:** the bundled BSP allocates I2S resources permanently after first initialization; `esp_codec_dev_close` stops active ADC recording but does not fully deinitialize the I2S peripheral. Full I2S teardown, power measurements and speaker coexistence tests are deferred. Do not claim deep-sleep power validated.
+- The user-requested top-priority OTA dropdown (Old/Current/New, max 3, no unsupported downgrades) stays in the **deferred register**, not in this microphone firmware.
+
 ## One item at a time — execution order
 
 | Order | Stage | Status | Hardware pass criterion |
 |---|---|---|---|
 | 1 | Manual ES7210 audio-ADC I2C ACK probe via Web UI | **PASS: ES7210 electrical probe on 0.8.29 hardware; remaining display/touch gate pending 0.8.30** | Device Web UI reports `adc_detected` from address 0x40; battery, Wi-Fi, touch and clock still operate |
-| 2 | On-demand ES7210 + I2S PCM amplitude test | Not started | User explicitly presses Start; live audio levels differ in quiet/noisy conditions; Stop reliably releases all capture resources; no audio uploaded |
+| 2 | On-demand ES7210 + I2S PCM amplitude test | **Implemented 0.8.31; physical audio validation pending** | User explicitly presses Start; live audio levels differ in quiet/noisy conditions; Stop reliably releases all capture resources; no audio uploaded |
 | 3 | On-device lyrics view using a short original/local timed test fixture | Not started | Readable lines display in order and follow timestamps on the physical 466×466 screen without blocking touch/clock |
 | 4 | Manual song-identification capture and recognition client | Not started | Start captures bounded sample, communicates with configured service over TLS and displays track or clear no-match/quota/error state |
 | 5 | Fetch, parse and cache synced lyrics | Not started | Matched track loads legally available lyric text, timestamps and source/error state; limit external requests |

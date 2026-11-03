@@ -473,3 +473,23 @@ require('"/api/hardware/mic-check"' in network and
         '/api/hardware/mic-check' in web and
         'audio_capture_active' in network,
         "0.8.29 explicit local mic check route, button and no-audio status")
+
+# 0.8.31: manual, bounded PCM test and preservation of physical display fix.
+pcm=read("main/mic_pcm.c")
+pcm_h=read("main/mic_pcm.h")
+require('LF_PCM_LIMIT_US (3000000LL)' in pcm and
+        'esp_codec_dev_read(codec,pcm,sizeof(pcm))' in pcm and
+        'esp_codec_dev_close(codec)' in pcm and
+        'atomic_load(&stop_requested)' in pcm and
+        'LF_PCM_RUNNING' in pcm_h and
+        'mic_pcm.c' in cmake,
+        "0.8.31 bounded PCM capture and Stop lifecycle")
+require('"/api/hardware/mic-test"' in network and
+        '"/api/hardware/mic-test/start"' in network and
+        '"/api/hardware/mic-test/stop"' in network and
+        'mic-pcm-start' in web and 'mic-pcm-stop' in web and
+        'X-LyricFlash-Manual-Test' in network and
+        'X-LyricFlash-Manual-Test' in web and
+        'audio_uploaded' in network and 'audio_saved' in network and
+        'max_uri_handlers=18' in network,
+        "0.8.31 manual-only Web UI test and no raw audio exposure")

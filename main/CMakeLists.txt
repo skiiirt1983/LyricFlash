@@ -4,6 +4,7 @@ idf_component_register(
         "main.c"
         "diagnostics.c"
         "mic_probe.c"
+        "mic_pcm.c"
         "ui.c"
         "char_wheel.c"
         "clock_face.c"
