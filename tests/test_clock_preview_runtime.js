@@ -67,6 +67,17 @@ const runtime=new Function("document","fetch","setInterval",
  }
  assert.equal(new Set(fontPreviews).size,20,
    "All twenty original clock typography options must render distinct previews");
+ el("font_size").value="0";el("font_size").dispatch("input");
+ const smallestTime=el("clock-preview").innerHTML;
+ el("font_size").value="200";el("font_size").dispatch("input");
+ const largestTime=el("clock-preview").innerHTML;
+ assert.notEqual(smallestTime,largestTime,
+   "Clock time must actually render at radically different sizes from 0 to 200%");
+ el("font_size").value="60";el("font_size").dispatch("input");
+ el("basic_battery_size").value="200";el("basic_battery_size").dispatch("input");
+ assert.match(el("clock-preview").innerHTML,/75%/,
+   "Largest battery preview disappeared");
+
  const oldBatteryPreview=el("clock-preview").innerHTML;
  el("basic_battery_x").value="37";el("basic_battery_x").dispatch("input");
  const newBatteryPreview=el("clock-preview").innerHTML;
