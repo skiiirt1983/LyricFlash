@@ -107,6 +107,14 @@ static lv_obj_t *round_panel(lv_obj_t *parent, int diameter, uint32_t fill,
     lv_obj_set_style_pad_all(o, 0, 0);
     return o;
 }
+/* Use only enabled LVGL fonts; these remain within the 466px display. */
+static const lv_font_t *basic_element_font(uint8_t size)
+{
+    return size>=85?&lv_font_montserrat_32:
+           size>=66?&lv_font_montserrat_28:
+           size>=46?&lv_font_montserrat_24:
+           size>=26?&lv_font_montserrat_20:&lv_font_montserrat_18;
+}
 static lv_obj_t *face_text(lv_obj_t *parent, const char *text, int x, int y,
                            const lv_font_t *font, uint32_t colour)
 {
@@ -385,9 +393,13 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
     else {
         time_label = lf_basic_clock_render(parent, settings);
         battery_label = face_text(parent, LV_SYMBOL_BATTERY_FULL " --%",
-                                  0, -166, &lv_font_montserrat_20, settings->basic_foreground);
+                                  settings->basic_battery_x, settings->basic_battery_y,
+                                  basic_element_font(settings->basic_battery_size),
+                                  settings->basic_foreground);
         if (settings->basic_show_date)
-            date_label = face_text(parent, "--", 0, 70, &lv_font_montserrat_24,
+            date_label = face_text(parent, "--",
+                                   settings->basic_date_x, settings->basic_date_y,
+                                   basic_element_font(settings->basic_date_size),
                                    settings->basic_foreground);
         info_label = face_text(parent, "", 0, 109, &lv_font_montserrat_16,
                                settings->basic_foreground);
@@ -399,14 +411,21 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
         (current_style == 1 || (current_style == 5 && settings->basic_weather))) {
         uint32_t colour = current_style == 5 ? settings->basic_foreground : 0x9DC9F3;
         weather_icon = lv_obj_create(parent);
-        lv_obj_set_size(weather_icon, 62, 62);
-        lv_obj_align(weather_icon, LV_ALIGN_CENTER, -52, 138);
+        int icon_size=current_style==5?46+settings->basic_weather_size/4:62;
+        lv_obj_set_size(weather_icon,icon_size,icon_size);
+        lv_obj_align(weather_icon,LV_ALIGN_CENTER,
+             current_style==5?settings->basic_weather_x-52:-52,
+             current_style==5?settings->basic_weather_y:138);
         lv_obj_set_style_bg_opa(weather_icon, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(weather_icon, 0, 0);
         lv_obj_set_style_pad_all(weather_icon, 0, 0);
         lv_obj_remove_flag(weather_icon, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_remove_flag(weather_icon, LV_OBJ_FLAG_SCROLLABLE);
-        weather_label = face_text(parent, "-- C", 50, 138, &lv_font_montserrat_24, colour);
+        weather_label = face_text(parent, "-- C",
+                   current_style==5?settings->basic_weather_x+50:50,
+                   current_style==5?settings->basic_weather_y:138,
+                   current_style==5?basic_element_font(settings->basic_weather_size):
+                                    &lv_font_montserrat_24,colour);
     }
     if(!settings->face_show_date[current_style] && date_label)
         lv_obj_add_flag(date_label,LV_OBJ_FLAG_HIDDEN);
@@ -423,9 +442,13 @@ void lf_clock_update(void)
     lf_power_state_t state;
     if (battery_label && lf_power_cached(&state)) {
         char text[44];
-        if (state.percentage >= 0)
-            snprintf(text, sizeof(text), "%s %d%%", state.charging ? LV_SYMBOL_CHARGE : LV_SYMBOL_BATTERY_FULL,
-                     state.percentage);
+        if (state.percentage >= 0){
+            const char *symbol=state.percentage>=88?LV_SYMBOL_BATTERY_FULL:
+                state.percentage>=63?LV_SYMBOL_BATTERY_3:
+                state.percentage>=38?LV_SYMBOL_BATTERY_2:
+                state.percentage>=15?LV_SYMBOL_BATTERY_1:LV_SYMBOL_BATTERY_EMPTY;
+            snprintf(text,sizeof text,"%s %d%%",symbol,state.percentage);
+        }
         else
             snprintf(text, sizeof(text), "%s", state.charging ? "CHARGING" : "BATTERY");
         update_label_if_changed(battery_label, text);
