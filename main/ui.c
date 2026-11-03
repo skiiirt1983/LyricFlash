@@ -44,6 +44,15 @@ static uint64_t timed_last_update_ms;
 static lv_obj_t *timed_rows[3];
 static lv_obj_t *timed_status;
 static lv_obj_t *timed_pause_button;
+/* Home now reflects the same explicitly triggered recognition session and
+ * manual LRC timeline as the Lyrics viewer. These pointers are never used
+ * after make_base() destroys its child pager. */
+static lv_obj_t *home_scan_button;
+static lv_obj_t *home_scan_status;
+static lv_obj_t *home_song_title;
+static lv_obj_t *home_song_artist;
+static lv_obj_t *home_lyric_line;
+static uint64_t home_last_refresh_ms;
 static lv_obj_t *speed_text;
 static lv_obj_t *brightness_text;
 static lv_obj_t *timeout_text;
@@ -721,6 +730,12 @@ static void make_base(void)
     for(size_t i=0;i<3;i++)timed_rows[i]=NULL;
     timed_status=NULL;
     timed_pause_button=NULL;
+    home_scan_button=NULL;
+    home_scan_status=NULL;
+    home_song_title=NULL;
+    home_song_artist=NULL;
+    home_lyric_line=NULL;
+    home_last_refresh_ms=0;
     battery_status=NULL;
     network_status=NULL;
     network_password=NULL;
@@ -755,17 +770,145 @@ static void build_connection_help_now(void)
     last_power_refresh_ms = 0; /* Refresh the network details immediately. */
 }
 
+/* Only change an LVGL label when the displayed text actually differs:
+ * frequent invalidations on the 466px QSPI panel slow the finger pager. */
+static void home_set_text(lv_obj_t *obj,const char *value)
+{
+    if(!obj||!value)return;
+    const char *shown=lv_label_get_text(obj);
+    if(!shown||strcmp(shown,value)!=0)lv_label_set_text(obj,value);
+}
+
+static void home_refresh(uint64_t current)
+{
+    if(!home_scan_status||!home_song_title||!home_song_artist||
+       !home_lyric_line||!home_scan_button)return;
+    lf_recog_snapshot_t song={0};
+    lf_recog_snapshot(&song);
+    const bool busy=lf_recog_busy();
+    const char *status="MIC OFF - READY TO SCAN";
+    const char *title="Find your music";
+    const char *artist="Tap SCAN to identify a song";
+    const char *lyric="Lyrics will appear after a match";
+
+    switch(song.state){
+    case LF_RECOG_CAPTURE:
+        status="LISTENING - MIC ON";
+        title="Identifying your song";
+        artist="Recording up to 10 seconds";
+        lyric="Tap STOP SCAN to cancel";
+        break;
+    case LF_RECOG_UPLOAD:
+        status="IDENTIFYING - MIC OFF";
+        title="Checking audio";
+        artist="Waiting for recognition";
+        lyric="Results appear here";
+        break;
+    case LF_RECOG_LYRICS:
+        status="SONG IDENTIFIED";
+        title=song.title[0]?song.title:"Song identified";
+        artist=song.artist[0]?song.artist:"Looking up lyrics";
+        lyric="Finding synchronized lyrics...";
+        break;
+    case LF_RECOG_MATCH:
+        title=song.title[0]?song.title:"Song identified";
+        artist=song.artist[0]?song.artist:"";
+        if(song.lyric_lines>0 && strcmp(song.lyrics_state,"synced")==0){
+            status="TIMED LYRICS READY";
+            lyric="Open LYRICS to start manual sync";
+            if(timed_clock.started && timed_scan_attempt==song.attempts &&
+               timed_line_count>0){
+                const uint32_t pos=lf_lyric_clock_position(&timed_clock,current);
+                const int index=lf_lyric_clock_line_at(timed_stamps,timed_line_count,pos);
+                if(index>=0 && (size_t)index<timed_line_count){
+                    lf_lyric_line_t line={0};
+                    if(lf_recog_lyric_line((uint32_t)index,&line)&&line.text[0])
+                        lyric=line.text;
+                    /* The copied LRC line belongs to this lexical scope.
+                     * Commit it now; never keep a pointer into this stack. */
+                    home_set_text(home_lyric_line,lyric);
+                    lyric=NULL;
+                }else lyric="Waiting for first lyric...";
+                status=timed_clock.running?"MANUAL LYRIC TIMELINE":"MANUAL LYRICS PAUSED";
+            }
+        } else {
+            status="SONG IDENTIFIED - MIC OFF";
+            lyric="No synchronized lyrics for this match";
+        }
+        break;
+    case LF_RECOG_NO_MATCH:
+        status="NO MATCH - MIC OFF";
+        title="Couldn't identify song";
+        artist="Move closer to the music and retry";
+        lyric="Tap SCAN to try again";
+        break;
+    case LF_RECOG_ERROR:
+        status="SCAN ERROR - MIC OFF";
+        title="Identification unavailable";
+        artist=song.message[0]?song.message:"Check Wi-Fi and API access";
+        lyric="Open device Web UI for details";
+        break;
+    case LF_RECOG_STOPPED:
+        status="SCAN STOPPED - MIC OFF";
+        title="Ready when you are";
+        artist="Manual microphone only";
+        lyric="Tap SCAN to try again";
+        break;
+    default:
+        if(!lf_recog_has_token())lyric="Add AudD key in Device Studio";
+        else if(!lf_network_is_connected())lyric="Connect Wi-Fi to identify songs";
+        break;
+    }
+    if(busy&&song.state==LF_RECOG_LYRICS)status="FINDING LYRICS - MIC OFF";
+    home_set_text(home_scan_status,status);
+    home_set_text(home_song_title,title);
+    home_set_text(home_song_artist,artist);
+    if(lyric)home_set_text(home_lyric_line,lyric);
+    lv_obj_t *caption=lv_obj_get_child(home_scan_button,0);
+    if(caption)home_set_text(caption,busy?"STOP SCAN":"SCAN SONG");
+    home_last_refresh_ms=current;
+}
+static void on_home_scan(lv_event_t *e)
+{
+    (void)e;
+    /* The microphone only activates on this explicit press. The worker
+     * records asynchronously; no sampling is performed in the LVGL task. */
+    if(lf_recog_busy())lf_recog_stop();
+    else (void)lf_recog_start();
+    activity();
+    home_refresh(now_ms());
+}
 static void primary_render_home_content(lv_obj_t *parent)
 {
-    label(parent, "LYRICFLASH", 36, &lv_font_montserrat_24, prefs->text_color);
-    label(parent, LF_VERSION_LABEL, 82, &lv_font_montserrat_20, 0xB7C7D7);
-    battery_status = label(parent, "BATTERY", 129, &lv_font_montserrat_20, 0xDCE8F0);
-    button(parent, "CLOCK", 132, 48, -80, -43, 0xA8D6FF, on_clock_back, NULL);
-    button(parent, "SETTINGS", 132, 48, 80, -43, 0xA8D6FF, on_settings, NULL);
-    button(parent, "LYRICS", 242, 55, 0, 28, 0xA8D6FF, on_preview, NULL);
-    button(parent, "CONNECT / OTA", 206, 49, 0, 100, 0xA8D6FF, on_connection_help, NULL);
-    network_status=label(parent, "Wi-Fi starting...", 371, &lv_font_montserrat_16, 0xB9CADB);
-    label(parent, "CLOCK     •     HOME     •     SETTINGS", 405, &lv_font_montserrat_16, 0x6E8CAC);
+    label(parent,"LYRICFLASH",28,&lv_font_montserrat_24,prefs->text_color);
+    label(parent,LF_VERSION_LABEL,63,&lv_font_montserrat_16,0xA3B9CC);
+    battery_status=label(parent,"BATTERY",97,&lv_font_montserrat_20,0xDCE8F0);
+    home_scan_status=label(parent,"MIC OFF - READY TO SCAN",132,
+                           &lv_font_montserrat_16,0x8DD8FF);
+    home_song_title=label(parent,"Find your music",170,
+                          &lv_font_montserrat_24,prefs->text_color);
+    home_song_artist=label(parent,"Tap SCAN to identify a song",209,
+                           &lv_font_montserrat_18,0xBACDE0);
+    home_lyric_line=label(parent,"Lyrics will appear after a match",246,
+                          &lv_font_montserrat_18,prefs->text_color);
+    /* Fixed single-line labels; long recognized titles cannot shift the
+     * controls or draw outside the circular panel. */
+    lv_obj_t *dynamic[]={home_scan_status,home_song_title,home_song_artist,home_lyric_line};
+    for(size_t i=0;i<sizeof dynamic/sizeof dynamic[0];i++){
+        lv_obj_set_width(dynamic[i],i==0?338:344);
+        lv_obj_set_height(dynamic[i],31);
+        lv_label_set_long_mode(dynamic[i],LV_LABEL_LONG_DOT);
+    }
+    home_scan_button=button(parent,"SCAN SONG",218,54,0,72,
+                            0xA8D6FF,on_home_scan,NULL);
+    button(parent,"LYRICS",146,49,-85,133,0xA8D6FF,on_preview,NULL);
+    button(parent,"CONNECT / OTA",164,49,85,133,0xA8D6FF,
+           on_connection_help,NULL);
+    network_status=label(parent,"Starting Wi-Fi...",403,
+                         &lv_font_montserrat_16,0x96B9D8);
+    lv_obj_set_width(network_status,278);
+    lv_label_set_long_mode(network_status,LV_LABEL_LONG_DOT);
+    home_last_refresh_ms=0;
     last_power_refresh_ms=0;
 }
 static void render_home(void)
@@ -1316,6 +1459,7 @@ static void primary_pager_commit(int index)
     last_power_refresh_ms=0;
     clock_last_refresh=0;
     activity();
+    if(index==1)home_refresh(now_ms());
     if(index==0) {
         /* A touch used to reveal a black Clock after a return swipe. Do not
            depend on another touch to trigger the panel's dirty rectangle:
@@ -1967,6 +2111,8 @@ static void on_tick(lv_timer_t *timer)
     if (page == 6 && touch_held && !pager_scrolling && touch_pressed_at_ms &&
         current - touch_pressed_at_ms >= LF_CLOCK_SETTINGS_HOLD_MS)
         show_clock_settings_popup();
+    if (page == 0 && !touch_held && !pager_scrolling &&
+        current-home_last_refresh_ms >= 750)home_refresh(current);
     if (page == 14 && current - last_debug_refresh >= 2500) {
         last_debug_refresh = current;
         refresh_debug();
@@ -2006,12 +2152,15 @@ static void on_tick(lv_timer_t *timer)
         if (network_status) {
             char text[128];
             char ssid[33] = {0};
-            if (lf_network_connected_ssid(ssid, sizeof ssid))
+            if (page==0)
+                snprintf(text,sizeof text,"Open: http://%s/",lf_network_address());
+            else if (lf_network_connected_ssid(ssid, sizeof ssid))
                 snprintf(text, sizeof text, "Wi-Fi: %.32s", ssid);
             else if (*lf_network_ap_ssid())
                 snprintf(text, sizeof text, "Setup: %.32s", lf_network_ap_ssid());
             else snprintf(text, sizeof text, "Wi-Fi connecting...");
-            lv_label_set_text(network_status, text);
+            if(page==0)home_set_text(network_status,text);
+            else lv_label_set_text(network_status,text);
         }
         if (network_password) {
             char text[72];
