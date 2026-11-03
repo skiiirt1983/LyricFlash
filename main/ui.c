@@ -1005,6 +1005,15 @@ static void auto_open_lyrics_deferred(void *unused)
 static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t current)
 {
     if(!song || !home_record_layer)return;
+    /* The physical pager must not scroll during recording/upload/lookup.
+       Re-enable once the scan has finished and the finger is released. */
+    if(primary_pager && page==0){
+        const bool locked=song->state==LF_RECOG_CAPTURE ||
+            song->state==LF_RECOG_UPLOAD || song->state==LF_RECOG_LYRICS;
+        if(locked)lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLLABLE);
+        else if(!ui_pointer_is_down())
+            lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_SCROLLABLE);
+    }
     /* This UI-only deadline is independent of HTTP socket timeouts and the
        recognition worker. A wedged request must release the visible loading
        overlay so the screen remains usable, even before worker cleanup. */
