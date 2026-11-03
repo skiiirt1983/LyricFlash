@@ -29,11 +29,13 @@ int main(void)
     initial.background_color=0x123456;
     initial.accent_color=0xABCDEF;
     initial.timing_offset_ms=-420;
-    initial.basic_battery_size=97;
+    initial.basic_battery_size=200;
     initial.basic_battery_y=-140;
-    initial.basic_date_size=82;
+    initial.basic_date_size=190;
     initial.basic_weather_x=22;
     initial.basic_time_y=-13;
+    initial.basic_font_size=200;
+    initial.basic_weather_size=0;
     initial.line_spacing_px=13;
     initial.face_background[0]=0x445566;
     initial.face_accent[2]=0xF0AC22;
@@ -49,9 +51,10 @@ int main(void)
     assert(next.brightness==77&&next.scroll_speed==0&&next.deep_sleep_minutes==15&&next.font_size==2);
     assert(next.text_color==0xFF55AB&&next.background_color==0x123456);
     assert(next.accent_color==0xABCDEF&&next.timing_offset_ms==-420);
-    assert(next.basic_battery_size==97 && next.basic_battery_y==-140);
-    assert(next.basic_date_size==82 && next.basic_weather_x==22 && next.basic_time_y==-13);
+    assert(next.basic_battery_size==200 && next.basic_battery_y==-140);
+    assert(next.basic_date_size==190 && next.basic_weather_x==22 && next.basic_time_y==-13);
     assert(next.line_spacing_px==13);
+    assert(next.basic_font_size==200 && next.basic_weather_size==0);
     assert(next.face_background[0]==0x445566);
     assert(next.face_accent[2]==0xF0AC22);
     assert(next.face_show_seconds[0]==0 && next.face_24h[1]==1);
