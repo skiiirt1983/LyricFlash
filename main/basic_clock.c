@@ -1,6 +1,7 @@
 #include "basic_clock.h"
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 static uint32_t lerp(uint32_t a, uint32_t b, unsigned x, unsigned maximum)
 {
