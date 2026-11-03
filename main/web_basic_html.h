@@ -289,8 +289,8 @@ static const char lf_basic_settings_html[] =
 "    let width=(end-col)*scale,height=scale;\n"
 "    if(style===7||style===13||style===15)\n"
 "     out+=run(xx+2,yy+2,width,height,style===15?'#246da7':'#2d4659');\n"
-"    if(style===8)width+=1;
-    if(style===17)width+=scale; /* thick Gothic strokes even at blank outer rows */\n"
+"    if(style===8)width+=1;\n"
+"    if(style===17)width+=scale; /* thick Gothic strokes even at blank outer rows */\n"
 "    if(style===9||style===14)width=Math.max(1,width-1);\n"
 "    if(style===19){width=Math.max(1,width-2);height=Math.max(1,height-1);xx++}\n"
 "    if(style===17&&(row===0||row===20))\n"
