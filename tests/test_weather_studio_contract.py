@@ -37,6 +37,16 @@ for token in ('aria-current="page"','geocoding-api.open-meteo.com',
               "longitude_e5","Save Weather","'/api/weather'"):
     assert token in html,token
 assert "fetch('/api/recognize/start'" not in html
+for selector in ("header .toolbar{display:flex!important",
+                 "header .lf-wordmark{display:flex!important",
+                 "header .lf-wordmark small{display:block!important",
+                 "header .toolbar-links{display:flex!important",
+                 "header .toolbar-links a{display:inline-flex!important",
+                 "header .lf-mark{display:flex!important"):
+    assert selector in html,selector
+assert 'class="toolbar-links"' in html
+assert 'class="lf-header-power"' in html
+
 js=html.split("<script>",1)[1].split("</script>",1)[0]
 with tempfile.TemporaryDirectory() as folder:
     target=Path(folder)/"weather.js"
