@@ -6,7 +6,7 @@ ui=(p/"main/ui.c").read_text()
 header=(p/"main/recognition.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.48-alpha"' in version
+assert 'LF_VERSION "0.8.49-alpha"' in version
 # Feed the renderer a scalar only: the existing capture is still manual.
 assert "uint8_t capture_visual_level;" in header
 assert "static void set_count(uint32_t frames,const int16_t *tdm)" in worker
@@ -28,7 +28,8 @@ assert "lv_obj_set_style_line_width(home_record_wave,7,0);" in ui
 assert "lv_obj_set_style_border_width(record_ring,6,0);" in ui
 assert 'lv_label_set_text(home_record_loading,"LOADING...")' in ui
 assert "const bool opening=song->state==LF_RECOG_MATCH" in ui
-assert 'home_caption(parent,"LYRIC"' in ui and 'home_caption(parent,"FLASH"' in ui
+assert 'lv_label_set_text(lyric_mark,"LYRIC");' in ui and
+       'lv_label_set_text(flash_mark,"FLASH");' in ui
 
 assert "lv_line_set_points(home_record_wave,home_record_wave_points" in ui
 assert 'lv_color_hex(0xFFD02C)' in ui
