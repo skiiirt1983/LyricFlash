@@ -2244,7 +2244,7 @@ static void build_clock_settings_now(void)
 static void on_basic_font(lv_event_t *e)
 {
     (void)e;
-    prefs->basic_font_style = (prefs->basic_font_style + 1) % 5;
+    prefs->basic_font_style = (prefs->basic_font_style + 1) % 20;
     save_settings();
     build_basic_settings();
 }
