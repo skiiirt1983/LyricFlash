@@ -98,6 +98,36 @@ bool lf_recog_lyric_line(uint32_t index, lf_lyric_line_t *out)
     return found;
 }
 static bool cancelled(void){return atomic_load(&stop_flag);}
+static void publish_capture_metrics(const lf_scan_audio_metrics_t *m)
+{
+    const uint32_t r1=lf_scan_audio_rms(m->mic1_sum_sq,m->frames);
+    const uint32_t r2=lf_scan_audio_rms(m->mic2_sum_sq,m->frames);
+    const uint32_t clean1=lf_scan_audio_rms(m->mic1_below_rail_sq,
+                                             m->mic1_below_rail_frames);
+    const uint32_t clean2=lf_scan_audio_rms(m->mic2_below_rail_sq,
+                                             m->mic2_below_rail_frames);
+    portENTER_CRITICAL(&result_mux);
+    result.audio_measured_frames=m->frames;
+    result.mic1_peak=m->mic1_peak;result.mic2_peak=m->mic2_peak;
+    result.mic1_rms=r1;result.mic2_rms=r2;
+    result.mic1_rms_without_rail=clean1;result.mic2_rms_without_rail=clean2;
+    result.mic1_near_rail=m->mic1_near_rail;
+    result.mic2_near_rail=m->mic2_near_rail;
+    result.mic1_half_scale=m->mic1_half_scale;
+    result.mic2_half_scale=m->mic2_half_scale;
+    result.mic1_rail_bursts=m->mic1_rail_bursts;
+    result.mic2_rail_bursts=m->mic2_rail_bursts;
+    result.mic1_longest_rail_burst=m->mic1_longest_burst;
+    result.mic2_longest_rail_burst=m->mic2_longest_burst;
+    result.both_near_rail_frames=m->both_near_rail;
+    portEXIT_CRITICAL(&result_mux);
+}
+static void set_transport_error(int code)
+{
+    portENTER_CRITICAL(&result_mux);
+    result.audd_transport_error_code=code;
+    portEXIT_CRITICAL(&result_mux);
+}
 static void lookup_lyrics_after_match(void)
 {
     lf_recog_snapshot_t song={0};
@@ -218,6 +248,7 @@ static void parse_recognition(int http_code,const char *json)
     const lf_service_error_t mapped=lf_recognition_status(http_code,provider_code,has_match);
     portENTER_CRITICAL(&result_mux);
     result.http_status=http_code;
+    result.audd_api_error_code=provider_code;
     if(has_match){
         snprintf(result.title,sizeof result.title,"%s",title->valuestring);
         snprintf(result.artist,sizeof result.artist,"%s",artist->valuestring);
@@ -252,17 +283,22 @@ static bool send_audio(const uint8_t *wav,size_t wav_bytes,const char *token)
         .keep_alive_enable=false
     };
     esp_http_client_handle_t client=esp_http_client_init(&config);
-    if(!client)return false;
+    if(!client){set_transport_error(ESP_ERR_NO_MEM);return false;}
     esp_http_client_set_method(client,HTTP_METHOD_POST);
     esp_http_client_set_header(client,"Content-Type",
           "multipart/form-data; boundary=" LF_RECOG_BOUNDARY);
     bool ok=false;
-    if(esp_http_client_open(client,(int)body_len)==ESP_OK){
+    const esp_err_t open_rc=esp_http_client_open(client,(int)body_len);
+    if(open_rc!=ESP_OK)set_transport_error((int)open_rc);
+    if(open_rc==ESP_OK){
         if(post_write(client,(const uint8_t*)prefix,(size_t)n)&&
            post_write(client,wav,wav_bytes)&&
            post_write(client,(const uint8_t*)suffix,sizeof suffix-1U)&&
            !atomic_load(&stop_flag)){
             const int64_t header_len=esp_http_client_fetch_headers(client);
+            portENTER_CRITICAL(&result_mux);
+            result.http_status=esp_http_client_get_status_code(client);
+            portEXIT_CRITICAL(&result_mux);
             if(header_len>=0 && header_len<LF_RECOG_RESPONSE_CAP){
                 char *reply=calloc(1,LF_RECOG_RESPONSE_CAP);
                 if(reply){
@@ -291,6 +327,8 @@ static void worker(void *arg)
     esp_codec_dev_handle_t codec=NULL;
     bool opened=false,ok=false;
     uint32_t frames=0;
+    lf_scan_audio_metrics_t metrics={0};
+    bool metrics_published=false;
     if(!load_token(token)){status(LF_RECOG_ERROR,"Set an AudD token in Device Settings");goto done;}
     if(!lf_network_is_connected()){status(LF_RECOG_ERROR,"Connect to Wi-Fi to identify music");goto done;}
     wav=(uint8_t*)heap_caps_malloc(LF_SCAN_WAV_BYTES,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
@@ -317,10 +355,12 @@ static void worker(void *arg)
         if(!lf_scan_tdm_to_stereo(wav+at,LF_SCAN_WAV_BYTES-at,tdm,LF_SCAN_TDM_SAMPLES)){
             status(LF_RECOG_ERROR,"Audio conversion failed");goto done;
         }
+        lf_scan_audio_metrics_add(&metrics,tdm,LF_SCAN_TDM_SAMPLES);
         frames+=LF_SCAN_TDM_FRAMES;
         set_count(frames);
     }
     (void)esp_codec_dev_close(codec);opened=false;
+    publish_capture_metrics(&metrics);metrics_published=true;
     if(atomic_load(&stop_flag))goto done;
     if(frames<LF_RECOG_MIN_FRAMES){
         status(LF_RECOG_ERROR,"Not enough recorded audio to identify song");goto done;
@@ -336,6 +376,7 @@ static void worker(void *arg)
     clear_secret(token,sizeof token);
     if(ok && !atomic_load(&stop_flag))lookup_lyrics_after_match();
 done:
+    if(!metrics_published)publish_capture_metrics(&metrics);
     if(opened)(void)esp_codec_dev_close(codec);
     if(wav){clear_secret(wav,LF_SCAN_WAV_BYTES);heap_caps_free(wav);}
     clear_secret(token,sizeof token);
