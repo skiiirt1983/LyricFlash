@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""0.8.43 three-line lyrics layout, battery status and NVS calibration gates."""
+from pathlib import Path
+root=Path(__file__).resolve().parents[1]
+ui=(root/"main/ui.c").read_text()
+settings=(root/"main/settings.c").read_text()
+schema=(root/"main/settings.h").read_text()
+scene=ui.split("static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)\n{",1)[1].split("static void build_preview_now",1)[0]
+assert "LF_CONFIG_SCHEMA 11U" in schema
+assert ".timing_offset_ms = -2000" in settings
+assert "schema < 10 && s->timing_offset_ms == 0" in settings
+assert 'nvs_set_i32(h, "offset_ms", s->timing_offset_ms)' in settings
+assert ui.count("lf_lyric_clock_adjust(&timed_clock,prefs->timing_offset_ms);")==2
+assert "prefs->timing_offset_ms=timed_clock.correction_ms;" in ui
+assert "prefs->timing_offset_ms=previous;" in ui
+assert "const esp_err_t err=lf_settings_save(prefs);" in ui
+for token in ("timed_line_label(0,352","timed_line_label(1,398",
+              "timed_line_label(2,352","timed_battery=lv_label_create(screen)",
+              "timed_controls=lv_obj_create(screen)",
+              "timed_hint_until_ms=now_ms()+5000","SAVE DEFAULT",
+              "LV_EVENT_LONG_PRESSED"):
+    assert token in scene,token
+for token in ("lv_label_set_long_mode(line,LV_LABEL_LONG_WRAP)",
+              "lv_obj_set_height(line,LV_SIZE_CONTENT)",
+              "battery.charging?0x42DC89",
+              "battery.percentage<=20)?0xFFD34D",
+              "current>=timed_controls_until_ms"):
+    assert token in ui,token
+assert "song->title,38" not in scene and "song->artist,77" not in scene
+assert "lv_obj_t *focus=lv_obj_create(screen)" not in scene
+print("PASS: minimal battery with charging/low colours, lyric viewport and saved -2s offset")
