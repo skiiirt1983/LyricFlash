@@ -11,6 +11,7 @@ typedef enum {
 typedef struct {
     lf_recog_state_t state;
     uint32_t captured_frames;
+    uint8_t capture_visual_level; /* 0..100 live aggregate amplitude; never raw audio */
     uint64_t capture_start_ms; /* monotonic scan start, not wall clock */
     uint32_t audd_timecode_ms; /* AudD-reported position; estimated alignment */
     bool audd_timecode_valid;
