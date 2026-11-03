@@ -9,6 +9,7 @@ python3 tests/test_recording_visual_contract.py
 python3 tests/test_lyrics_layout_contract.py
 python3 tests/test_weather_studio_contract.py
 python3 tests/test_clock_layout_contract.py
+python3 tests/test_open_font_contract.py
 python3 tests/test_mic_probe_contract.py
 python3 tests/test_mic_pcm_contract.py
 python3 tests/test_recognition_contract.py
