@@ -11,6 +11,7 @@ int main(void)
     assert(lf_settings_load(&initial)==ESP_OK);
     assert(initial.brightness==55 && initial.scroll_speed==70);
     assert(initial.line_spacing_px==5 && initial.show_progress==1);
+    assert(initial.timing_offset_ms==-2000);
     /* Virgin NVS must use the NEW default (70), not migrate a nonexistent
        legacy preference as if it came from alpha 0.8.4. */
     assert(initial.face_background[0]==0x070F14);
@@ -45,6 +46,21 @@ int main(void)
     assert(nvs_set_i32(h,"offset_ms",-100000)==ESP_OK);
     nvs_close(h);
     assert(lf_settings_load(&next)==ESP_OK);
-    assert(next.brightness==55 && next.timing_offset_ms==0);
+    assert(next.brightness==55 && next.timing_offset_ms==-2000);
+    /* Legacy 0.8.42 default zero maps to the new calibrated baseline. */
+    assert(nvs_open(LF_CONFIG_NS,NVS_READWRITE,&h)==ESP_OK);
+    assert(nvs_set_u32(h,"schema",9)==ESP_OK);
+    assert(nvs_set_i32(h,"offset_ms",0)==ESP_OK);
+    nvs_close(h);
+    assert(lf_settings_load(&next)==ESP_OK && next.timing_offset_ms==-2000);
+    /* Schema 10 permits deliberate zero as a user preference. */
+    assert(nvs_open(LF_CONFIG_NS,NVS_READWRITE,&h)==ESP_OK);
+    assert(nvs_set_u32(h,"schema",10)==ESP_OK);
+    assert(nvs_set_i32(h,"offset_ms",0)==ESP_OK);
+    nvs_close(h);
+    assert(lf_settings_load(&next)==ESP_OK && next.timing_offset_ms==0);
+    next.timing_offset_ms=-2000;
+    assert(lf_settings_save(&next)==ESP_OK);
+    assert(lf_settings_load(&next)==ESP_OK && next.timing_offset_ms==-2000);
     printf("Persistent settings and schema migration defaults passed\n");
 }
