@@ -53,19 +53,19 @@ assert "gh release create" in workflow
 # The previously validated 0.8.39 release remains published.
 # The 0.8.41 branch may publish a new OTA only after a validated compile-once gate.
 active_version=(root / "main/version.h").read_text()
-# 0.8.41 is the separately published OTA release. The experimental 0.8.45
+# 0.8.41 is the separately published OTA release. The experimental 0.8.46
 # branch has its own ESP32-S3 build and artifact; a successful compile is NOT
 # proof that it has been published to the device's direct OTA catalog.
 assert ('"0.8.41-alpha"' in active_version or
-        '"0.8.45-alpha"' in active_version), "Unexpected alpha firmware version"
-if '"0.8.45-alpha"' in active_version:
+        '"0.8.46-alpha"' in active_version), "Unexpected alpha firmware version"
+if '"0.8.46-alpha"' in active_version:
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
-    assert "feature/private-0.8.45-recording-visuals" in private_workflow
-    assert "LyricFlash-Private-Alpha-0.8.45-ESP32S3-UNTESTED" in private_workflow
+    assert "feature/private-0.8.46-recording-visuals" in private_workflow
+    assert "LyricFlash-Private-Alpha-0.8.46-ESP32S3-UNTESTED" in private_workflow
     assert "tools/package_release.py --verify _site" in private_workflow
     assert "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin" in private_workflow
     assert "gh release create" in private_workflow
     assert "--prerelease --latest=false" in private_workflow
-    print("PASS: 0.8.45 private firmware artifacts and gated OTA publishing contract")
+    print("PASS: 0.8.46 private firmware artifacts and gated OTA publishing contract")
 else:
     print("PASS: 0.8.41 manual alpha build is eligible for direct OTA publishing")
