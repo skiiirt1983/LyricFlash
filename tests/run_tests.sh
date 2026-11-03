@@ -19,6 +19,9 @@ node tests/test_clock_preview_runtime.js
 node tests/test_firmware_picker_runtime.js
 python3 tests/test_beta_local_installer.py
 node --check docs/beta/local-flash.js
+cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/lyric_sync.c tests/test_lyric_sync.c -o /tmp/lyricflash_test_lyric_sync
+/tmp/lyricflash_test_lyric_sync
+rm -f /tmp/lyricflash_test_lyric_sync
 cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/lyric_clock.c tests/test_lyric_clock.c -o /tmp/lyricflash_test_lyric_clock
 /tmp/lyricflash_test_lyric_clock
 cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/lyrics.c tests/test_lyrics.c -o /tmp/lyricflash_test_lyrics
