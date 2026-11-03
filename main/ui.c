@@ -2020,68 +2020,29 @@ static void build_preview_now(void)
         build_timed_lyrics_now(&song);
         return;
     }
-    page = 1;
-    make_base();
-    scroll_y = 0;
-    paused = false;
-    user_dragging = false;
-    finger_was_scrolling = false;
-    scroll_at_end_ms = 0;
-    touch_resume_at_ms = 0;
-    last_scroll_ms = now_ms();
-    label(screen, "LYRIC PREVIEW", 54, &lv_font_montserrat_20, prefs->text_color);
-    label(screen, "SAMPLE LYRICS - MIC OFF", 85, &lv_font_montserrat_16, 0xB7C7D7);
-    scroll_panel = lv_obj_create(screen);
-    lv_obj_set_size(scroll_panel, 338, 215);
-    lv_obj_align(scroll_panel, LV_ALIGN_CENTER, 0, 10);
-    lv_obj_set_style_bg_color(scroll_panel, lv_color_hex(0x090E15), 0);
-    lv_obj_set_style_border_width(scroll_panel, 0, 0);
-    lv_obj_set_style_radius(scroll_panel, 22, 0);
-    lv_obj_set_style_pad_all(scroll_panel, 14, 0);
-    lv_obj_set_scroll_dir(scroll_panel, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(scroll_panel, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_add_flag(scroll_panel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(scroll_panel, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_add_flag(scroll_panel, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_remove_flag(scroll_panel, LV_OBJ_FLAG_GESTURE_BUBBLE);
-    lv_obj_remove_flag(scroll_panel, LV_OBJ_FLAG_SCROLL_CHAIN);
-    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_SCROLL_BEGIN, NULL);
-    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_SCROLL_END, NULL);
-    lv_obj_add_event_cb(scroll_panel, on_touch_scroll, LV_EVENT_RELEASED, NULL);
-
-
-    lyrics_label = lv_label_create(scroll_panel);
-    lv_obj_set_width(lyrics_label, 292);
-    lv_obj_set_height(lyrics_label, LV_SIZE_CONTENT);
-    lv_obj_remove_flag(lyrics_label, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(lyrics_label, LV_OBJ_FLAG_SCROLLABLE);
-    lv_label_set_long_mode(lyrics_label, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(lyrics_label, DEMO_TEXT);
-    lv_obj_set_style_text_align(lyrics_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(lyrics_label, lv_color_hex(prefs->text_color), 0);
-    lv_obj_set_style_text_font(lyrics_label, font_for_size(prefs->font_size), 0);
-    lv_obj_set_style_text_line_space(lyrics_label, prefs->line_spacing_px, 0);
-    lv_obj_align(lyrics_label, LV_ALIGN_TOP_MID, 0, 0);
-    /* Expand the computed content height and leave room to read the last
-       verse. A 1px invisible child guarantees an actual LVGL scroll range. */
-    lv_obj_update_layout(lyrics_label);
-    lv_obj_t *tail = lv_obj_create(scroll_panel);
-    lv_obj_set_size(tail, 1, 1);
-    lv_obj_set_style_bg_opa(tail, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(tail, 0, 0);
-    lv_obj_set_style_pad_all(tail, 0, 0);
-    lv_obj_remove_flag(tail, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_align(tail, LV_ALIGN_TOP_MID, 0,
-                 lv_obj_get_height(lyrics_label) + 80);
-    lv_obj_update_layout(scroll_panel);
-    ESP_LOGI(TAG, "Lyrics scroll: label=%ld px, viewport=%ld px, bottom=%ld px",
-             (long)lv_obj_get_height(lyrics_label), (long)lv_obj_get_height(scroll_panel),
-             (long)lv_obj_get_scroll_bottom(scroll_panel));
-    lv_obj_remove_flag(lyrics_label, LV_OBJ_FLAG_GESTURE_BUBBLE);
-
-    button(screen, "BACK", 130, 47, -76, 172, 0x9CB7CB, on_home, NULL);
-    pause_button = button(screen, "PAUSE", 130, 47, 76, 172, prefs->text_color, on_toggle_pause, NULL);
+    /* The vertical panel is for real lyrics, never the old demo scroller.
+       Leave Home and the Clock cache alive so swiping back is reversible. */
+    page=1;
+    lv_obj_t *surface=screen;
+    if(primary_pager && screen){
+        timed_overlay=lv_obj_create(screen);
+        surface=timed_overlay;
+        lv_obj_set_size(surface,466,466);
+        lv_obj_center(surface);
+        lv_obj_set_style_radius(surface,0,0);
+        lv_obj_set_style_bg_color(surface,lv_color_hex(0x070D16),0);
+        lv_obj_set_style_bg_opa(surface,LV_OPA_COVER,0);
+        lv_obj_set_style_border_width(surface,0,0);
+        lv_obj_set_style_pad_all(surface,0,0);
+        lv_obj_remove_flag(surface,LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(surface,LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(surface,LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_add_flag(surface,LV_OBJ_FLAG_GESTURE_BUBBLE);
+        lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_HIDDEN);
+    }else make_base();
+    label(surface,"NO LYRICS YET",180,&lv_font_montserrat_24,0xE8F5FF);
+    label(surface,"Swipe up to Home, then tap Play",228,
+          &lv_font_montserrat_16,0xA8C8E1);
 }
 
 /* List rows are clickable; selecting a network opens the on-device keyboard. */
