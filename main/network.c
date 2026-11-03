@@ -449,6 +449,8 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
         cJSON_AddBoolToObject(p,"show_date",s.face_show_date[i]!=0);
         cJSON_AddBoolToObject(p,"show_seconds",s.face_show_seconds[i]!=0);
         cJSON_AddBoolToObject(p,"show_battery",s.face_show_battery[i]!=0);
+        cJSON_AddNumberToObject(p,"battery_x",s.face_battery_x[i]);
+        cJSON_AddNumberToObject(p,"battery_y",s.face_battery_y[i]);
         cJSON_AddBoolToObject(p,"time_24h",s.face_24h[i]!=0);
         cJSON_AddItemToArray(faces,p);
     }
@@ -543,6 +545,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     const cJSON *profiles=cJSON_GetObjectItemCaseSensitive(root,"face_profiles");
     uint32_t bg_face[6],fg_face[6],ac_face[6];
     uint8_t dt_face[6],sc_face[6],bt_face[6],hr_face[6];
+    int32_t battery_x_face[6],battery_y_face[6];
     if(!cJSON_IsArray(profiles)||cJSON_GetArraySize(profiles)!=6) valid=false;
     if(valid) for(int i=0;i<6;i++){
         const cJSON *p=cJSON_GetArrayItem(profiles,i);
@@ -554,6 +557,16 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
            || !boolean_value(p,"show_seconds",&sv)
            || !boolean_value(p,"show_battery",&bv)
            || !boolean_value(p,"time_24h",&hv)){valid=false;break;}
+        /* Accept older clients without the two new coordinates; preserve
+           stored locations. New Clock Studio always sends both fields. */
+        int btx=current.face_battery_x[i],bty=current.face_battery_y[i];
+        const cJSON *batteryX=cJSON_GetObjectItemCaseSensitive(p,"battery_x");
+        const cJSON *batteryY=cJSON_GetObjectItemCaseSensitive(p,"battery_y");
+        if((batteryX&&!number_in_range(p,"battery_x",-150,150,&btx)) ||
+           (batteryY&&!number_in_range(p,"battery_y",-180,180,&bty))){
+            valid=false;break;
+        }
+        battery_x_face[i]=btx;battery_y_face[i]=bty;
         bg_face[i]=(uint32_t)bgv;fg_face[i]=(uint32_t)fgv;ac_face[i]=(uint32_t)acv;
         dt_face[i]=dv;sc_face[i]=sv;bt_face[i]=bv;hr_face[i]=hv;
     }
@@ -593,6 +606,8 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         current.face_accent[i]=ac_face[i];current.face_show_date[i]=dt_face[i];
         current.face_show_seconds[i]=sc_face[i];current.face_show_battery[i]=bt_face[i];
         current.face_24h[i]=hr_face[i];
+        current.face_battery_x[i]=battery_x_face[i];
+        current.face_battery_y[i]=battery_y_face[i];
     }
     /* Basic face keeps existing ring/font controls as well. */
     current.basic_background=current.face_background[5];
