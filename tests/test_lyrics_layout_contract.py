@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.44 three-line lyrics layout, battery status and NVS calibration gates."""
+"""0.8.45 three-line lyrics layout, battery status and NVS calibration gates."""
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 ui=(root/"main/ui.c").read_text()
