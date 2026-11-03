@@ -385,7 +385,7 @@ static const char lf_basic_settings_html[] =
 " setTimeout(()=>{$('selected-size').disabled=true;\n"
 " $('unlock-selected-size').textContent='Unlock size';},600);\n"
 "});\n"
-"for(const button of document.querySelectorAll('[data-nudge]')){\n"
+"for(const button of (typeof document.querySelectorAll==='function'?document.querySelectorAll('[data-nudge]'):[])){\n"
 " button.addEventListener('click',()=>{\n"
 "  if(!selectedPart)return;\n"
 "  const info=partDefs[selectedPart],step=button.getAttribute('data-nudge').split(',').map(Number);\n"
