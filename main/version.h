@@ -5,3 +5,5 @@
  * Host regression tests and strict C parser checks passed; hardware test pending. */
 #define LF_VERSION "0.8.55-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.55"
+
+/* Release gate: lyrics progress without status label; enclosed mic gain 27 dB. */
