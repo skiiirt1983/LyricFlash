@@ -14,8 +14,8 @@ assert ui.count("lf_lyric_clock_adjust(&timed_clock,prefs->timing_offset_ms);")=
 assert "prefs->timing_offset_ms=timed_clock.correction_ms;" in ui
 assert "prefs->timing_offset_ms=previous;" in ui
 assert "const esp_err_t err=lf_settings_save(prefs);" in ui
-for token in ("timed_line_label(0,352","timed_line_label(1,398",
-              "timed_line_label(2,370","timed_battery=lv_label_create(surface)",
+for token in ("timed_line_label(0,LF_TIMED_TEXT_WIDTH","timed_line_label(1,LF_TIMED_TEXT_WIDTH",
+              "timed_line_label(2,LF_TIMED_TEXT_WIDTH","timed_battery=lv_label_create(surface)",
               "timed_controls=lv_obj_create(surface)",
               "timed_hint_until_ms=now_ms()+5000","SAVE DEFAULT",
               "LV_EVENT_LONG_PRESSED"):
@@ -31,7 +31,7 @@ assert "lv_obj_set_style_translate_y(timed_scroll_group,target,0)" in ui
 assert "timed_viewport=lv_obj_create(surface);" in ui
 assert "LV_OBJ_FLAG_OVERFLOW_VISIBLE" in ui
 assert "lv_obj_set_style_text_opa(row,opacity,0);" in ui
-assert "const int16_t target=(int16_t)(-(int)(progress*82U/1024U));" in ui
+assert "const int16_t target=-(int16_t)((uint32_t)progress*(uint16_t)pitch/1024U);" in ui
 assert "timed_scroll_timer=lv_timer_create(timed_scroll_frame,65,NULL)" in ui
 assert "song->title,38" not in scene and "song->artist,77" not in scene
 assert "lv_obj_t *focus=lv_obj_create(screen)" not in scene

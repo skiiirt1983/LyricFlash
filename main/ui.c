@@ -38,7 +38,13 @@ static lv_obj_t *lyrics_label;
 static bool timed_lyrics_mode;
 static lf_lyric_clock_t timed_clock;
 static uint32_t timed_stamps[LF_MAX_LINES];
+/* Premeasure every LRC line before its first frame with one fixed 24px
+   font and identical wrapping width for all four lyric slots. */
+#define LF_TIMED_TEXT_WIDTH 378
+static uint16_t timed_line_heights[LF_MAX_LINES];
 static size_t timed_line_count;
+static int16_t timed_row_centers[4];
+static uint8_t timed_visible_future_mask;
 static uint32_t timed_scan_attempt;
 static int timed_active_index=-999;
 static uint32_t timed_last_second=UINT32_MAX;
@@ -740,6 +746,7 @@ static void lyrics_overlay_close(void)
     timed_lyrics_mode=false;
     timed_viewport=NULL;
     timed_scroll_group=NULL;
+    timed_visible_future_mask=0xFF;
     for(size_t i=0;i<4;i++)timed_rows[i]=NULL;
     timed_status=NULL;
     timed_pause_button=NULL;
@@ -827,6 +834,7 @@ static void make_base(void)
     for(size_t i=0;i<4;i++)timed_rows[i]=NULL;
     timed_viewport=NULL;
     timed_scroll_group=NULL;
+    timed_visible_future_mask=0xFF;
     timed_scroll_y=INT16_MIN;
     for(size_t i=0;i<4;i++)timed_row_opa[i]=255;
     timed_status=NULL;
@@ -1407,53 +1415,74 @@ static void on_touch_scroll(lv_event_t *e)
  * line from "next" through "current" to "previous", allowing the listener
  * to anticipate words and still read the completed line above. No new
  * audio capture, network fetch, background thread, or display root. */
+/* Uniform font and text width; no per-line shrink/enlarge animation. */
 static void timed_set_row(int slot,const char *value)
 {
     lv_obj_t *item=timed_rows[slot];
     if(!item)return;
     if(!value)value=" ";
-    const size_t n=strlen(value);
-    const lv_font_t *font=
-        n>115?&lv_font_montserrat_16:
-        n>90?&lv_font_montserrat_18:
-        n>62?&lv_font_montserrat_20:
-        n>39?&lv_font_montserrat_24:
-        slot==1?&lv_font_montserrat_28:&lv_font_montserrat_24;
-    if(lv_obj_get_style_text_font(item,0)!=font)
-        lv_obj_set_style_text_font(item,font,0);
-    if(strcmp(lv_label_get_text(item),value)!=0)
-        lv_label_set_text(item,value);
+    if(strcmp(lv_label_get_text(item),value)!=0)lv_label_set_text(item,value);
+}
+static uint16_t timed_line_height_at(int index)
+{
+    if(index<0 || (size_t)index>=timed_line_count)return 30U;
+    return timed_line_heights[index];
+}
+static uint16_t timed_pitch(int from,int to)
+{
+    uint32_t gap=0;
+    if(from>=0 && to>=0 && (size_t)to<timed_line_count &&
+       (size_t)from<timed_line_count &&
+       timed_stamps[to]>timed_stamps[from])
+        gap=timed_stamps[to]-timed_stamps[from];
+    return lf_sync_row_pitch_px(timed_line_height_at(from),
+                                timed_line_height_at(to),gap);
+}
+static void timed_position_rows(int index)
+{
+    timed_row_centers[0]=-(int16_t)timed_pitch(index-1,index);
+    timed_row_centers[1]=0;
+    timed_row_centers[2]=(int16_t)timed_pitch(index,index+1);
+    timed_row_centers[3]=timed_row_centers[2]+
+                          (int16_t)timed_pitch(index+1,index+2);
+    for(int slot=0;slot<4;slot++)
+        if(timed_rows[slot])
+            lv_obj_align(timed_rows[slot],LV_ALIGN_CENTER,0,timed_row_centers[slot]);
+}
+static uint8_t timed_future_mask(uint32_t ms,int index)
+{
+    uint8_t visible=0;
+    if(!timed_clock.started)return 0;
+    for(int slot=2;slot<4;slot++){
+        const int line_index=index+slot-1;
+        if(line_index>=0 && (size_t)line_index<timed_line_count &&
+           (uint64_t)timed_stamps[line_index]<=(uint64_t)ms+3500ULL)
+            visible|=(uint8_t)(1U<<slot);
+    }
+    return visible;
 }
 static void timed_render(uint64_t current,bool force);
 static void timed_layout_rows(uint32_t ms,int index)
 {
     if(!timed_viewport||!timed_scroll_group)return;
     uint32_t progress=0;
-    if(index>=0 && (size_t)(index+1)<timed_line_count){
-        const uint32_t start=timed_stamps[index];
-        const uint32_t end=timed_stamps[index+1];
-        if(end>start && ms>start){
-            const uint32_t duration=end-start;
-            const uint32_t elapsed=ms-start;
-            progress=elapsed>=duration?1024U:
-                (uint32_t)(((uint64_t)elapsed*1024U)/duration);
-        }
-    }
-    /* Linear clock-paced motion. The previous smoothstep slowed motion
-       around each timecode, visually resembling a late lyric. The clock,
-       highlighted index and text position now agree at every LRC boundary. */
-    const int16_t target=(int16_t)(-(int)(progress*82U/1024U));
+    if(index>=0 && (size_t)(index+1)<timed_line_count)
+        progress=lf_sync_slide_fraction(ms,timed_stamps[index],
+                                        timed_stamps[index+1]);
+    else if(index<0 && timed_line_count)
+        progress=lf_sync_slide_fraction(ms,0,timed_stamps[0]);
+    /* Hold over long gaps and move in the last second before the next LRC
+       timestamp; the actual lyric switch stays pinned to its timestamp. */
+    const int16_t pitch=timed_row_centers[2];
+    const int16_t target=-(int16_t)((uint32_t)progress*(uint16_t)pitch/1024U);
     if(target!=timed_scroll_y){
         lv_obj_set_style_translate_y(timed_scroll_group,target,0);
         timed_scroll_y=target;
     }
-    /* Fade lyric lines only near the fixed viewport edges. Quantization
-       avoids repainting labels every 25ms on the 466px QSPI display. */
-    static const int16_t centers[4]={-82,0,82,164};
     for(int slot=0;slot<4;slot++){
         lv_obj_t *row=timed_rows[slot];
         if(!row)continue;
-        const int center=centers[slot]+target;
+        const int center=(int)timed_row_centers[slot]+target;
         const int distance=center<0?-center:center;
         const int room=180-distance;
         uint8_t opacity=room>=72?255:
@@ -1512,7 +1541,10 @@ static void timed_render(uint64_t current,bool force)
         timed_lyrics_mode=false;
         return;
     }
-    const uint32_t ms=lf_lyric_clock_position(&timed_clock,current);
+    /* Observed lyrics run ~1s ahead: adjust the rendered timeline only,
+       keeping the user's saved manual clock offset independent. */
+    const uint32_t ms=lf_sync_visible_position_ms(
+        lf_lyric_clock_position(&timed_clock,current));
     const uint32_t second=ms/1000U;
     if(force||timed_last_second!=second){
         char info[105];
@@ -1532,20 +1564,24 @@ static void timed_render(uint64_t current,bool force)
     }
     const int index=timed_clock.started?
         lf_lyric_clock_line_at(timed_stamps,timed_line_count,ms):-1;
-    if(force||index!=timed_active_index){
+    const uint8_t future=timed_future_mask(ms,index);
+    if(force||index!=timed_active_index||future!=timed_visible_future_mask){
         for(int slot=0;slot<4;slot++){
             const int line_index=index+slot-1;
             lf_lyric_line_t line={0};
-            if(line_index>=0 && (size_t)line_index<timed_line_count &&
-               lf_recog_lyric_line((uint32_t)line_index,&line))
+            if(slot>=2 && !(future & (1U<<slot)))
+                timed_set_row(slot," "); /* prevent early future verses */
+            else if(line_index>=0 && (size_t)line_index<timed_line_count &&
+                    lf_recog_lyric_line((uint32_t)line_index,&line))
                 timed_set_row(slot,line.text[0]?line.text:" ");
             else if(slot==1 && index<0)
                 timed_set_row(slot,timed_clock.started?
                     "Waiting for first lyric":"Hold for sync controls");
-            else
-                timed_set_row(slot," ");
+            else timed_set_row(slot," ");
         }
+        if(force||index!=timed_active_index)timed_position_rows(index);
         timed_active_index=index;
+        timed_visible_future_mask=future;
     }
     if(timed_clock.started)timed_layout_rows(ms,index);
 }
@@ -1651,9 +1687,10 @@ static lv_obj_t *timed_line_label(int slot,int width,uint32_t color)
     lv_obj_set_style_text_align(line,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_set_style_text_color(line,lv_color_hex(color),0);
     lv_obj_set_style_text_line_space(line,3,0);
+    lv_obj_set_style_text_font(line,&lv_font_montserrat_24,0);
     lv_obj_add_flag(line,LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_flag(line,LV_OBJ_FLAG_GESTURE_BUBBLE);
-    lv_obj_align(line,LV_ALIGN_CENTER,0,(slot-1)*82);
+    lv_obj_align(line,LV_ALIGN_CENTER,0,0);
     return line;
 }
 static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
@@ -1706,10 +1743,20 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     timed_line_count=0;
     const size_t maximum=song->lyric_lines<LF_MAX_LINES?
         song->lyric_lines:LF_MAX_LINES;
+    /* Preflight wrapping for all lyrics before painting the first line,
+       using LVGL's actual glyph measurements (not byte/word guesses). */
     for(size_t i=0;i<maximum;i++){
         lf_lyric_line_t line={0};
         if(!lf_recog_lyric_line((uint32_t)i,&line))break;
-        timed_stamps[timed_line_count++]=line.start_ms;
+        lv_point_t measured={0};
+        lv_text_get_size(&measured,line.text[0]?line.text:" ",
+                         &lv_font_montserrat_24,0,3,
+                         LF_TIMED_TEXT_WIDTH,LV_TEXT_FLAG_NONE);
+        if(measured.y<30)measured.y=30;
+        if(measured.y>320)measured.y=320;
+        timed_stamps[timed_line_count]=line.start_ms;
+        timed_line_heights[timed_line_count]=(uint16_t)measured.y;
+        timed_line_count++;
     }
     atomic_store(&ui_lyrics_scene_phase,3U);
     if(!timed_line_count){
@@ -1772,10 +1819,11 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_add_flag(timed_scroll_group,LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_flag(timed_scroll_group,LV_OBJ_FLAG_GESTURE_BUBBLE);
     timed_scroll_y=INT16_MIN;
-    timed_rows[0]=timed_line_label(0,352,0x647A91);
-    timed_rows[1]=timed_line_label(1,398,0xFFFFFF);
-    timed_rows[2]=timed_line_label(2,370,0xA9C2D8);
-    timed_rows[3]=timed_line_label(3,326,0x637E96);
+    /* Uniform wrap width prevents reflow while a line changes slots. */
+    timed_rows[0]=timed_line_label(0,LF_TIMED_TEXT_WIDTH,0x647A91);
+    timed_rows[1]=timed_line_label(1,LF_TIMED_TEXT_WIDTH,0xFFFFFF);
+    timed_rows[2]=timed_line_label(2,LF_TIMED_TEXT_WIDTH,0xA9C2D8);
+    timed_rows[3]=timed_line_label(3,LF_TIMED_TEXT_WIDTH,0x637E96);
     timed_hint=label(surface,"Long-press for controls",374,&lv_font_montserrat_16,0x526B84);
     lv_obj_set_style_text_font(timed_hint,&lv_font_montserrat_16,0);
     lv_obj_set_width(timed_hint,260);
@@ -1827,6 +1875,7 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_add_event_cb(surface,timed_double_tap_home,LV_EVENT_SHORT_CLICKED,NULL);
     paused=!timed_clock.running;
     timed_active_index=-999;timed_last_second=UINT32_MAX;
+    timed_visible_future_mask=0xFF;
     timed_scroll_y=INT16_MIN;
     timed_last_update_ms=0;
     timed_power_update_ms=0;

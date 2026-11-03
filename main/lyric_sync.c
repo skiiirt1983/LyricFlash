@@ -34,3 +34,31 @@ uint32_t lf_sync_estimate_position_ms(uint32_t audd,uint64_t start,uint32_t fram
  uint64_t position=(uint64_t)audd+delta;
  return position>UINT32_MAX?UINT32_MAX:(uint32_t)position;
 }
+
+/* Adjust the rendered timeline only, never an on-device persisted offset. */
+uint32_t lf_sync_visible_position_ms(uint32_t estimated_ms){
+ return estimated_ms>LF_SYNC_DISPLAY_DELAY_MS?
+        estimated_ms-LF_SYNC_DISPLAY_DELAY_MS:0U;
+}
+/* Stay still through long pauses, moving only in the final 1000ms. */
+uint16_t lf_sync_slide_fraction(uint32_t position_ms,uint32_t start_ms,uint32_t next_ms){
+ if(next_ms<=start_ms)return 1024U;
+ if(position_ms>=next_ms)return 1024U;
+ const uint32_t gap=next_ms-start_ms;
+ const uint32_t window=gap<1000U?gap:1000U;
+ const uint32_t motion_start=next_ms-window;
+ if(position_ms<=motion_start)return 0U;
+ return (uint16_t)(((uint64_t)(position_ms-motion_start)*1024U)/window);
+}
+/* Fit wrapped height and add capped visual whitespace on long gaps. */
+uint16_t lf_sync_row_pitch_px(uint16_t height_a,uint16_t height_b,uint32_t gap_ms){
+ uint32_t pitch=((uint32_t)height_a+height_b+1U)/2U+18U;
+ if(pitch<92U)pitch=92U;
+ if(gap_ms>3500U){
+  uint32_t extra=(gap_ms-3500U)/500U*5U;
+  if(extra>35U)extra=35U;
+  pitch+=extra;
+ }
+ if(pitch>320U)pitch=320U;
+ return (uint16_t)pitch;
+}
