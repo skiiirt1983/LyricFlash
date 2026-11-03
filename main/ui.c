@@ -70,6 +70,16 @@ static lv_obj_t *home_lyric_line;
 static uint64_t home_last_refresh_ms;
 static lv_obj_t *home_play_symbol;
 static lv_obj_t *home_play_hint;
+/* Overlay is owned by the existing Home pager, not a second LVGL root. */
+static lv_obj_t *home_record_layer;
+static lv_obj_t *home_record_wave;
+static lv_obj_t *home_record_caption;
+static uint32_t home_record_attempt;
+static uint32_t home_record_last_frames;
+static uint64_t home_record_last_tick;
+#define LF_RECORD_WAVE_MAX_POINTS 170U
+static lv_point_precise_t home_record_wave_points[LF_RECORD_WAVE_MAX_POINTS];
+static uint32_t home_record_wave_count;
 static uint64_t home_warning_until_ms;
 static const char *home_warning;
 static int home_visual_busy=-1;
@@ -764,6 +774,13 @@ static void make_base(void)
     home_lyric_line=NULL;
     home_play_symbol=NULL;
     home_play_hint=NULL;
+    home_record_layer=NULL;
+    home_record_wave=NULL;
+    home_record_caption=NULL;
+    home_record_attempt=0;
+    home_record_last_frames=0;
+    home_record_last_tick=0;
+    home_record_wave_count=0;
     home_last_refresh_ms=0;
     home_visual_busy=-1;
     battery_status=NULL;
@@ -840,6 +857,56 @@ static void auto_open_lyrics_deferred(void *unused)
         build_preview();
     }
 }
+/* A tiny amplitude envelope is published by the manual capture worker.
+ * Draw only a bounded yellow line inside the existing Home pager. No PCM
+ * samples or background microphone access cross into LVGL. */
+static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t current)
+{
+    if(!song || !home_record_layer)return;
+    const bool capturing=song->state==LF_RECOG_CAPTURE;
+    const bool working=song->state==LF_RECOG_UPLOAD ||
+                       song->state==LF_RECOG_LYRICS;
+    if(!capturing&&!working){
+        lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(home_record_layer);
+    if(home_record_caption){
+        const char *word=capturing?"LISTENING":
+            song->state==LF_RECOG_UPLOAD?"IDENTIFYING":"FINDING LYRICS";
+        if(strcmp(lv_label_get_text(home_record_caption),word)!=0)
+            lv_label_set_text(home_record_caption,word);
+    }
+    if(!capturing||!home_record_wave)return; /* Finished waveform stays visible. */
+    if(song->attempts!=home_record_attempt){
+        home_record_attempt=song->attempts;
+        home_record_last_frames=UINT32_MAX;
+        home_record_wave_count=1;
+        home_record_wave_points[0]=(lv_point_precise_t){0,72};
+        lv_line_set_points(home_record_wave,home_record_wave_points,1);
+        home_record_last_tick=0;
+    }
+    if(current-home_record_last_tick<75 ||
+       song->captured_frames==home_record_last_frames)return;
+    home_record_last_tick=current;
+    home_record_last_frames=song->captured_frames;
+    if(home_record_wave_count>=LF_RECORD_WAVE_MAX_POINTS)return;
+    /* X is based on recorded frames, so the line reaches the right edge at
+       10 seconds even if rendering frames are missed. Quiet music stays
+       near the baseline; real sound moves the trace above and below it. */
+    const uint32_t x=(uint32_t)(((uint64_t)song->captured_frames*360U)/
+                                LF_SCAN_MAX_FRAMES);
+    const static int8_t phases[8]={0,-4,-8,-3,2,8,4,-2};
+    const int8_t wave=phases[home_record_wave_count%8];
+    const int amplitude=(int)song->capture_visual_level;
+    const int y=72+amplitude*wave/12;
+    home_record_wave_points[home_record_wave_count++]=(lv_point_precise_t){
+        (int32_t)(x>360U?360U:x),(int32_t)y};
+    lv_line_set_points(home_record_wave,home_record_wave_points,
+                       home_record_wave_count);
+}
+
 static void home_refresh(uint64_t current)
 {
     if(!home_scan_status||!home_song_title||!home_song_artist||
@@ -848,6 +915,7 @@ static void home_refresh(uint64_t current)
     lf_recog_snapshot_t song={0};
     lf_recog_snapshot(&song);
     const bool busy=lf_recog_busy();
+    home_recording_update(&song,current);
     const char *status="READY TO LISTEN";
     const char *title="Find your music";
     const char *artist="One tap to identify the song";
@@ -882,13 +950,13 @@ static void home_refresh(uint64_t current)
         artist=song.artist[0]?song.artist:"";
         hint="TAP TO SCAN AGAIN";
         if(song.lyric_lines>0 && strcmp(song.lyrics_state,"synced")==0){
-            lyric="TAP SONG TO VIEW LYRICS";
+            lyric="OPENING LYRICS";
             status="TIMED LYRICS READY";
             if(timed_clock.started && timed_scan_attempt==song.attempts &&
                timed_line_count>0){
                 const uint32_t pos=lf_lyric_clock_position(&timed_clock,current);
                 const int index=lf_lyric_clock_line_at(timed_stamps,timed_line_count,pos);
-                status=timed_clock.running?(timed_estimated?"ESTIMATED SYNC":"MANUAL SYNC"):"TIMELINE PAUSED";
+                status=timed_clock.running?"LYRICS PLAYING":"LYRICS PAUSED";
                 if(index>=0 && (size_t)index<timed_line_count){
                     lf_lyric_line_t line={0};
                     if(lf_recog_lyric_line((uint32_t)index,&line) && line.text[0])
@@ -898,20 +966,24 @@ static void home_refresh(uint64_t current)
                 lyric=NULL;
             }
         }else{
-            lyric="NO TIMED LYRICS FOR THIS SONG";
+            lyric=" ";
+            hint="No Song Lyrics Available";
+            status="LYRICS UNAVAILABLE";
         }
         break;
     case LF_RECOG_NO_MATCH:
         status="NO MATCH";
         title="Song not recognized";
         artist="Try again closer to the music";
-        lyric="MIC OFF";
+        lyric=" ";
+        hint="Song Not Recognized";
         break;
     case LF_RECOG_ERROR:
         status="SCAN UNAVAILABLE";
         title="Couldn't identify this song";
         artist=song.message[0]?song.message:"Check network and AudD settings";
-        lyric="MIC OFF";
+        lyric=" ";
+        hint="Identification Error";
         break;
     case LF_RECOG_STOPPED:
         status="SCAN STOPPED";
@@ -936,7 +1008,9 @@ static void home_refresh(uint64_t current)
     if(home_visual_busy!=(int)busy){
         home_visual_busy=(int)busy;
         lv_obj_set_style_bg_color(home_scan_button,
-            lv_color_hex(busy?0xE06A69:0x2884EA),0);
+            lv_color_hex(busy?0x0EBA8D:0x2884EA),0);
+        lv_obj_set_style_border_color(home_scan_button,
+            lv_color_hex(busy?0xFDD64D:0xAADFFF),0);
     }
     home_last_refresh_ms=current;
     if(song.state==LF_RECOG_MATCH && song.lyric_lines>0 &&
@@ -1000,7 +1074,32 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_set_style_radius(home_scan_button,LV_RADIUS_CIRCLE,0);
     lv_obj_set_style_bg_color(home_scan_button,lv_color_hex(0x2884EA),0);
     lv_obj_set_style_bg_opa(home_scan_button,LV_OPA_COVER,0);
-    lv_obj_set_style_bg_color(home_scan_button,lv_color_hex(0x55B7FF),LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(home_scan_button,lv_color_hex(0xFFD24A),LV_STATE_PRESSED);
+    /* Animated feedback without a continuously running full-screen effect:
+       press grows the 184px button and warms its color, release eases back. */
+    static const lv_style_prop_t press_props[]={
+        LV_STYLE_BG_COLOR,LV_STYLE_TRANSFORM_WIDTH,
+        LV_STYLE_TRANSFORM_HEIGHT,LV_STYLE_BORDER_COLOR,0};
+    static lv_style_transition_dsc_t press_enter,press_exit;
+    static lv_style_t press_style,release_style;
+    static bool press_styles_ready;
+    if(!press_styles_ready){
+        lv_style_transition_dsc_init(&press_enter,press_props,
+                                    lv_anim_path_ease_out,125,0,NULL);
+        lv_style_transition_dsc_init(&press_exit,press_props,
+                                    lv_anim_path_ease_out,160,50,NULL);
+        lv_style_init(&press_style);
+        lv_style_set_transition(&press_style,&press_enter);
+        lv_style_set_transform_width(&press_style,24);
+        lv_style_set_transform_height(&press_style,24);
+        lv_style_set_bg_color(&press_style,lv_color_hex(0xFFD24A));
+        lv_style_set_border_color(&press_style,lv_color_hex(0xFFFFFF));
+        lv_style_init(&release_style);
+        lv_style_set_transition(&release_style,&press_exit);
+        press_styles_ready=true;
+    }
+    lv_obj_add_style(home_scan_button,&release_style,0);
+    lv_obj_add_style(home_scan_button,&press_style,LV_STATE_PRESSED);
     lv_obj_set_style_border_width(home_scan_button,3,0);
     lv_obj_set_style_border_color(home_scan_button,lv_color_hex(0xAADFFF),0);
     lv_obj_set_style_shadow_width(home_scan_button,0,0);
@@ -1026,6 +1125,56 @@ static void primary_render_home_content(lv_obj_t *parent)
                                   382,280,&lv_font_montserrat_16,0xB1C8DE);
     home_lyric_line=home_caption(parent,"MIC OFF  /  TAP PLAY",411,248,
                                  &lv_font_montserrat_16,0x76BDEB);
+    /* Recording occupies the round AMOLED screen only after an explicit
+       Play tap. It is also an invisible click target to STOP on demand. */
+    home_record_layer=lv_obj_create(parent);
+    lv_obj_set_size(home_record_layer,466,466);
+    lv_obj_align(home_record_layer,LV_ALIGN_CENTER,0,0);
+    lv_obj_set_style_bg_color(home_record_layer,lv_color_hex(0x020406),0);
+    lv_obj_set_style_bg_opa(home_record_layer,LV_OPA_COVER,0);
+    lv_obj_set_style_border_width(home_record_layer,0,0);
+    lv_obj_set_style_radius(home_record_layer,0,0);
+    lv_obj_set_style_pad_all(home_record_layer,0,0);
+    lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(home_record_layer,on_home_scan,LV_EVENT_CLICKED,NULL);
+    lv_obj_t *record_ring=lv_obj_create(home_record_layer);
+    lv_obj_set_size(record_ring,408,408);
+    lv_obj_align(record_ring,LV_ALIGN_CENTER,0,-4);
+    lv_obj_set_style_radius(record_ring,LV_RADIUS_CIRCLE,0);
+    lv_obj_set_style_border_color(record_ring,lv_color_hex(0x158F50),0);
+    lv_obj_set_style_border_width(record_ring,2,0);
+    lv_obj_set_style_bg_opa(record_ring,LV_OPA_TRANSP,0);
+    lv_obj_set_style_shadow_width(record_ring,0,0);
+    lv_obj_remove_flag(record_ring,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(record_ring,LV_OBJ_FLAG_SCROLLABLE);
+    static const lv_point_precise_t baseline[]={{0,72},{360,72}};
+    lv_obj_t *centerline=lv_line_create(home_record_layer);
+    lv_line_set_points(centerline,baseline,2);
+    lv_obj_set_size(centerline,360,144);
+    lv_obj_align(centerline,LV_ALIGN_CENTER,0,-4);
+    lv_obj_set_style_bg_opa(centerline,LV_OPA_TRANSP,0);
+    lv_obj_set_style_line_color(centerline,lv_color_hex(0x258854),0);
+    lv_obj_set_style_line_width(centerline,1,0);
+    lv_obj_remove_flag(centerline,LV_OBJ_FLAG_CLICKABLE);
+    home_record_wave=lv_line_create(home_record_layer);
+    lv_obj_set_size(home_record_wave,360,144);
+    lv_obj_align(home_record_wave,LV_ALIGN_CENTER,0,-4);
+    lv_obj_set_style_bg_opa(home_record_wave,LV_OPA_TRANSP,0);
+    lv_obj_set_style_line_color(home_record_wave,lv_color_hex(0xFFD02C),0);
+    lv_obj_set_style_line_width(home_record_wave,3,0);
+    lv_obj_set_style_line_rounded(home_record_wave,true,0);
+    lv_obj_remove_flag(home_record_wave,LV_OBJ_FLAG_CLICKABLE);
+    home_record_wave_points[0]=(lv_point_precise_t){0,72};
+    lv_line_set_points(home_record_wave,home_record_wave_points,1);
+    home_record_wave_count=1;
+    home_record_attempt=0;
+    home_record_last_frames=UINT32_MAX;
+    home_record_last_tick=0;
+    home_record_caption=home_caption(home_record_layer,"LISTENING",356,206,
+                                    &lv_font_montserrat_16,0x4A946F);
+    lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
+
     /* Informational text is also the unobtrusive entry to the Lyrics page.
      * Swipes beginning on it still bubble through the primary pager. */
     lv_obj_t *details[]={home_song_title,home_song_artist,home_lyric_line};
@@ -1161,7 +1310,8 @@ static void timed_render(uint64_t current,bool force)
                 battery.percentage>=38?LV_SYMBOL_BATTERY_2:
                 battery.percentage>=15?LV_SYMBOL_BATTERY_1:LV_SYMBOL_BATTERY_EMPTY;
             if(battery.percentage>=0)
-                snprintf(battery_text,sizeof battery_text,"%s %d%%",symbol,battery.percentage);
+                snprintf(battery_text,sizeof battery_text,"%s%s %d%%",
+                    battery.charging?LV_SYMBOL_CHARGE:"",symbol,battery.percentage);
             else snprintf(battery_text,sizeof battery_text,"%s --%%",symbol);
             battery_color=battery.charging?0x42DC89:
                 (battery.percentage>=0 && battery.percentage<=20)?0xFFD34D:0xAFC6DC;
@@ -1186,8 +1336,7 @@ static void timed_render(uint64_t current,bool force)
         else{
             const int64_t offset=timed_clock.correction_ms<0?
                 -(int64_t)timed_clock.correction_ms:(int64_t)timed_clock.correction_ms;
-            snprintf(info,sizeof info,"%s %02lu:%02lu  |  offset %c%ld.%01lds",
-                timed_estimated?"ESTIMATED":"MANUAL",
+            snprintf(info,sizeof info,"SYNC %02lu:%02lu  |  offset %c%ld.%01lds",
                 (unsigned long)(second/60),(unsigned long)(second%60),
                 timed_clock.correction_ms<0?'-':'+',
                 (long)(offset/1000),(long)((offset%1000)/100));
@@ -2427,6 +2576,15 @@ static void on_tick(lv_timer_t *timer)
     if (page == 6 && touch_held && !pager_scrolling && touch_pressed_at_ms &&
         current - touch_pressed_at_ms >= LF_CLOCK_SETTINGS_HOLD_MS)
         show_clock_settings_popup();
+    if(page==0 && !asleep && home_record_layer &&
+       current-home_record_last_tick>=75){
+        lf_recog_snapshot_t scan={0};
+        lf_recog_snapshot(&scan);
+        if(scan.state==LF_RECOG_CAPTURE || scan.state==LF_RECOG_UPLOAD ||
+           scan.state==LF_RECOG_LYRICS ||
+           !lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN))
+            home_recording_update(&scan,current);
+    }
     if (page == 0 && !touch_held && !pager_scrolling &&
         current-home_last_refresh_ms >= 750)home_refresh(current);
     if (page == 14 && current - last_debug_refresh >= 2500) {
