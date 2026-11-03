@@ -53,19 +53,22 @@ assert "gh release create" in workflow
 # The previously validated 0.8.39 release remains published.
 # The 0.8.41 branch may publish a new OTA only after a validated compile-once gate.
 active_version=(root / "main/version.h").read_text()
-# 0.8.41 is the separately published OTA release. The experimental 0.8.49
-# branch has its own ESP32-S3 build and artifact; a successful compile is NOT
-# proof that it has been published to the device's direct OTA catalog.
-assert ('"0.8.41-alpha"' in active_version or
-        '"0.8.49-alpha"' in active_version), "Unexpected alpha firmware version"
-if '"0.8.49-alpha"' in active_version:
+# The experimental private builds have separate ESP32-S3 release gates.
+# A successful compile does not prove hardware operation or catalog publication.
+assert any(f'"{ver}"' in active_version for ver in
+           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha")), "Unexpected alpha firmware version"
+if '"0.8.49-alpha"' in active_version or '"0.8.50-alpha"' in active_version:
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
-    assert "feature/private-0.8.49-watchdog-header" in private_workflow
-    assert "LyricFlash-Private-Alpha-0.8.49-ESP32S3-UNTESTED" in private_workflow
+    is_next='"0.8.50-alpha"' in active_version
+    version="0.8.50" if is_next else "0.8.49"
+    expected_branch=("feature/private-0.8.50-recognition-awake" if is_next
+                     else "feature/private-0.8.49-watchdog-header")
+    assert expected_branch in private_workflow
+    assert f"LyricFlash-Private-Alpha-{version}-ESP32S3-UNTESTED" in private_workflow
     assert "tools/package_release.py --verify _site" in private_workflow
     assert "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin" in private_workflow
     assert "gh release create" in private_workflow
     assert "--prerelease --latest=false" in private_workflow
-    print("PASS: 0.8.49 private firmware artifacts and gated OTA publishing contract")
+    print(f"PASS: {version} private firmware artifacts and gated OTA publishing contract")
 else:
     print("PASS: 0.8.41 manual alpha build is eligible for direct OTA publishing")
