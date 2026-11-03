@@ -1081,11 +1081,24 @@ static lv_obj_t *home_decor_ring(lv_obj_t *parent,int diameter,uint32_t color)
 }
 static void primary_render_home_content(lv_obj_t *parent)
 {
-    /* Native LyricFlash wordmark: white LYRIC, ice-blue FLASH, small
-       cloud-and-bolt mark. This is ONLY on Home, never over song lyrics. */
-    lv_obj_t *mark=lv_obj_create(parent);
+    /* A single flex header keeps the icon directly beside the wordmark,
+       irrespective of glyph widths or round-screen clipping. The previous
+       three independent absolute offsets separated logo and text. */
+    lv_obj_t *brand_row=lv_obj_create(parent);
+    lv_obj_set_size(brand_row,276,62);
+    lv_obj_align(brand_row,LV_ALIGN_TOP_MID,0,68);
+    lv_obj_set_style_bg_opa(brand_row,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(brand_row,0,0);
+    lv_obj_set_style_shadow_width(brand_row,0,0);
+    lv_obj_set_style_pad_all(brand_row,0,0);
+    lv_obj_set_style_pad_column(brand_row,4,0);
+    lv_obj_remove_flag(brand_row,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(brand_row,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(brand_row,LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(brand_row,LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *mark=lv_obj_create(brand_row);
     lv_obj_set_size(mark,58,58);
-    lv_obj_align(mark,LV_ALIGN_TOP_MID,-111,68);
     lv_obj_set_style_bg_color(mark,lv_color_hex(0x0A2859),0);
     lv_obj_set_style_border_color(mark,lv_color_hex(0x3662A4),0);
     lv_obj_set_style_border_width(mark,1,0);
@@ -1113,14 +1126,18 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_set_style_line_width(bolt,4,0);
     lv_obj_set_style_line_rounded(bolt,true,0);
     lv_obj_remove_flag(bolt,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *lyric_mark=home_caption(parent,"LYRIC",71,80,
-                                      &lv_font_montserrat_20,0xFFFFFF);
-    lv_obj_align(lyric_mark,LV_ALIGN_TOP_MID,-12,79);
-    lv_obj_set_style_text_letter_space(lyric_mark,2,0);
-    lv_obj_t *flash_mark=home_caption(parent,"FLASH",71,90,
-                                      &lv_font_montserrat_20,0x7BD3FF);
-    lv_obj_align(flash_mark,LV_ALIGN_TOP_MID,76,79);
-    lv_obj_set_style_text_letter_space(flash_mark,2,0);
+    lv_obj_t *lyric_mark=lv_label_create(brand_row);
+    lv_label_set_text(lyric_mark,"LYRIC");
+    lv_obj_set_style_text_font(lyric_mark,&lv_font_montserrat_20,0);
+    lv_obj_set_style_text_color(lyric_mark,lv_color_hex(0xFFFFFF),0);
+    lv_obj_set_style_text_letter_space(lyric_mark,1,0);
+    lv_obj_remove_flag(lyric_mark,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *flash_mark=lv_label_create(brand_row);
+    lv_label_set_text(flash_mark,"FLASH");
+    lv_obj_set_style_text_font(flash_mark,&lv_font_montserrat_20,0);
+    lv_obj_set_style_text_color(flash_mark,lv_color_hex(0x7BD3FF),0);
+    lv_obj_set_style_text_letter_space(flash_mark,1,0);
+    lv_obj_remove_flag(flash_mark,LV_OBJ_FLAG_CLICKABLE);
     battery_status=home_caption(parent,"",416,160,
                                &lv_font_montserrat_16,0x9ACFEA);
     /* Static concentric rings give the circular AMOLED a device-player
