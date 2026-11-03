@@ -18,7 +18,7 @@ end=ui.index("\nstatic void render_home(void)",start)
 home=ui[start:end]
 refresh=ui[ui.index("static void home_refresh(uint64_t current)\n{"):start]
 on_click=ui[ui.index("static void on_home_scan(lv_event_t *e)\n{"):ui.index("static lv_obj_t *home_decor_ring")]
-check('LF_VERSION "0.8.46-alpha"' in version,"0.8.42 alpha version not set")
+check('LF_VERSION "0.8.47-alpha"' in version,"0.8.47 alpha version not set")
 check('home_scan_button=lv_button_create(parent);' in home,"Missing single circular play surface")
 check(home.count('lv_button_create(')==1,"Home must expose only one visual control")
 check('button(parent,' not in home,"Old rectangular navigation buttons still on Home")
@@ -35,15 +35,22 @@ check('lf_recog_start()' in on_click and 'lf_recog_stop()' in on_click,
       "Play must manually start and stop recognition")
 check('lf_recog_has_token()' in on_click and 'lf_network_is_connected()' in on_click,
       "Missing actionable failure states")
-check('lf_recog_snapshot(&song)' in refresh and 'song.title' in refresh and 'song.artist' in refresh,
-      "Home missing actual recognized song identity")
-check('lf_recog_lyric_line(' in refresh and 'timed_clock.started' in refresh,
-      "Home must display the manually timed line when available")
-check('lv_obj_add_event_cb(details[i],on_preview,LV_EVENT_CLICKED,NULL);' in home,
-      "Song details must open Lyrics without a rectangular button")
+check('lf_recog_snapshot(&song)' in refresh and 'No Song Lyrics Available' in refresh,
+      "Home must show a single error only when song lyrics are unavailable")
+check('home_play_hint=home_caption(' not in home and
+      'home_scan_status=home_caption(' not in home and
+      'home_lyric_line=home_caption(' not in home,
+      "Remove redundant TAP PLAY, MIC OFF and READY labels from Home")
+check('home_song_artist=home_caption(' not in home,
+      "Remove duplicate below-button song description")
+check('lv_obj_add_event_cb(details[i],on_preview,LV_EVENT_CLICKED,NULL);' not in home,
+      "Home should have only the one manual Play button")
 check('LV_OBJ_FLAG_GESTURE_BUBBLE' in home and 'on_lvgl_gesture' in home,
       "Play touch must preserve swipe navigation")
 check('battery_status=home_caption' in home,"Home lost charging/battery indicator")
+check('lv_obj_align(mark,LV_ALIGN_TOP_MID,-111,68);' in home and
+      'lv_obj_set_size(mark,58,58);' in home,
+      "Logo must be large and positioned within circular screen bounds")
 check('home_visual_busy!=(int)busy' in refresh,"Redundant QSPI full-circle redraws")
 check('primary_render_home_content(primary_pager_pages[1]);' in ui and
       'primary_render_settings_content(primary_pager_pages[2]);' in ui and
@@ -57,4 +64,4 @@ check('if(song.state==LF_RECOG_MATCH && song.lyric_lines>0' in ui and
 check('No background listening' in recognition or
       'lf_recog_start(void)' in recognition,
       "Manual recognition entrypoint missing")
-print("PASS: LyricFlash 0.8.41 large Play Home source contracts")
+print("PASS: compact circular-safe Home, single Play button, error-only caption, native brand")
