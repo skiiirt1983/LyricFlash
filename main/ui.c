@@ -770,146 +770,219 @@ static void build_connection_help_now(void)
     last_power_refresh_ms = 0; /* Refresh the network details immediately. */
 }
 
-/* Only change an LVGL label when the displayed text actually differs:
- * frequent invalidations on the 466px QSPI panel slow the finger pager. */
+/* A quiet, full-screen player instead of navigation buttons.
+ * Home deliberately presents one large, circular PLAY control. The Clock
+ * and Settings pages are still reached by swiping the proven LVGL pager.
+ * A tap on song text opens the timed-lyrics viewer after recognition. */
+static lv_obj_t *home_play_symbol;
+static lv_obj_t *home_play_hint;
+static uint64_t home_warning_until_ms;
+static const char *home_warning;
+
 static void home_set_text(lv_obj_t *obj,const char *value)
 {
     if(!obj||!value)return;
     const char *shown=lv_label_get_text(obj);
     if(!shown||strcmp(shown,value)!=0)lv_label_set_text(obj,value);
 }
-
+static lv_obj_t *home_caption(lv_obj_t *parent,const char *value,int y,
+                              int width,const lv_font_t *font,uint32_t color)
+{
+    lv_obj_t *item=lv_label_create(parent);
+    lv_label_set_text(item,value);
+    lv_obj_set_size(item,width,34);
+    lv_obj_set_style_text_font(item,font,0);
+    lv_obj_set_style_text_color(item,lv_color_hex(color),0);
+    lv_obj_set_style_text_align(item,LV_TEXT_ALIGN_CENTER,0);
+    lv_label_set_long_mode(item,LV_LABEL_LONG_DOT);
+    lv_obj_align(item,LV_ALIGN_TOP_MID,0,y);
+    lv_obj_add_flag(item,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(item,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    return item;
+}
 static void home_refresh(uint64_t current)
 {
     if(!home_scan_status||!home_song_title||!home_song_artist||
-       !home_lyric_line||!home_scan_button)return;
+       !home_lyric_line||!home_scan_button||!home_play_symbol||
+       !home_play_hint)return;
     lf_recog_snapshot_t song={0};
     lf_recog_snapshot(&song);
     const bool busy=lf_recog_busy();
-    const char *status="MIC OFF - READY TO SCAN";
+    const char *status="READY TO LISTEN";
     const char *title="Find your music";
-    const char *artist="Tap SCAN to identify a song";
-    const char *lyric="Lyrics will appear after a match";
+    const char *artist="One tap to identify the song";
+    const char *lyric="MIC OFF  /  TAP PLAY";
+    const char *hint="TAP TO IDENTIFY";
 
     switch(song.state){
     case LF_RECOG_CAPTURE:
-        status="LISTENING - MIC ON";
-        title="Identifying your song";
-        artist="Recording up to 10 seconds";
-        lyric="Tap STOP SCAN to cancel";
+        status="LISTENING";
+        title="Finding your song";
+        artist="Microphone is active";
+        lyric="Recording up to 10 seconds";
+        hint="TAP TO STOP";
         break;
     case LF_RECOG_UPLOAD:
-        status="IDENTIFYING - MIC OFF";
-        title="Checking audio";
-        artist="Waiting for recognition";
-        lyric="Results appear here";
+        status="IDENTIFYING";
+        title="Recognizing audio";
+        artist="Microphone is off";
+        lyric="Checking the song...";
+        hint="TAP TO CANCEL";
         break;
     case LF_RECOG_LYRICS:
-        status="SONG IDENTIFIED";
+        status="FINDING LYRICS";
         title=song.title[0]?song.title:"Song identified";
-        artist=song.artist[0]?song.artist:"Looking up lyrics";
-        lyric="Finding synchronized lyrics...";
+        artist=song.artist[0]?song.artist:"Checking synchronized lyrics";
+        lyric="Finding the timed lyric lines";
+        hint="TAP TO CANCEL";
         break;
     case LF_RECOG_MATCH:
+        status="SONG FOUND";
         title=song.title[0]?song.title:"Song identified";
         artist=song.artist[0]?song.artist:"";
+        hint="TAP TO SCAN AGAIN";
         if(song.lyric_lines>0 && strcmp(song.lyrics_state,"synced")==0){
+            lyric="TAP SONG TO VIEW LYRICS";
             status="TIMED LYRICS READY";
-            lyric="Open LYRICS to start manual sync";
             if(timed_clock.started && timed_scan_attempt==song.attempts &&
                timed_line_count>0){
                 const uint32_t pos=lf_lyric_clock_position(&timed_clock,current);
                 const int index=lf_lyric_clock_line_at(timed_stamps,timed_line_count,pos);
+                status=timed_clock.running?"MANUAL TIMELINE":"TIMELINE PAUSED";
                 if(index>=0 && (size_t)index<timed_line_count){
                     lf_lyric_line_t line={0};
-                    if(lf_recog_lyric_line((uint32_t)index,&line)&&line.text[0])
-                        lyric=line.text;
-                    /* The copied LRC line belongs to this lexical scope.
-                     * Commit it now; never keep a pointer into this stack. */
-                    home_set_text(home_lyric_line,lyric);
-                    lyric=NULL;
-                }else lyric="Waiting for first lyric...";
-                status=timed_clock.running?"MANUAL LYRIC TIMELINE":"MANUAL LYRICS PAUSED";
+                    if(lf_recog_lyric_line((uint32_t)index,&line) && line.text[0])
+                        home_set_text(home_lyric_line,line.text);
+                    else home_set_text(home_lyric_line,"LYRICS LOADING");
+                }else home_set_text(home_lyric_line,"WAITING FOR FIRST LINE");
+                lyric=NULL;
             }
-        } else {
-            status="SONG IDENTIFIED - MIC OFF";
-            lyric="No synchronized lyrics for this match";
+        }else{
+            lyric="NO TIMED LYRICS FOR THIS SONG";
         }
         break;
     case LF_RECOG_NO_MATCH:
-        status="NO MATCH - MIC OFF";
-        title="Couldn't identify song";
-        artist="Move closer to the music and retry";
-        lyric="Tap SCAN to try again";
+        status="NO MATCH";
+        title="Song not recognized";
+        artist="Try again closer to the music";
+        lyric="MIC OFF";
         break;
     case LF_RECOG_ERROR:
-        status="SCAN ERROR - MIC OFF";
-        title="Identification unavailable";
-        artist=song.message[0]?song.message:"Check Wi-Fi and API access";
-        lyric="Open device Web UI for details";
+        status="SCAN UNAVAILABLE";
+        title="Couldn't identify this song";
+        artist=song.message[0]?song.message:"Check network and AudD settings";
+        lyric="MIC OFF";
         break;
     case LF_RECOG_STOPPED:
-        status="SCAN STOPPED - MIC OFF";
-        title="Ready when you are";
-        artist="Manual microphone only";
-        lyric="Tap SCAN to try again";
+        status="SCAN STOPPED";
+        title="Find your music";
+        artist="Tap play when you're ready";
+        lyric="MIC OFF";
         break;
-    default:
-        if(!lf_recog_has_token())lyric="Add AudD key in Device Studio";
-        else if(!lf_network_is_connected())lyric="Connect Wi-Fi to identify songs";
-        break;
+    default:break;
     }
-    if(busy&&song.state==LF_RECOG_LYRICS)status="FINDING LYRICS - MIC OFF";
+    if(home_warning && current<home_warning_until_ms){
+        status="CHECK CONNECTION";
+        artist=home_warning;
+    }else home_warning=NULL;
     home_set_text(home_scan_status,status);
     home_set_text(home_song_title,title);
     home_set_text(home_song_artist,artist);
     if(lyric)home_set_text(home_lyric_line,lyric);
-    lv_obj_t *caption=lv_obj_get_child(home_scan_button,0);
-    if(caption)home_set_text(caption,busy?"STOP SCAN":"SCAN SONG");
+    home_set_text(home_play_hint,hint);
+    home_set_text(home_play_symbol,busy?LV_SYMBOL_STOP:LV_SYMBOL_PLAY);
+    /* A color change is cheap and conveys that the control now cancels
+     * the session; never continuously animate the circular background. */
+    lv_obj_set_style_bg_color(home_scan_button,
+        lv_color_hex(busy?0xE06A69:0x2884EA),0);
     home_last_refresh_ms=current;
 }
 static void on_home_scan(lv_event_t *e)
 {
     (void)e;
-    /* The microphone only activates on this explicit press. The worker
-     * records asynchronously; no sampling is performed in the LVGL task. */
-    if(lf_recog_busy())lf_recog_stop();
-    else (void)lf_recog_start();
+    if(lf_recog_busy()){
+        lf_recog_stop();
+    }else if(!lf_recog_start()){
+        home_warning=!lf_network_is_connected()?
+            "Connect to Wi-Fi in Settings":
+            !lf_recog_has_token()?
+                "Configure AudD in Device Studio":
+                "Scanner busy - try again";
+        home_warning_until_ms=now_ms()+4500;
+    }else{
+        home_warning=NULL;
+    }
     activity();
     home_refresh(now_ms());
 }
+static lv_obj_t *home_decor_ring(lv_obj_t *parent,int diameter,uint32_t color)
+{
+    lv_obj_t *ring=lv_obj_create(parent);
+    lv_obj_set_size(ring,diameter,diameter);
+    lv_obj_align(ring,LV_ALIGN_CENTER,0,-15);
+    lv_obj_set_style_radius(ring,LV_RADIUS_CIRCLE,0);
+    lv_obj_set_style_bg_opa(ring,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(ring,2,0);
+    lv_obj_set_style_border_color(ring,lv_color_hex(color),0);
+    lv_obj_set_style_shadow_width(ring,0,0);
+    lv_obj_set_style_pad_all(ring,0,0);
+    lv_obj_remove_flag(ring,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(ring,LV_OBJ_FLAG_SCROLLABLE);
+    return ring;
+}
 static void primary_render_home_content(lv_obj_t *parent)
 {
-    label(parent,"LYRICFLASH",28,&lv_font_montserrat_24,prefs->text_color);
-    label(parent,LF_VERSION_LABEL,63,&lv_font_montserrat_16,0xA3B9CC);
-    battery_status=label(parent,"BATTERY",97,&lv_font_montserrat_20,0xDCE8F0);
-    home_scan_status=label(parent,"MIC OFF - READY TO SCAN",132,
-                           &lv_font_montserrat_16,0x8DD8FF);
-    home_song_title=label(parent,"Find your music",170,
-                          &lv_font_montserrat_24,prefs->text_color);
-    home_song_artist=label(parent,"Tap SCAN to identify a song",209,
-                           &lv_font_montserrat_18,0xBACDE0);
-    home_lyric_line=label(parent,"Lyrics will appear after a match",246,
-                          &lv_font_montserrat_18,prefs->text_color);
-    /* Fixed single-line labels; long recognized titles cannot shift the
-     * controls or draw outside the circular panel. */
-    lv_obj_t *dynamic[]={home_scan_status,home_song_title,home_song_artist,home_lyric_line};
-    for(size_t i=0;i<sizeof dynamic/sizeof dynamic[0];i++){
-        lv_obj_set_width(dynamic[i],i==0?338:344);
-        lv_obj_set_height(dynamic[i],31);
-        lv_label_set_long_mode(dynamic[i],LV_LABEL_LONG_DOT);
+    home_caption(parent,"L Y R I C F L A S H",35,310,
+                 &lv_font_montserrat_20,0xE6F2FF);
+    home_scan_status=home_caption(parent,"READY TO LISTEN",79,312,
+                                  &lv_font_montserrat_18,0x79C6FF);
+    /* Static concentric rings give the circular AMOLED a device-player
+     * look without the continuous redraw cost of pulsing gradients. */
+    (void)home_decor_ring(parent,236,0x163C65);
+    (void)home_decor_ring(parent,212,0x23578D);
+    home_scan_button=lv_button_create(parent);
+    lv_obj_set_size(home_scan_button,184,184);
+    lv_obj_align(home_scan_button,LV_ALIGN_CENTER,0,-15);
+    lv_obj_set_style_radius(home_scan_button,LV_RADIUS_CIRCLE,0);
+    lv_obj_set_style_bg_color(home_scan_button,lv_color_hex(0x2884EA),0);
+    lv_obj_set_style_bg_opa(home_scan_button,LV_OPA_COVER,0);
+    lv_obj_set_style_bg_color(home_scan_button,lv_color_hex(0x55B7FF),LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(home_scan_button,3,0);
+    lv_obj_set_style_border_color(home_scan_button,lv_color_hex(0xAADFFF),0);
+    lv_obj_set_style_shadow_width(home_scan_button,0,0);
+    lv_obj_add_flag(home_scan_button,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(home_scan_button,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(home_scan_button,on_home_scan,LV_EVENT_CLICKED,NULL);
+    lv_obj_add_event_cb(home_scan_button,on_gesture_press,LV_EVENT_PRESSED,NULL);
+    lv_obj_add_event_cb(home_scan_button,on_touch_pressing,LV_EVENT_PRESSING,NULL);
+    lv_obj_add_event_cb(home_scan_button,on_touch_release,LV_EVENT_RELEASED,NULL);
+    lv_obj_add_event_cb(home_scan_button,on_touch_cancel,LV_EVENT_PRESS_LOST,NULL);
+    lv_obj_add_event_cb(home_scan_button,on_lvgl_gesture,LV_EVENT_GESTURE,NULL);
+    home_play_symbol=lv_label_create(home_scan_button);
+    lv_label_set_text(home_play_symbol,LV_SYMBOL_PLAY);
+    lv_obj_set_style_text_font(home_play_symbol,&lv_font_montserrat_48,0);
+    lv_obj_set_style_text_color(home_play_symbol,lv_color_hex(0xFFFFFF),0);
+    lv_obj_align(home_play_symbol,LV_ALIGN_CENTER,3,0);
+    lv_obj_remove_flag(home_play_symbol,LV_OBJ_FLAG_CLICKABLE);
+    home_play_hint=home_caption(parent,"TAP TO IDENTIFY",323,265,
+                                &lv_font_montserrat_16,0x8AC8FC);
+    home_song_title=home_caption(parent,"Find your music",352,326,
+                                 &lv_font_montserrat_24,0xFFFFFF);
+    home_song_artist=home_caption(parent,"One tap to identify the song",
+                                  382,280,&lv_font_montserrat_16,0xB1C8DE);
+    home_lyric_line=home_caption(parent,"MIC OFF  /  TAP PLAY",411,248,
+                                 &lv_font_montserrat_16,0x76BDEB);
+    /* Informational text is also the unobtrusive entry to the Lyrics page.
+     * Swipes beginning on it still bubble through the primary pager. */
+    lv_obj_t *details[]={home_song_title,home_song_artist,home_lyric_line};
+    for(size_t i=0;i<sizeof details/sizeof details[0];i++){
+        lv_obj_add_flag(details[i],LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(details[i],on_preview,LV_EVENT_CLICKED,NULL);
     }
-    home_scan_button=button(parent,"SCAN SONG",218,54,0,72,
-                            0xA8D6FF,on_home_scan,NULL);
-    button(parent,"LYRICS",146,49,-85,133,0xA8D6FF,on_preview,NULL);
-    button(parent,"CONNECT / OTA",164,49,85,133,0xA8D6FF,
-           on_connection_help,NULL);
-    network_status=label(parent,"Starting Wi-Fi...",403,
-                         &lv_font_montserrat_16,0x96B9D8);
-    lv_obj_set_width(network_status,278);
-    lv_label_set_long_mode(network_status,LV_LABEL_LONG_DOT);
+    /* Battery and connection details remain in Device Studio and Settings.
+     * Their previous Home labels and rectangular shortcut buttons are gone. */
     home_last_refresh_ms=0;
-    last_power_refresh_ms=0;
+    home_refresh(now_ms());
 }
 static void render_home(void)
 {
