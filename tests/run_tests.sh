@@ -10,6 +10,7 @@ python3 tests/test_recognition_stall_recovery_contract.py
 python3 tests/test_ui_freeze_failsafe_contract.py
 python3 tests/test_lyrics_layout_contract.py
 python3 tests/test_lyrics_overlay_contract.py
+python3 tests/test_upload_brand_navigation_contract.py
 python3 tests/test_weather_studio_contract.py
 python3 tests/test_clock_layout_contract.py
 python3 tests/test_open_font_contract.py

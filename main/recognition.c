@@ -250,6 +250,7 @@ static bool post_write(esp_http_client_handle_t client,const uint8_t *src,size_t
         sent+=(size_t)written;
         portENTER_CRITICAL(&result_mux);
         result.upload_bytes_sent+=(uint32_t)written;
+        result.upload_progress_ms=lf_recog_now_ms();
         portEXIT_CRITICAL(&result_mux);
     }
     return sent==len;
@@ -314,6 +315,7 @@ static bool send_audio(const uint8_t *wav,size_t wav_bytes,const char *token)
     portENTER_CRITICAL(&result_mux);
     result.upload_bytes_sent=0;
     result.upload_bytes_total=(uint32_t)body_len;
+    result.upload_progress_ms=lf_recog_now_ms();
     portEXIT_CRITICAL(&result_mux);
     esp_http_client_config_t config={
         .url="https://api.audd.io/",

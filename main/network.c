@@ -709,6 +709,9 @@ static esp_err_t handle_song_status(httpd_req_t *req)
         s.stage_started_ms && monotonic_ms>=s.stage_started_ms?
         (double)(monotonic_ms-s.stage_started_ms):0);
     cJSON_AddNumberToObject(reply,"upload_bytes_sent",s.upload_bytes_sent);
+    cJSON_AddNumberToObject(reply,"upload_progress_age_ms",
+        s.upload_progress_ms && monotonic_ms>=s.upload_progress_ms?
+        (double)(monotonic_ms-s.upload_progress_ms):0);
     cJSON_AddNumberToObject(reply,"upload_bytes_total",s.upload_bytes_total);
     /* Safe cross-thread diagnostics: no display lock, no audio or token. */
     lf_ui_display_stats_t live={0};

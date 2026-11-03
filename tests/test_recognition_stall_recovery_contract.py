@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.51: no silent forever-IDENTIFYING overlay, with independent diagnostics.
+"""0.8.52: no silent forever-IDENTIFYING overlay, with independent diagnostics.
 Physical AMOLED and real AudD outcomes must still be validated on hardware.
 """
 from pathlib import Path
@@ -10,12 +10,15 @@ ui=(root/"main/ui.c").read_text()
 header=(root/"main/ui.h").read_text()
 network=(root/"main/network.c").read_text()
 version=(root/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.51-alpha"' in version
+assert 'LF_VERSION "0.8.52-alpha"' in version
 assert "LF_RECOG_UPLOAD_BUDGET_MS 60000ULL" in worker
 assert "if(lf_recog_now_ms()>=deadline_ms)" in worker
 assert "set_transport_error(ESP_ERR_TIMEOUT);" in worker
 assert "post_write(client,wav,wav_bytes,deadline_ms)" in worker
 assert "result.upload_bytes_sent+=(uint32_t)written;" in worker
+assert "result.upload_progress_ms=lf_recog_now_ms();" in worker
+assert "upload_progress_ms" in state
+assert '"upload_progress_age_ms"' in network
 assert "result.upload_bytes_total=(uint32_t)body_len;" in worker
 assert "result.stage_started_ms=lf_recog_now_ms();" in worker
 for name in ("stage_started_ms","upload_bytes_sent","upload_bytes_total"):

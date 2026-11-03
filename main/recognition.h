@@ -19,6 +19,7 @@ typedef struct {
     uint32_t attempts;
     uint64_t stage_started_ms; /* monotonic, when latest state began */
     uint32_t upload_bytes_sent; /* bounded diagnostics; never contains WAV */
+    uint64_t upload_progress_ms; /* monotonic last successful socket write */
     uint32_t upload_bytes_total;
     int http_status; /* AudD HTTP status, including legitimate no-match replies */
     int audd_api_error_code;

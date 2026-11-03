@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.51: a failed song lookup must never leave the OLED permanently frozen."""
+"""0.8.52: a failed song lookup must never leave the OLED permanently frozen."""
 from pathlib import Path
 p=Path(__file__).resolve().parents[1]
 ui=(p/"main/ui.c").read_text()
@@ -7,13 +7,13 @@ main=(p/"main/main.c").read_text()
 header=(p/"main/ui.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.51-alpha"' in version
+assert 'LF_VERSION "0.8.52-alpha"' in version
 # One spatially linked Home logo + white/blue wordmark, no off-screen label.
 assert "brand_row=lv_obj_create(parent)" in ui
-assert "lv_obj_set_size(brand_row,276,62)" in ui
+assert "lv_obj_set_size(brand_row,304,88)" in ui
 assert "lv_obj_set_flex_flow(brand_row,LV_FLEX_FLOW_ROW)" in ui
 assert "lv_obj_set_flex_align(brand_row,LV_FLEX_ALIGN_CENTER" in ui
-assert "lv_obj_set_style_pad_column(brand_row,4,0)" in ui
+assert "lv_obj_set_style_pad_column(brand_row,10,0)" in ui
 assert 'lv_label_set_text(lyric_mark,"LYRIC")' in ui
 assert 'lv_label_set_text(flash_mark,"FLASH")' in ui
 assert "lv_obj_align(mark,LV_ALIGN_TOP_MID,-111,68)" not in ui
@@ -51,5 +51,8 @@ assert "active_scan.attempts != home_stalled_attempt" in tick
 assert "last_activity_ms = current;" in tick
 assert tick.index("last_activity_ms = current;") < tick.index("sleep_display();")
 assert '"AWAITING SONG ID %us"' in ui
+assert "upload_stalled" in ui
+assert "current-song->upload_progress_ms>18000U" in ui
+assert 'home_warning=upload_stalled?"Upload stalled - retry":"Identification timed out";' in ui
 assert "LF_RECOG_UPLOAD_BUDGET_MS 60000ULL" in worker
 print("PASS: grouped circular-safe Home branding and independent bounded UI/reboot fail-safes")

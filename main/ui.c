@@ -62,6 +62,7 @@ static lv_obj_t *timed_battery;
 static uint64_t timed_power_update_ms;
 static lv_obj_t *timed_save_note;
 static uint64_t timed_hint_until_ms;
+static uint64_t timed_last_short_tap_ms;
 static uint64_t timed_controls_until_ms;
 static bool timed_estimated;
 static uint32_t auto_open_attempt;
@@ -747,6 +748,7 @@ static void lyrics_overlay_close(void)
     timed_battery=NULL;
     timed_save_note=NULL;
     timed_line_count=0;
+    timed_last_short_tap_ms=0;
     atomic_store(&ui_lyrics_scene_phase,0U);
     if(primary_pager)lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_HIDDEN);
 }
@@ -836,6 +838,7 @@ static void make_base(void)
     timed_save_note=NULL;
     timed_hint_until_ms=0;
     timed_controls_until_ms=0;
+    timed_last_short_tap_ms=0;
     home_scan_button=NULL;
     home_scan_status=NULL;
     home_song_title=NULL;
@@ -957,6 +960,16 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
     /* This UI-only deadline is independent of HTTP socket timeouts and the
        recognition worker. A wedged request must release the visible loading
        overlay so the screen remains usable, even before worker cleanup. */
+    /* HTTP writes can stop halfway through a large stereo WAV. Do not hold
+       the round recording overlay for the entire 60-second global budget:
+       after 18 seconds without ANY successful upload bytes, cancel that
+       attempt and expose an actionable Home warning. Worker cancellation is
+       cooperative; a blocked socket uses its own bounded 15s timeout. */
+    const bool upload_stalled=song->state==LF_RECOG_UPLOAD &&
+        song->upload_bytes_total>0 &&
+        song->upload_bytes_sent<song->upload_bytes_total &&
+        song->upload_progress_ms && current>song->upload_progress_ms &&
+        current-song->upload_progress_ms>18000U;
     const bool overdue=song->stage_started_ms &&
         current>song->stage_started_ms &&
         ((song->state==LF_RECOG_CAPTURE &&
@@ -965,9 +978,9 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
           current-song->stage_started_ms>80000U) ||
          (song->state==LF_RECOG_LYRICS &&
           current-song->stage_started_ms>40000U));
-    if(overdue && song->attempts!=home_stalled_attempt){
+    if((overdue || upload_stalled) && song->attempts!=home_stalled_attempt){
         home_stalled_attempt=song->attempts;
-        home_warning="Identification timed out";
+        home_warning=upload_stalled?"Upload stalled - retry":"Identification timed out";
         home_warning_until_ms=current+10000U;
         lf_recog_stop(); /* cooperative cancel; no UI mutex or audio read */
         ESP_LOGW(TAG,"Recognition stage exceeded UI deadline, attempt=%lu",
@@ -1150,29 +1163,29 @@ static void primary_render_home_content(lv_obj_t *parent)
        irrespective of glyph widths or round-screen clipping. The previous
        three independent absolute offsets separated logo and text. */
     lv_obj_t *brand_row=lv_obj_create(parent);
-    lv_obj_set_size(brand_row,276,62);
-    lv_obj_align(brand_row,LV_ALIGN_TOP_MID,0,68);
+    lv_obj_set_size(brand_row,304,88);
+    lv_obj_align(brand_row,LV_ALIGN_TOP_MID,0,55);
     lv_obj_set_style_bg_opa(brand_row,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(brand_row,0,0);
     lv_obj_set_style_shadow_width(brand_row,0,0);
     lv_obj_set_style_pad_all(brand_row,0,0);
-    lv_obj_set_style_pad_column(brand_row,4,0);
+    lv_obj_set_style_pad_column(brand_row,10,0);
     lv_obj_remove_flag(brand_row,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(brand_row,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(brand_row,LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(brand_row,LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
     lv_obj_t *mark=lv_obj_create(brand_row);
-    lv_obj_set_size(mark,58,58);
+    lv_obj_set_size(mark,84,84);
     lv_obj_set_style_bg_color(mark,lv_color_hex(0x0A2859),0);
     lv_obj_set_style_border_color(mark,lv_color_hex(0x3662A4),0);
     lv_obj_set_style_border_width(mark,1,0);
-    lv_obj_set_style_radius(mark,12,0);
+    lv_obj_set_style_radius(mark,17,0);
     lv_obj_set_style_pad_all(mark,0,0);
     lv_obj_remove_flag(mark,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(mark,LV_OBJ_FLAG_CLICKABLE);
-    const int8_t cloud_x[3]={8,21,36},cloud_y[3]={18,10,19};
-    const int8_t cloud_d[3]={24,31,20};
+    const int8_t cloud_x[3]={12,30,53},cloud_y[3]={27,15,29};
+    const int8_t cloud_d[3]={35,45,29};
     for(int i=0;i<3;i++){
         lv_obj_t *b=lv_obj_create(mark);
         lv_obj_set_size(b,cloud_d[i],cloud_d[i]);
@@ -1184,22 +1197,35 @@ static void primary_render_home_content(lv_obj_t *parent)
         lv_obj_remove_flag(b,LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_remove_flag(b,LV_OBJ_FLAG_CLICKABLE);
     }
-    static const lv_point_precise_t bolt_line[]={{30,30},{23,44},{32,40},{29,54},{46,35},{38,38}};
+    static const lv_point_precise_t bolt_line[]={{43,43},{33,62},{46,58},{42,77},{66,50},{55,54}};
     lv_obj_t *bolt=lv_line_create(mark);
     lv_line_set_points(bolt,bolt_line,6);
     lv_obj_set_style_line_color(bolt,lv_color_hex(0xFFD12B),0);
-    lv_obj_set_style_line_width(bolt,4,0);
+    lv_obj_set_style_line_width(bolt,5,0);
     lv_obj_set_style_line_rounded(bolt,true,0);
     lv_obj_remove_flag(bolt,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *lyric_mark=lv_label_create(brand_row);
+    /* Two stacked lines sit to the right of the enlarged cloud-and-bolt.
+       Compact vertical flex keeps both words within the round display. */
+    lv_obj_t *wordmark_col=lv_obj_create(brand_row);
+    lv_obj_set_size(wordmark_col,144,84);
+    lv_obj_set_style_bg_opa(wordmark_col,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(wordmark_col,0,0);
+    lv_obj_set_style_pad_all(wordmark_col,0,0);
+    lv_obj_set_style_pad_row(wordmark_col,0,0);
+    lv_obj_remove_flag(wordmark_col,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(wordmark_col,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(wordmark_col,LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(wordmark_col,LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_START,LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *lyric_mark=lv_label_create(wordmark_col);
     lv_label_set_text(lyric_mark,"LYRIC");
-    lv_obj_set_style_text_font(lyric_mark,&lv_font_montserrat_20,0);
+    lv_obj_set_style_text_font(lyric_mark,&lv_font_montserrat_28,0);
     lv_obj_set_style_text_color(lyric_mark,lv_color_hex(0xFFFFFF),0);
     lv_obj_set_style_text_letter_space(lyric_mark,1,0);
     lv_obj_remove_flag(lyric_mark,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *flash_mark=lv_label_create(brand_row);
+    lv_obj_t *flash_mark=lv_label_create(wordmark_col);
     lv_label_set_text(flash_mark,"FLASH");
-    lv_obj_set_style_text_font(flash_mark,&lv_font_montserrat_20,0);
+    lv_obj_set_style_text_font(flash_mark,&lv_font_montserrat_28,0);
     lv_obj_set_style_text_color(flash_mark,lv_color_hex(0x7BD3FF),0);
     lv_obj_set_style_text_letter_space(flash_mark,1,0);
     lv_obj_remove_flag(flash_mark,LV_OBJ_FLAG_CLICKABLE);
@@ -1582,6 +1608,24 @@ static void timed_pause(lv_event_t *e)
     if(caption)lv_label_set_text(caption,timed_clock.running?"PAUSE":"RESUME");
     activity();timed_render(now,true);
 }
+/* LVGL SHORT_CLICKED excludes both swipes and long holds. Two short
+   releases within 360ms return Home without stealing the long-press menu. */
+static void timed_double_tap_home(lv_event_t *e)
+{
+    (void)e;
+    if(page!=1 || !timed_lyrics_mode || !timed_overlay)return;
+    if(timed_controls && !lv_obj_has_flag(timed_controls,LV_OBJ_FLAG_HIDDEN)){
+        timed_last_short_tap_ms=0;
+        return;
+    }
+    const uint64_t current=now_ms();
+    if(timed_last_short_tap_ms && current>=timed_last_short_tap_ms &&
+       current-timed_last_short_tap_ms<=360U){
+        timed_last_short_tap_ms=0;
+        activity();
+        build_home(); /* deferred navigation: do not delete touch target here */
+    }else timed_last_short_tap_ms=current;
+}
 static void timed_toggle_controls(lv_event_t *e)
 {
     (void)e;
@@ -1615,6 +1659,7 @@ static lv_obj_t *timed_line_label(int slot,int width,uint32_t color)
 static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
 {
     if(timed_overlay)lyrics_overlay_close();
+    timed_last_short_tap_ms=0;
     atomic_store(&ui_lyrics_scene_phase,1U);
     lv_obj_t *surface=NULL;
     if(primary_pager && screen){
@@ -1693,11 +1738,11 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     /* A compact icon + percent only; four-segment detail stays in Web UI. */
     timed_battery=lv_label_create(surface);
     lv_label_set_text(timed_battery,LV_SYMBOL_BATTERY_EMPTY " --%");
-    lv_obj_set_style_text_font(timed_battery,&lv_font_montserrat_20,0);
+    lv_obj_set_style_text_font(timed_battery,&lv_font_montserrat_18,0);
     lv_obj_set_style_text_color(timed_battery,lv_color_hex(0xAFC6DC),0);
-    lv_obj_set_width(timed_battery,116);
-    lv_obj_set_style_text_align(timed_battery,LV_TEXT_ALIGN_RIGHT,0);
-    lv_obj_align(timed_battery,LV_ALIGN_TOP_RIGHT,-24,42);
+    lv_obj_set_width(timed_battery,120);
+    lv_obj_set_style_text_align(timed_battery,LV_TEXT_ALIGN_CENTER,0);
+    lv_obj_align(timed_battery,LV_ALIGN_TOP_MID,0,43);
     lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_flag(timed_battery,LV_OBJ_FLAG_GESTURE_BUBBLE);
     /* An unmoving parent clips line ends above/below the lyric field.
@@ -1779,6 +1824,7 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_align(timed_save_note,LV_ALIGN_CENTER,0,94);
     lv_obj_remove_event_cb(surface,timed_toggle_controls);
     lv_obj_add_event_cb(surface,timed_toggle_controls,LV_EVENT_LONG_PRESSED,NULL);
+    lv_obj_add_event_cb(surface,timed_double_tap_home,LV_EVENT_SHORT_CLICKED,NULL);
     paused=!timed_clock.running;
     timed_active_index=-999;timed_last_second=UINT32_MAX;
     timed_scroll_y=INT16_MIN;
@@ -1787,8 +1833,7 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     atomic_store(&ui_lyrics_scene_phase,4U);
     timed_render(now_ms(),true);
     atomic_store(&ui_lyrics_scene_phase,5U);
-    /* Only this page gets the higher-rate lyric compositor. Other pages
-       retain their proven 50ms pager and clock timers. */
+    /* Lyrics use a bounded, retained 65ms compositor; preserve 50ms pager. */
     timed_scroll_timer=lv_timer_create(timed_scroll_frame,65,NULL);
 }
 
