@@ -82,6 +82,8 @@ static lv_obj_t *home_song_title;
 static lv_obj_t *home_song_artist;
 static lv_obj_t *home_lyric_line;
 static uint64_t home_last_refresh_ms;
+/* Never let a network request monopolize the round OLED indefinitely. */
+static uint32_t home_stalled_attempt;
 static lv_obj_t *home_play_symbol;
 static lv_obj_t *home_play_hint;
 /* Overlay is owned by the existing Home pager, not a second LVGL root. */
@@ -822,6 +824,8 @@ static void make_base(void)
     home_record_wave_count=0;
     home_last_refresh_ms=0;
     home_visual_busy=-1;
+    /* home_stalled_attempt is scan-id scoped and survives ordinary Home
+       page rebuilds until lf_recog_start increments the session number. */
     battery_status=NULL;
     network_status=NULL;
     network_password=NULL;
@@ -920,6 +924,29 @@ static void auto_open_lyrics_deferred(void *unused)
 static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t current)
 {
     if(!song || !home_record_layer)return;
+    /* This UI-only deadline is independent of HTTP socket timeouts and the
+       recognition worker. A wedged request must release the visible loading
+       overlay so the screen remains usable, even before worker cleanup. */
+    const bool overdue=song->stage_started_ms &&
+        current>song->stage_started_ms &&
+        ((song->state==LF_RECOG_CAPTURE &&
+          current-song->stage_started_ms>30000U) ||
+         (song->state==LF_RECOG_UPLOAD &&
+          current-song->stage_started_ms>80000U) ||
+         (song->state==LF_RECOG_LYRICS &&
+          current-song->stage_started_ms>40000U));
+    if(overdue && song->attempts!=home_stalled_attempt){
+        home_stalled_attempt=song->attempts;
+        home_warning="Identification timed out";
+        home_warning_until_ms=current+10000U;
+        lf_recog_stop(); /* cooperative cancel; no UI mutex or audio read */
+        ESP_LOGW(TAG,"Recognition stage exceeded UI deadline, attempt=%lu",
+                 (unsigned long)song->attempts);
+    }
+    if(home_stalled_attempt==song->attempts){
+        lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
     const bool capturing=song->state==LF_RECOG_CAPTURE;
     const bool working=song->state==LF_RECOG_UPLOAD ||
                        song->state==LF_RECOG_LYRICS;
