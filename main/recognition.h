@@ -13,7 +13,18 @@ typedef struct {
     uint32_t captured_frames;
     uint32_t capture_seconds;
     uint32_t attempts;
-    int http_status;
+    int http_status; /* AudD HTTP status, including legitimate no-match replies */
+    int audd_api_error_code;
+    int audd_transport_error_code; /* ESP-IDF negative error; 0 if none */
+    uint32_t audio_measured_frames;
+    uint32_t mic1_peak, mic2_peak;
+    uint32_t mic1_rms, mic2_rms;
+    uint32_t mic1_rms_without_rail, mic2_rms_without_rail;
+    uint32_t mic1_near_rail, mic2_near_rail;
+    uint32_t mic1_half_scale, mic2_half_scale;
+    uint32_t mic1_rail_bursts, mic2_rail_bursts;
+    uint32_t mic1_longest_rail_burst, mic2_longest_rail_burst;
+    uint32_t both_near_rail_frames;
     char title[128];
     char artist[128];
     char message[128];
