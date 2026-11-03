@@ -526,6 +526,28 @@ static esp_err_t handle_song_status(httpd_req_t *req)
     cJSON_AddNumberToObject(reply,"captured_frames",s.captured_frames);
     cJSON_AddNumberToObject(reply,"capture_seconds",s.capture_seconds);
     cJSON_AddNumberToObject(reply,"attempts",s.attempts);
+    /* The actual submitted stereo scan, not the separate 3-second PCM test.
+     * Aggregate metrics only; no audio, credentials or remote response body. */
+    cJSON_AddNumberToObject(reply,"audd_http_status",s.http_status);
+    cJSON_AddNumberToObject(reply,"audd_api_error_code",s.audd_api_error_code);
+    cJSON_AddNumberToObject(reply,"audd_transport_error_code",s.audd_transport_error_code);
+    cJSON_AddNumberToObject(reply,"mic_gain_db",24);
+    cJSON_AddNumberToObject(reply,"audio_measured_frames",s.audio_measured_frames);
+    cJSON_AddNumberToObject(reply,"mic1_peak",s.mic1_peak);
+    cJSON_AddNumberToObject(reply,"mic2_peak",s.mic2_peak);
+    cJSON_AddNumberToObject(reply,"mic1_rms",s.mic1_rms);
+    cJSON_AddNumberToObject(reply,"mic2_rms",s.mic2_rms);
+    cJSON_AddNumberToObject(reply,"mic1_rms_without_rail",s.mic1_rms_without_rail);
+    cJSON_AddNumberToObject(reply,"mic2_rms_without_rail",s.mic2_rms_without_rail);
+    cJSON_AddNumberToObject(reply,"mic1_near_rail",s.mic1_near_rail);
+    cJSON_AddNumberToObject(reply,"mic2_near_rail",s.mic2_near_rail);
+    cJSON_AddNumberToObject(reply,"mic1_half_scale",s.mic1_half_scale);
+    cJSON_AddNumberToObject(reply,"mic2_half_scale",s.mic2_half_scale);
+    cJSON_AddNumberToObject(reply,"mic1_rail_bursts",s.mic1_rail_bursts);
+    cJSON_AddNumberToObject(reply,"mic2_rail_bursts",s.mic2_rail_bursts);
+    cJSON_AddNumberToObject(reply,"mic1_longest_rail_burst",s.mic1_longest_rail_burst);
+    cJSON_AddNumberToObject(reply,"mic2_longest_rail_burst",s.mic2_longest_rail_burst);
+    cJSON_AddNumberToObject(reply,"both_near_rail_frames",s.both_near_rail_frames);
     cJSON_AddStringToObject(reply,"lyrics_state",
          s.lyrics_state[0]?s.lyrics_state:"not_checked");
     cJSON_AddNumberToObject(reply,"lyric_lines",s.lyric_lines);
