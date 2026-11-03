@@ -2995,7 +2995,17 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
     err = lf_settings_save(prefs);
     if (err == ESP_OK) {
         clock_scene_stale=true;
-        if (page == 6) build_clock(); /* Rebuild only the current clock. */
+        /* A Web UI clock save is a request to SEE that face on the device,
+           not merely mark a hidden cache stale. Refresh the existing
+           pager's clock scene and navigate to it without rebooting. */
+        if(primary_pager){
+            primary_pager_build_clock();
+            primary_pager_enter(0);
+        }else if(!timed_lyrics_mode && !lf_recog_busy()){
+            build_clock();
+        }
+        /* Never interrupt manual microphone capture or active synced
+           lyrics: the stale clock rebuilds on the next clock visit. */
     } else {
         *prefs = previous;
         lf_diag_error("settings", "Basic settings NVS save failed");
