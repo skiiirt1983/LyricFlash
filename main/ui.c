@@ -2372,7 +2372,7 @@ static void build_basic_settings_now(void)
     lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_remove_flag(list, LV_OBJ_FLAG_GESTURE_BUBBLE);
     char text[65];
-    snprintf(text, sizeof text, "Font preset %u / 5", prefs->basic_font_style + 1);
+    snprintf(text, sizeof text, "Font preset %u / 20", prefs->basic_font_style + 1);
     button(list, text, 256, 50, 0, 0, 0xB2C6D3, on_basic_font, NULL);
     basic_font_size_label = lv_label_create(list);
     snprintf(text, sizeof text, "Time size: %u%%", prefs->basic_font_size);
