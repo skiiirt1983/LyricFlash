@@ -645,7 +645,7 @@ require('#include "recognition.h"' in ui and
         'strcmp(song.lyrics_state,"synced")==0' in ui and
         'build_timed_lyrics_now(&song)' in ui and
         'lf_lyric_clock_line_at(timed_stamps,timed_line_count,ms)' in ui and
-        'timed_render(current,false)' in ui,
+        'timed_render(now_ms(),false)' in ui,
         "0.8.39 real song and timestamp focused lyric viewport")
 require('lf_sync_estimate_position_ms(' in ui and
         'song->audd_timecode_valid' in ui and
@@ -658,7 +658,7 @@ require('lf_sync_estimate_position_ms(' in ui and
         "0.8.42 estimated sync, hidden alignment controls and new scan reset")
 require('lv_obj_delete_async(old_screen);' in ui and
         'lv_timer_create(on_tick, 50, NULL)' in ui and
-        'timed_last_update_ms>=65' in ui and
+        'timed_scroll_timer=lv_timer_create(timed_scroll_frame,25,NULL)' in ui and
         'timed_rows[4]' in ui and
         'for(int slot=0;slot<4;slot++)' in ui,
         "0.8.39 retain proven QSPI, pager and redraw-safe 3-row UI")
