@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/private-0.8.44-lyrics-layout
+      - feature/private-0.8.44-scrolling-lyrics-webui
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
