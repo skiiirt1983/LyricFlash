@@ -60,7 +60,7 @@ assert ('"0.8.41-alpha"' in active_version or
         '"0.8.43-alpha"' in active_version), "Unexpected alpha firmware version"
 if '"0.8.43-alpha"' in active_version:
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
-    assert "feature/private-0.8.43-auto-lyrics" in private_workflow
+    assert "feature/private-0.8.43-lyrics-layout" in private_workflow
     assert "LyricFlash-Private-Alpha-0.8.43-ESP32S3-UNTESTED" in private_workflow
     assert "tools/package_release.py --verify _site" in private_workflow
     assert "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin" in private_workflow
