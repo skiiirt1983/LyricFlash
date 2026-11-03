@@ -985,7 +985,15 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
                                                song->upload_bytes_total);
                 snprintf(uploading,sizeof uploading,"UPLOADING %u%%",pct);
                 word=uploading;
-            }else word="AWAITING SONG ID";
+            }else{
+                /* A live seconds indicator distinguishes slow AudD from
+                   a frozen screen without changing microphone behavior. */
+                const unsigned waited=(unsigned)(song->stage_started_ms &&
+                    current>=song->stage_started_ms?
+                    (current-song->stage_started_ms)/1000U:0U);
+                snprintf(uploading,sizeof uploading,"AWAITING SONG ID %us",waited);
+                word=uploading;
+            }
         }
         if(strcmp(lv_label_get_text(home_record_caption),word)!=0)
             lv_label_set_text(home_record_caption,word);
@@ -2685,6 +2693,16 @@ static void on_tick(lv_timer_t *timer)
     atomic_store(&ui_last_page,(uint32_t)page);
     if(primary_pager)primary_pager_watchdog(current);
     if (nav_transition_active) return; /* No UI activity until reveal completes. */
+    /* Manual song identification continues after microphone capture,
+       including AudD response and lyric lookup. Preserve the OLED until
+       the worker completes; an already timed-out scan may sleep normally. */
+    if (page == 0 && lf_recog_busy()) {
+        lf_recog_snapshot_t active_scan={0};
+        lf_recog_snapshot(&active_scan);
+        if (active_scan.attempts &&
+            active_scan.attempts != home_stalled_attempt)
+            last_activity_ms = current;
+    }
     /* Polling fallback for wake when the cover misses a press. A wake touch
        must never trigger navigation or click the previously shown buttons. */
     if(asleep) {

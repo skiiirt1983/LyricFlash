@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.49: a failed song lookup must never leave the OLED permanently frozen."""
+"""0.8.50: a failed song lookup must never leave the OLED permanently frozen."""
 from pathlib import Path
 p=Path(__file__).resolve().parents[1]
 ui=(p/"main/ui.c").read_text()
@@ -7,7 +7,7 @@ main=(p/"main/main.c").read_text()
 header=(p/"main/ui.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.49-alpha"' in version
+assert 'LF_VERSION "0.8.50-alpha"' in version
 # One spatially linked Home logo + white/blue wordmark, no off-screen label.
 assert "brand_row=lv_obj_create(parent)" in ui
 assert "lv_obj_set_size(brand_row,276,62)" in ui
@@ -44,5 +44,12 @@ assert "nvs_flash_erase(" not in main
 assert "lf_ota_guard_confirm_startup();" in main
 assert "xTaskCreate(lyricflash_display_recovery_watchdog" in main
 assert "ui_tick_age_ms" in header
+# A real song scan must stay visible past normal 15/30/60s screen timeout.
+tick=ui.split("static void on_tick(lv_timer_t *timer)",1)[1]
+assert "if (page == 0 && lf_recog_busy())" in tick
+assert "active_scan.attempts != home_stalled_attempt" in tick
+assert "last_activity_ms = current;" in tick
+assert tick.index("last_activity_ms = current;") < tick.index("sleep_display();")
+assert '"AWAITING SONG ID %us"' in ui
 assert "LF_RECOG_UPLOAD_BUDGET_MS 60000ULL" in worker
 print("PASS: grouped circular-safe Home branding and independent bounded UI/reboot fail-safes")
