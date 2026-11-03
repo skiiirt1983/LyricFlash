@@ -61,8 +61,18 @@ for key in ['font_style','font_size','ring_mode','show_date','weather','backgrou
     assert key in web and key in net, key
 assert 'microphone' in net and 'recent_errors' in net
 assert 'uxTaskGetNumberOfTasks' in diag
-assert '0.8.41-alpha' in (p/'main/version.h').read_text()
-assert 'set(PROJECT_VER "0.8.41-alpha")' in (p/'CMakeLists.txt').read_text()
+# The project metadata must match the device's reported firmware version.
+# A stale ESP-IDF PROJECT_VER produces a mismatched application descriptor,
+# which must fail before packaging or offering any OTA installation.
+import re
+header=(p/'main/version.h').read_text()
+match=re.search(r'^#define LF_VERSION "([^"]+)"',header,re.MULTILINE)
+assert match, "Missing LF_VERSION"
+version=match.group(1)
+assert version in ("0.8.41-alpha","0.8.42-alpha"), version
+assert f'set(PROJECT_VER "{version}")' in (p/'CMakeLists.txt').read_text(), (
+    "ESP-IDF app descriptor PROJECT_VER must agree with LF_VERSION"
+)
 assert 'ESP-IDF image descriptor version' in (p/'tools/check_build.py').read_text()
 assert 'LyricFlash-Alpha-0.8.41-FULL-USB-and-OTA-UNTESTED' in workflow
 print('PASS: Alpha 0.8 diagnostics, PIN-free Web UI and navigation gates')
