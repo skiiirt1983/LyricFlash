@@ -23,6 +23,7 @@ Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` an
 - **Requested OTA UI fix:** Optional Pages catalog HTTP 404 is hidden from the standard update status. Display `No newer firmware available` if at least one source responds; `Unable to check for updates` when all sources fail. Leave genuine transfer diagnostics available while installing OTA.
 - **Acceptance:** Install 0.8.38, confirm regular UI/touch and firmware selector, then manually identify one known song. Verify artist/title, lyrics state and total timestamped line count or understandable unsynced/not-found message. No repeat of completed microphone amplitude tests. Stop remains available.
 - **Preflight:** Native URL encoding and version suffix tests, LRCLIB source/TLS/metadata guard, no 429 auto-retry, browser firmware catalog mock, all existing audio and display static tests. Full compile only after pass.
+- **Preflight PASS:** 702 source-only assertions, native dual microphone/TDM and WAV tests, LRCLIB URI encoding and fallback tests, Web UI syntax, optional Pages HTTP 404 suppression, OTA reinstall mock, power/NVS and release packaging. Checked on commit ffdea944edff1ffe6b9bc41cc6c8fd07d0004446. Source remains identical for this one compile.
 
 ## Physical hardware result: Alpha 0.8.37 — first successful real AudD song recognition
 
