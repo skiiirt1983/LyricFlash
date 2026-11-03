@@ -19,6 +19,7 @@ idf_component_register(
         "settings.c"
         "lyrics.c"
         "lyric_clock.c"
+        "lyric_sync.c"
         "image_policy.c"
         "service_errors.c"
         "power.c"
