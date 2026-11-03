@@ -374,13 +374,13 @@ static void build_sundial(lv_obj_t *parent)
 const char *lf_clock_style_name(uint8_t style)
 {
     switch (style) {
-        case 0: return "Rolex Diver";
+        case 0: return "Brolex Diver";
         case 1: return "Midnight Digital";
         case 2: return "Classic Analog";
         case 3: return "Retro Green LCD";
         case 4: return "Solar-ish Sundial";
         case 5: return "Basic Custom";
-        default: return "Rolex Diver";
+        default: return "Brolex Diver";
     }
 }
 void lf_clock_clear(void)
