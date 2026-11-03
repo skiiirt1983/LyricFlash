@@ -20,7 +20,7 @@ void lf_settings_defaults(lf_settings_t *s)
         .text_color = 0x86E3AE,
         .background_color = 0x000000,
         .accent_color = 0x86E3AE,
-        .timing_offset_ms = -2000, /* AudD timecode calibration */
+        .timing_offset_ms = 0, /* neutral baseline; manual tuning saved separately */
         .line_spacing_px = 5,
         .clock_face = 0,
         .basic_font_style = 0,
@@ -91,10 +91,12 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     (void)nvs_get_u32(h, "bgcolor", &s->background_color);
     (void)nvs_get_u32(h, "accent", &s->accent_color);
     (void)nvs_get_i32(h, "offset_ms", &s->timing_offset_ms);
-    /* Old versions stored zero without applying it to the live lyric clock.
-       Migrate that default only, preserving explicitly saved nonzero offsets. */
-    if (schema < 10 && s->timing_offset_ms == 0)
-        s->timing_offset_ms = -2000;
+    /* Firmware 0.8.43-45 applied -2000ms as a saved default. Feedback on
+       0.8.45 confirmed this now makes lyrics two seconds late. Migrate
+       ONLY that legacy value; retain all other personalized corrections.
+       Once saved with schema 13 an intentional -2000ms stays untouched. */
+    if(schema<13 && s->timing_offset_ms==-2000)
+        s->timing_offset_ms=0;
     (void)nvs_get_u8(h, "spacing", &s->line_spacing_px);
     (void)nvs_get_u8(h, "progress", &s->show_progress);
     (void)nvs_get_u32(h, "chargeclr", &s->charging_color);
@@ -146,7 +148,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     s->text_color &= 0xFFFFFF;
     s->background_color &= 0xFFFFFF;
     s->accent_color &= 0xFFFFFF;
-    if (s->timing_offset_ms < -10000 || s->timing_offset_ms > 10000) s->timing_offset_ms = -2000;
+    if (s->timing_offset_ms < -10000 || s->timing_offset_ms > 10000) s->timing_offset_ms = 0;
     s->line_spacing_px = in_range(s->line_spacing_px, 0, 24, 5);
     s->show_progress = in_range(s->show_progress, 0, 1, 1);
     s->charging_color &= 0xFFFFFF;
