@@ -14,7 +14,14 @@
 
 Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` and `0.8.29` failed screen/touch on physical hardware. `0.8.30` is the targeted display recovery candidate and is not hardware-proven until the user verifies it. Keep 0.8.26 as rollback. Do not merge or publish a stable v1.0 release until the device tests pass. Each functional milestone uses **one isolated change and one gated compile after preflight**, followed by a specific device acceptance test.
 
-## Current milestone: Alpha 0.8.36 — rare audio rail-spike duration diagnostic
+## Physical test accepted: Alpha 0.8.36 — rail spike distribution
+
+- **User's 3.008-second medium-music hardware capture (0.8.36):** 141,824 selected MIC samples (~70,912 per channel), combined mean 91 and peak 32,767. MIC1 mean/RMS/peak 84/824/32767; 22 near-rail samples (0.031%), **2 separate near-rail bursts, longest 21 consecutive frames = 0.875 ms**, 53 samples above half-scale, RMS excluding near-rail 589. MIC2 mean/RMS/peak 98/866/32767; 20 near-rail samples (0.028%), **2 bursts, longest 19 consecutive frames = 0.792 ms**, 54 samples above half-scale, RMS excluding near-rail 669. Zero frames with both MICs simultaneously near-rail.
+- **Engineering interpretation:** a single ~0.8ms burst and an isolated near-rail event on each channel; not sustained multi-second clipping. The spikes are channel-independent at the near-rail threshold. This cannot yet distinguish actual ADC overload from TDM/framing artifacts. Excluding near-rail samples lowers RMS substantially and does not establish clean recognizable audio; do not claim signal quality validated by amplitudes alone.
+- **Decision:** keep the physically working 24 kHz 4-slot TDM, microphone mapping and 24dB gain. Additional numerical-only microphone test releases have diminishing returns; move toward bounded manual audio recognition testing to validate actual intelligible/fingerprintable PCM. Respect user preference against unnecessary firmware recompilations. Preserve zero background mic activity and settings/OTA.
+- **Separate UX request remains queued:** hide optional Pages catalog 404/HTTP diagnostics from the normal firmware-update status when GitHub Releases works, while still reporting genuine inability to check/update in understandable language. Do not present a missing optional catalog as an OTA failure.
+
+## Previous milestone: Alpha 0.8.36 — rare audio rail-spike duration diagnostic
 
 - **Alpha 0.8.35 physically confirmed by user:** Current same-version reinstall appears and works; release OTA picker/installed baseline passed. No need to retest OTA behavior on this microphone-only release.
 - **Problem:** both MIC1/MIC2 have 0 near-rail samples at quiet baseline, but about 20–25 near-rail samples per MIC in 3 seconds at medium music/15–20 cm voice. Very low typical signal and rare full-scale values disproportionately inflate RMS. We have not determined if bursts represent I²S ADC framing, clipping or physical impulses; changing input gain or software interpolation is premature.
