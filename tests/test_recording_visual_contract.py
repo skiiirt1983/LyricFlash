@@ -6,7 +6,7 @@ ui=(p/"main/ui.c").read_text()
 header=(p/"main/recognition.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.46-alpha"' in version
+assert 'LF_VERSION "0.8.47-alpha"' in version
 # Feed the renderer a scalar only: the existing capture is still manual.
 assert "uint8_t capture_visual_level;" in header
 assert "static void set_count(uint32_t frames,const int16_t *tdm)" in worker
@@ -21,10 +21,11 @@ assert "home_recording_update(&song,current);" in ui
 assert "home_recording_update(&scan,current);" in ui
 assert "song->captured_frames*360U" in ui
 assert "song->capture_visual_level" in ui
-assert "130+amplitude*wave/4" in ui
-assert "if(y<10)y=10;" in ui and "if(y>250)y=250;" in ui
-assert "lv_obj_set_style_line_width(home_record_wave,6,0);" in ui
-assert "lv_obj_set_style_border_width(record_ring,5,0);" in ui
+assert "int swing=amplitude>0?30+amplitude*4:0;" in ui
+assert "int y=130+swing*wave/8;" in ui
+assert "if(y<12)y=12;" in ui and "if(y>248)y=248;" in ui
+assert "lv_obj_set_style_line_width(home_record_wave,7,0);" in ui
+assert "lv_obj_set_style_border_width(record_ring,6,0);" in ui
 assert 'lv_label_set_text(home_record_loading,"LOADING...")' in ui
 assert "const bool opening=song->state==LF_RECOG_MATCH" in ui
 assert 'home_caption(parent,"LYRIC"' in ui and 'home_caption(parent,"FLASH"' in ui
@@ -38,9 +39,17 @@ assert "song->state==LF_RECOG_LYRICS" in ui
 assert "lv_style_set_transform_width(&press_style,24)" in ui
 assert "No Song Lyrics Available" in ui
 assert "auto_open_lyrics_deferred" in ui
+assert "const bool recognition_open=auto_open_transition;" in ui
+assert "auto_open_attempt=timed_scan_attempt;" in ui
+assert "if(page==1 && timed_lyrics_mode && timed_line_count>0)" in ui
+assert "lv_obj_invalidate(screen);" in ui
+assert "ui_pointer_is_down()" in ui
+assert "lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN)" in ui
+assert "lv_obj_move_foreground(home_record_layer);" in ui
+
 assert "lyric_logo_at_top(screen);" not in ui
 assert "lv_line_set_points(strike,bolt,7)" not in ui  # no logo on sacred lyrics page
 assert "LV_SYMBOL_CHARGE" in ui
 assert "ESTIMATED SYNC" not in ui
 assert '"SYNC %02lu:%02lu  |  offset %c%ld.%01lds"' in ui
-print("PASS: safe level-only waveform, animated selection, simplified lyric header and fallbacks")
+print("PASS: large bounded waveform and acknowledged, retryable recognition-to-lyrics navigation")
