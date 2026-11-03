@@ -1,6 +1,7 @@
 #include "basic_clock.h"
 #include <stdint.h>
 #include <string.h>
+#include "basic_open_face.h"
 #include <stdio.h>
 
 static uint32_t lerp(uint32_t a, uint32_t b, unsigned x, unsigned maximum)
@@ -200,6 +201,49 @@ static void styled_digit(lv_layer_t *layer,int x,int y,int cell,char c,
     }
 }
 
+/* Genuine non-LCD numeral letterforms, derived from open-licensed serif,
+ * high-contrast display and rounded families. Styles with names like Deco,
+ * Vintage and Rounded now use actual curved/serif digit skeletons instead
+ * of perturbations of the SAME Retro 8 pixel grid. */
+static int open_face_family(uint8_t style)
+{
+    switch(style){
+    case 3:case 9:case 11:case 13:case 19:return 0; /* EB Garamond */
+    case 5:case 7:case 8:case 16:case 17:return 1; /* display bold */
+    case 6:case 10:case 14:case 15:return 2;       /* rounded */
+    default:return -1;
+    }
+}
+static void open_face_digit(lv_layer_t *layer,int x,int y,int scale,
+                            char c,uint32_t rgb,int family,uint8_t style)
+{
+    if(c==':'){
+        draw_bar(layer,x+7*scale,y+6*scale,scale+1,scale+1,rgb,scale/2);
+        draw_bar(layer,x+7*scale,y+15*scale,scale+1,scale+1,rgb,scale/2);
+        return;
+    }
+    if(c<'0'||c>'9')return;
+    for(unsigned row=0;row<LF_OPEN_FACE_H;row++){
+        uint16_t bits=lf_open_face_row((unsigned)family,(unsigned)(c-'0'),row);
+        /* Stencil and geometric variants intentionally interrupt strokes,
+           but their underlying number contour remains conventional. */
+        if(style==16 && (row==7 || row==14))bits=0;
+        for(int col=0;col<15;){
+            if(!(bits&(1U<<(14-col)))){col++;continue;}
+            int end=col+1;
+            while(end<15 && (bits&(1U<<(14-end))))end++;
+            int skew=style==11?(int)(20U-row)*scale/7:0;
+            int xx=x+col*scale+skew,yy=y+(int)row*scale;
+            int w=(end-col)*scale;
+            if(style==7 || style==13)
+                draw_bar(layer,xx+2,yy+2,w,scale,0x2D4659,1);
+            if(style==9 || style==19)w=w>1?w-1:1;
+            draw_bar(layer,xx,yy,w,scale,rgb,
+                     (style==6 || style==10)?scale/2:0);
+            col=end;
+        }
+    }
+}
 static void basic_digits_draw(lv_event_t *e)
 {
     const lf_settings_t *p=(const lf_settings_t *)lv_event_get_user_data(e);
@@ -218,7 +262,22 @@ static void basic_digits_draw(lv_event_t *e)
         for(int i=0;i<length;i++)
             segment_digit(layer,start_x+i*(w+gap),start_y,w,h,thick,
                           custom_time[i],p->basic_foreground);
+    }else if(open_face_family(p->basic_font_style)>=0){
+        const int cell=p->basic_font_size<30?1:
+            p->basic_font_size<75?2:
+            p->basic_font_size<125?3:
+            p->basic_font_size<175?4:5;
+        const int w=15*cell,gap=cell;
+        const int total=length*w+(length-1)*gap;
+        const int start_x=center_x-total/2,start_y=center_y-(21*cell)/2;
+        const int family=open_face_family(p->basic_font_style);
+        for(int i=0;i<length;i++)
+            open_face_digit(layer,start_x+i*(w+gap),start_y,cell,
+                            custom_time[i],p->basic_foreground,family,
+                            p->basic_font_style);
     }else{
+        /* Only Digital 7, Retro 8, Roadster and Dot Matrix use synthetic
+           segment/pixel styles. Ordinary typography is no longer LCD. */
         const int cell=(int)basic_digit_cell(p->basic_font_size);
         const int w=5*cell,gap=2*cell,total=length*w+(length-1)*gap;
         const int start_x=center_x-total/2,start_y=center_y-7*cell/2;
@@ -228,7 +287,7 @@ static void basic_digits_draw(lv_event_t *e)
                              custom_time[i],p->basic_foreground,p->basic_font_style);
             else
                 pixel_digit(layer,start_x+i*(w+gap),start_y,cell,
-                            custom_time[i],p->basic_foreground,p->basic_font_style==3);
+                            custom_time[i],p->basic_foreground,false);
         }
     }
 }
