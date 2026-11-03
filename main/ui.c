@@ -740,6 +740,7 @@ static void make_base(void)
     for(size_t i=0;i<3;i++)timed_rows[i]=NULL;
     timed_status=NULL;
     timed_pause_button=NULL;
+    timed_controls=NULL;
     home_scan_button=NULL;
     home_scan_status=NULL;
     home_song_title=NULL;
@@ -1225,6 +1226,7 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     button(timed_controls,"SETTINGS",124,48,-80,26,0x8FAFC7,on_settings,NULL);
     timed_pause_button=button(timed_controls,timed_clock.started&&!timed_clock.running?
         "RESUME":"PAUSE",124,48,80,26,prefs->text_color,timed_pause,NULL);
+    lv_obj_remove_event_cb(screen,timed_toggle_controls);
     lv_obj_add_event_cb(screen,timed_toggle_controls,LV_EVENT_LONG_PRESSED,NULL);
     paused=!timed_clock.running;
     timed_active_index=-999;timed_last_second=UINT32_MAX;
