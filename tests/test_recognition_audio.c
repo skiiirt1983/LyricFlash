@@ -30,6 +30,34 @@ int main(void)
     assert(lf_scan_tdm_to_stereo(bytes,8,tdm,7)==0);
     assert(lf_scan_tdm_to_stereo(bytes,8,tdm,0)==0);
     assert(lf_scan_tdm_to_stereo(NULL,8,tdm,8)==0);
+    /* Measure the identical MIC1/MIC2 TDM slots that form the AudD WAV.
+     * Two rail samples in the first frame must count as a single burst
+     * per microphone; other slots must have no influence. */
+    lf_scan_audio_metrics_t levels={0};
+    lf_scan_audio_metrics_add(&levels,tdm,8);
+    assert(levels.frames==2);
+    assert(levels.mic1_peak==32768 && levels.mic2_peak==32767);
+    assert(levels.mic1_near_rail==1 && levels.mic2_near_rail==1);
+    assert(levels.both_near_rail==1);
+    assert(levels.mic1_half_scale==1 && levels.mic2_half_scale==1);
+    assert(levels.mic1_rail_bursts==1 && levels.mic2_rail_bursts==1);
+    assert(levels.mic1_longest_burst==1 && levels.mic2_longest_burst==1);
+    assert(levels.mic1_below_rail_frames==1 && levels.mic2_below_rail_frames==1);
+    assert(lf_scan_audio_rms(0,0)==0);
+    assert(lf_scan_audio_rms(10000,4)==50);
+    assert(lf_scan_audio_rms(levels.mic1_below_rail_sq,
+                            levels.mic1_below_rail_frames)==300);
+    assert(lf_scan_audio_rms(levels.mic2_below_rail_sq,
+                            levels.mic2_below_rail_frames)==1000);
+    const int16_t rail_burst[12]={32767,300,32767,9,
+        -32768,101,-32768,-2,0,200,0,110};
+    lf_scan_audio_metrics_add(&levels,rail_burst,12);
+    assert(levels.frames==5 && levels.mic1_near_rail==3);
+    assert(levels.mic1_rail_bursts==2 && levels.mic1_longest_burst==2);
+    assert(levels.mic2_rail_bursts==2 && levels.mic2_longest_burst==2);
+    lf_scan_audio_metrics_add(&levels,NULL,12);
+    lf_scan_audio_metrics_add(&levels,rail_burst,11);
+    assert(levels.frames==5);
     assert(lf_scan_token_valid("test"));
     assert(lf_scan_token_valid("abcd-0123_XYZ.token"));
     assert(!lf_scan_token_valid(""));
