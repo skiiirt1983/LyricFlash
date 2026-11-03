@@ -1310,7 +1310,10 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_set_style_pad_all(home_record_layer,0,0);
     lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(home_record_layer,on_home_scan,LV_EVENT_CLICKED,NULL);
+    /* Recording overlay is deliberately inert to touches: never stop
+       the capture or bubble a pager gesture from this overlay. */
+    lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_t *record_ring=lv_obj_create(home_record_layer);
     lv_obj_set_size(record_ring,408,408);
     lv_obj_align(record_ring,LV_ALIGN_CENTER,0,-4);
