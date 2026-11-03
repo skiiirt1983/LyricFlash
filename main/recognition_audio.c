@@ -44,10 +44,11 @@ bool lf_scan_token_valid(const char *token)
 {
     if(!token)return false;
     size_t n=0;
-    while(token[n]&&n<=128U){
-        const char c=token[n++];
+    for(;n<128U;n++){
+        const char c=token[n];
+        if(!c)break;
         if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
              (c>='0'&&c<='9')||c=='-'||c=='_'||c=='.'))return false;
     }
-    return n>=4U&&n<=127U;
+    return n>=4U&&n<128U;
 }

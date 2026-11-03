@@ -15,6 +15,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <stdatomic.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
@@ -28,7 +29,6 @@
 #define LF_RECOG_BOUNDARY "----LyricFlashScan2026"
 #define LF_RECOG_MIN_FRAMES (LF_SCAN_RATE*6U)
 #define LF_RECOG_RESPONSE_CAP 4096
-static const char *TAG="LFRecognition";
 static atomic_int active_state=ATOMIC_VAR_INIT(LF_RECOG_IDLE);
 static atomic_bool stop_flag;
 static atomic_uint attempts;
