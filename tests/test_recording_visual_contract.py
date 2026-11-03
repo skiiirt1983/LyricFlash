@@ -28,8 +28,8 @@ assert "lv_obj_set_style_line_width(home_record_wave,7,0);" in ui
 assert "lv_obj_set_style_border_width(record_ring,6,0);" in ui
 assert 'lv_label_set_text(home_record_loading,"LOADING...")' in ui
 assert "const bool opening=song->state==LF_RECOG_MATCH" in ui
-assert 'lv_label_set_text(lyric_mark,"LYRIC");' in ui and
-       'lv_label_set_text(flash_mark,"FLASH");' in ui
+assert ('lv_label_set_text(lyric_mark,"LYRIC");' in ui and
+        'lv_label_set_text(flash_mark,"FLASH");' in ui)
 
 assert "lv_line_set_points(home_record_wave,home_record_wave_points" in ui
 assert 'lv_color_hex(0xFFD02C)' in ui
