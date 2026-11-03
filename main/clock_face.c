@@ -24,6 +24,7 @@ static lv_obj_t *date_label;
 static lv_obj_t *time_label;
 static lv_obj_t *battery_label;
 static lv_obj_t *weather_label;
+static lv_obj_t *meridiem_label;
 static lv_obj_t *sundial_time_label;
 static lv_obj_t *sundial_shadow;
 static lv_point_precise_t sundial_shadow_points[2];
@@ -361,6 +362,7 @@ const char *lf_clock_style_name(uint8_t style)
 }
 void lf_clock_clear(void)
 {
+    lf_basic_clock_clear();
     clock_active = false;
     displayed_battery_color = UINT32_MAX;
     for (int i = 0; i < 3; i++) hands[i] = NULL;
@@ -369,6 +371,7 @@ void lf_clock_clear(void)
     time_label = NULL;
     battery_label = NULL;
     weather_label = NULL;
+    meridiem_label = NULL;
     weather_icon = NULL;
     weather_icon_code = -999;
     weather_icon = NULL;
@@ -392,6 +395,12 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
     else if (current_style == 4) build_sundial(parent);
     else {
         time_label = lf_basic_clock_render(parent, settings);
+        if(settings->basic_font_style>=1 && settings->basic_font_style<=3 &&
+           !settings->face_24h[5])
+            meridiem_label=face_text(parent,"",settings->basic_time_x+139,
+                                    settings->basic_time_y+22,
+                                    &lv_font_montserrat_16,
+                                    settings->basic_foreground);
         battery_label = face_text(parent, LV_SYMBOL_BATTERY_FULL " --%",
                                   settings->basic_battery_x, settings->basic_battery_y,
                                   basic_element_font(settings->basic_battery_size),
@@ -476,12 +485,19 @@ void lf_clock_update(void)
     if (!synced) {
         update_label_if_changed(info_label, "CONNECT WI-FI TO SYNC");
         update_label_if_changed(time_label, "--:--");
+        lf_basic_clock_update_time("--:--");
+        update_label_if_changed(meridiem_label, "");
         update_label_if_changed(sundial_time_label, "??:??");
         return;
     }
     struct tm local;
     localtime_r(&now, &local);
     update_label_if_changed(info_label, "");
+    if(meridiem_label){
+        char ampm[4]={0};
+        strftime(ampm,sizeof ampm,"%p",&local);
+        update_label_if_changed(meridiem_label,ampm);
+    }
     if (date_label) {
         char date[32];
         if (current_style == 0) strftime(date, sizeof(date), "%d", &local);
@@ -493,6 +509,7 @@ void lf_clock_update(void)
         char t[20];
         strftime(t, sizeof(t), clock_settings->face_24h[current_style] ? "%H:%M" : "%I:%M %p", &local);
         update_label_if_changed(time_label, t);
+        if(current_style==5)lf_basic_clock_update_time(t);
     }
     if (sundial_time_label) {
         char t[20];
