@@ -151,7 +151,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     s->show_progress = in_range(s->show_progress, 0, 1, 1);
     s->charging_color &= 0xFFFFFF;
     s->clock_face = in_range(s->clock_face, 0, 5, 0);
-    s->basic_font_style = in_range(s->basic_font_style, 0, 4, 0);
+    s->basic_font_style = in_range(s->basic_font_style, 0, 19, 0);
     s->basic_font_size = in_range(s->basic_font_size, 0, 100, 60);
     /* Per-element offsets remain bounded inside the AMOLED circle. */
     if(s->basic_time_x<-100||s->basic_time_x>100)s->basic_time_x=0;
