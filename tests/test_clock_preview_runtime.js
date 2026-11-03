@@ -40,15 +40,20 @@ const settings={
  accent:0x40c0e6,show_date:true,show_seconds:true,show_battery:true,time_24h:false}))
 };
 const posts=[];
-const fakeFetch=async(_url,opts)=>opts?.method==="POST"
+const sourceFonts=fs.readFileSync("main/basic_open_face.h","utf8");
+const bitmapMatch=sourceFonts.match(/static const char lf_open_face_b64\[\]="([A-Za-z0-9+/]+)"/);
+assert(bitmapMatch,"Device glyphs missing");
+const deviceFonts={digits:bitmapMatch[1],width:15,height:21,families:3};
+const fakeFetch=async(url,opts)=>opts?.method==="POST"
  ? (posts.push(JSON.parse(opts.body)),{ok:true,text:async()=>"{\"saved\":true}"})
- : {ok:true,text:async()=>JSON.stringify(settings)};
+ : {ok:true,text:async()=>JSON.stringify(String(url).includes('/api/clock-fonts')?deviceFonts:settings)};
 const runtime=new Function("document","fetch","setInterval",
  js+"\nreturn {load,save,render};")(
  {getElementById:el},fakeFetch,()=>0
 );
 (async()=>{
  await runtime.load();
+ await new Promise(resolve=>setImmediate(resolve)); /* allow font API parse */
  assert.match(el("status").textContent,/loaded/i);
  for(let i=0;i<6;i++){
   el("clock_face").value=String(i);
@@ -67,6 +72,12 @@ const runtime=new Function("document","fetch","setInterval",
  }
  assert.equal(new Set(fontPreviews).size,20,
    "All twenty original clock typography options must render distinct previews");
+ assert.match(fontPreviews[3],/data-face-style|<rect/,
+   "Actual Garamond-like raster glyphs missing from browser preview");
+ assert.notEqual(fontPreviews[3],fontPreviews[2],
+   "Traditional serif face must differ from Retro 8");
+ assert.notEqual(fontPreviews[5],fontPreviews[6],
+   "Heavy display must differ from rounded geometric digits");
  el("font_size").value="0";el("font_size").dispatch("input");
  const smallestTime=el("clock-preview").innerHTML;
  el("font_size").value="200";el("font_size").dispatch("input");
