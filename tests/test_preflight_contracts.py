@@ -420,7 +420,7 @@ require('primary_pager_snap_started_ms' in ui and
         'lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_OFF);' in watchdog and
         'primary_pager_commit(target);' in watchdog and
         'lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)return;' in watchdog and
-        'if(primary_pager)primary_pager_watchdog(current);' in ui,
+        'if(primary_pager && !timed_overlay)primary_pager_watchdog(current);' in ui,
         "Mid-page scroll watchdog / finger ownership regression")
 # User hardware regression: occasional black Clock on return, revealed by
 # a tap after screenshot/live visibility swapping in 0.8.23–0.8.24.
@@ -658,7 +658,7 @@ require('lf_sync_estimate_position_ms(' in ui and
         "0.8.42 estimated sync, hidden alignment controls and new scan reset")
 require('lv_obj_delete_async(old_screen);' in ui and
         'lv_timer_create(on_tick, 50, NULL)' in ui and
-        'timed_scroll_timer=lv_timer_create(timed_scroll_frame,25,NULL)' in ui and
+        'timed_scroll_timer=lv_timer_create(timed_scroll_frame,65,NULL)' in ui and
         'timed_rows[4]' in ui and
         'for(int slot=0;slot<4;slot++)' in ui,
         "0.8.39 retain proven QSPI, pager and redraw-safe 3-row UI")

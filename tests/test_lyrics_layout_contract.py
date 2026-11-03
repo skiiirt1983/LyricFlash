@@ -15,8 +15,8 @@ assert "prefs->timing_offset_ms=timed_clock.correction_ms;" in ui
 assert "prefs->timing_offset_ms=previous;" in ui
 assert "const esp_err_t err=lf_settings_save(prefs);" in ui
 for token in ("timed_line_label(0,352","timed_line_label(1,398",
-              "timed_line_label(2,370","timed_battery=lv_label_create(screen)",
-              "timed_controls=lv_obj_create(screen)",
+              "timed_line_label(2,370","timed_battery=lv_label_create(surface)",
+              "timed_controls=lv_obj_create(surface)",
               "timed_hint_until_ms=now_ms()+5000","SAVE DEFAULT",
               "LV_EVENT_LONG_PRESSED"):
     assert token in scene,token
@@ -28,7 +28,7 @@ for token in ("lv_label_set_long_mode(line,LV_LABEL_LONG_WRAP)",
     assert token in ui,token
 assert "lyric_logo_at_top(screen)" not in scene
 assert "lv_obj_set_style_translate_y(timed_scroll_group,target,0)" in ui
-assert "timed_viewport=lv_obj_create(screen);" in ui
+assert "timed_viewport=lv_obj_create(surface);" in ui
 assert "LV_OBJ_FLAG_OVERFLOW_VISIBLE" in ui
 assert "lv_obj_set_style_text_opa(row,opacity,0);" in ui
 assert "const int16_t target=(int16_t)(-(int)(progress*82U/1024U));" in ui
