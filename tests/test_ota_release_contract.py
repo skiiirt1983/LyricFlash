@@ -50,5 +50,9 @@ assert "github.ref == 'refs/heads/feature/0.8.39-ondevice-timed-lyrics'" in work
 assert "--prerelease --latest=false" in workflow
 assert "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin" in workflow
 assert "gh release create" in workflow
-assert "0.8.39-alpha" in (root / "main/version.h").read_text()
+# The established 0.8.39 release remains the last published firmware.
+# Source-only 0.8.40 Home development does not publish a new OTA image.
+active_version=(root / "main/version.h").read_text()
+assert ('"0.8.39-alpha"' in active_version or
+        '"0.8.40-alpha"' in active_version)
 print("PASS: 0.8.39 recovery OTA selector will receive a published alpha release")
