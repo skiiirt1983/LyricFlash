@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/private-0.8.48-home-recognition-fonts
+      - feature/private-0.8.48-recognition-recovery
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
