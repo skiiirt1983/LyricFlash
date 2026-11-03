@@ -1679,6 +1679,7 @@ static void timed_toggle_controls(lv_event_t *e)
 }
 static lv_obj_t *timed_line_label(int slot,int width,uint32_t color)
 {
+    (void)slot; /* all four slots now use identical font and wrapping width */
     lv_obj_t *line=lv_label_create(timed_scroll_group);
     lv_label_set_text(line," ");
     lv_obj_set_width(line,width);
