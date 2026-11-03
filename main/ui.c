@@ -736,6 +736,7 @@ static void make_base(void)
     home_song_artist=NULL;
     home_lyric_line=NULL;
     home_last_refresh_ms=0;
+    home_visual_busy=-1;
     battery_status=NULL;
     network_status=NULL;
     network_password=NULL;
@@ -778,6 +779,7 @@ static lv_obj_t *home_play_symbol;
 static lv_obj_t *home_play_hint;
 static uint64_t home_warning_until_ms;
 static const char *home_warning;
+static int home_visual_busy=-1;
 
 static void home_set_text(lv_obj_t *obj,const char *value)
 {
@@ -893,8 +895,11 @@ static void home_refresh(uint64_t current)
     home_set_text(home_play_symbol,busy?LV_SYMBOL_STOP:LV_SYMBOL_PLAY);
     /* A color change is cheap and conveys that the control now cancels
      * the session; never continuously animate the circular background. */
-    lv_obj_set_style_bg_color(home_scan_button,
-        lv_color_hex(busy?0xE06A69:0x2884EA),0);
+    if(home_visual_busy!=(int)busy){
+        home_visual_busy=(int)busy;
+        lv_obj_set_style_bg_color(home_scan_button,
+            lv_color_hex(busy?0xE06A69:0x2884EA),0);
+    }
     home_last_refresh_ms=current;
 }
 static void on_home_scan(lv_event_t *e)
@@ -932,14 +937,17 @@ static lv_obj_t *home_decor_ring(lv_obj_t *parent,int diameter,uint32_t color)
 }
 static void primary_render_home_content(lv_obj_t *parent)
 {
-    home_caption(parent,"L Y R I C F L A S H",35,310,
-                 &lv_font_montserrat_20,0xE6F2FF);
-    home_scan_status=home_caption(parent,"READY TO LISTEN",79,312,
+    lv_obj_t *wordmark=home_caption(parent,"LYRICFLASH",27,235,
+                  &lv_font_montserrat_20,0xE6F2FF);
+    lv_obj_set_style_text_letter_space(wordmark,3,0);
+    battery_status=home_caption(parent,"",56,196,
+                               &lv_font_montserrat_16,0x9ACFEA);
+    home_scan_status=home_caption(parent,"READY TO LISTEN",86,300,
                                   &lv_font_montserrat_18,0x79C6FF);
     /* Static concentric rings give the circular AMOLED a device-player
      * look without the continuous redraw cost of pulsing gradients. */
-    (void)home_decor_ring(parent,236,0x163C65);
-    (void)home_decor_ring(parent,212,0x23578D);
+    (void)home_decor_ring(parent,216,0x163C65);
+    (void)home_decor_ring(parent,202,0x23578D);
     home_scan_button=lv_button_create(parent);
     lv_obj_set_size(home_scan_button,184,184);
     lv_obj_align(home_scan_button,LV_ALIGN_CENTER,0,-15);
@@ -964,7 +972,7 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_set_style_text_color(home_play_symbol,lv_color_hex(0xFFFFFF),0);
     lv_obj_align(home_play_symbol,LV_ALIGN_CENTER,3,0);
     lv_obj_remove_flag(home_play_symbol,LV_OBJ_FLAG_CLICKABLE);
-    home_play_hint=home_caption(parent,"TAP TO IDENTIFY",323,265,
+    home_play_hint=home_caption(parent,"TAP TO IDENTIFY",329,265,
                                 &lv_font_montserrat_16,0x8AC8FC);
     home_song_title=home_caption(parent,"Find your music",352,326,
                                  &lv_font_montserrat_24,0xFFFFFF);
@@ -982,6 +990,7 @@ static void primary_render_home_content(lv_obj_t *parent)
     /* Battery and connection details remain in Device Studio and Settings.
      * Their previous Home labels and rectangular shortcut buttons are gone. */
     home_last_refresh_ms=0;
+    home_visual_busy=-1;
     home_refresh(now_ms());
 }
 static void render_home(void)
