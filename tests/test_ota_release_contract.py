@@ -56,7 +56,7 @@ active_version=(root / "main/version.h").read_text()
 # The experimental private builds have separate ESP32-S3 release gates.
 # A successful compile does not prove hardware operation or catalog publication.
 assert any(f'"{ver}"' in active_version for ver in
-           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha")), "Unexpected alpha firmware version"
+           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha")), "Unexpected alpha firmware version"
 if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51")):
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
     is_51='"0.8.51-alpha"' in active_version
