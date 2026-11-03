@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.43 three-line lyrics layout, battery status and NVS calibration gates."""
+"""0.8.44 three-line lyrics layout, battery status and NVS calibration gates."""
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 ui=(root/"main/ui.c").read_text()
@@ -15,7 +15,7 @@ assert "prefs->timing_offset_ms=timed_clock.correction_ms;" in ui
 assert "prefs->timing_offset_ms=previous;" in ui
 assert "const esp_err_t err=lf_settings_save(prefs);" in ui
 for token in ("timed_line_label(0,352","timed_line_label(1,398",
-              "timed_line_label(2,352","timed_battery=lv_label_create(screen)",
+              "timed_line_label(2,370","timed_battery=lv_label_create(screen)",
               "timed_controls=lv_obj_create(screen)",
               "timed_hint_until_ms=now_ms()+5000","SAVE DEFAULT",
               "LV_EVENT_LONG_PRESSED"):

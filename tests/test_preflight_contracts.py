@@ -499,7 +499,7 @@ require('"/api/hardware/mic-test"' in network and
         'X-LyricFlash-Manual-Test' in network and
         'X-LyricFlash-Manual-Test' in web and
         'audio_uploaded' in network and 'audio_saved' in network and
-        'max_uri_handlers=25' in network,
+        'max_uri_handlers=26' in network,
         "0.8.31 manual-only Web UI test and no raw audio exposure")
 
 # 0.8.32: frame the physical ES7210 correctly; never touch the display path.
@@ -658,7 +658,7 @@ require('lf_sync_estimate_position_ms(' in ui and
         "0.8.42 estimated sync, hidden alignment controls and new scan reset")
 require('lv_obj_delete_async(old_screen);' in ui and
         'lv_timer_create(on_tick, 50, NULL)' in ui and
-        'timed_last_update_ms>=200' in ui and
-        'timed_rows[3]' in ui and
-        'for(int slot=0;slot<3;slot++)' in ui,
+        'timed_last_update_ms>=65' in ui and
+        'timed_rows[4]' in ui and
+        'for(int slot=0;slot<4;slot++)' in ui,
         "0.8.39 retain proven QSPI, pager and redraw-safe 3-row UI")

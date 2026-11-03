@@ -14,7 +14,7 @@ page=(root/"main/web_weather_html.h").read_text()
 assert 'lf_weather_settings_html' in net
 for endpoint in ('"/weather"','"/api/weather"'):
     assert endpoint in net, endpoint
-assert "cfg.max_uri_handlers=25" in net
+assert "cfg.max_uri_handlers=26" in net
 assert 'handle_weather_post(httpd_req_t *req)' in net
 assert 'lf_weather_save_config(&cfg)' in net
 assert 'latitude_e5' in net and 'longitude_e5' in net
