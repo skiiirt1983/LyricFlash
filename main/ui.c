@@ -857,7 +857,7 @@ static void home_refresh(uint64_t current)
                timed_line_count>0){
                 const uint32_t pos=lf_lyric_clock_position(&timed_clock,current);
                 const int index=lf_lyric_clock_line_at(timed_stamps,timed_line_count,pos);
-                status=timed_clock.running?"MANUAL TIMELINE":"TIMELINE PAUSED";
+                status=timed_clock.running?(timed_estimated?"ESTIMATED SYNC":"MANUAL SYNC"):"TIMELINE PAUSED";
                 if(index>=0 && (size_t)index<timed_line_count){
                     lf_lyric_line_t line={0};
                     if(lf_recog_lyric_line((uint32_t)index,&line) && line.text[0])
