@@ -114,9 +114,11 @@ require('"/firmware"' in network and '"/api/install"' in network
 require("/api/install" in pages["firmware"]
         and "skiiirt1983.github.io/LyricFlash/beta/" in pages["firmware"] and "catalog.json" in pages["firmware"],
         "GitHub build selector not linked to install endpoint")
-require("selector.disabled=!entries.length;el('install').disabled=true;" in pages["firmware"]
-        and "selection===''?null" in pages["firmware"],
-        "OTA install button must require an explicit version selection")
+require("selector.disabled=!hasNew;" in pages["firmware"]
+        and "el('install').disabled=true;" in pages["firmware"]
+        and "const b=selectedNew();" in pages["firmware"]
+        and "if(!b)return info('Select New" in pages["firmware"],
+        "OTA install must require explicit newer-version selection")
 require("lf_weather_save_config" in network and "xTaskNotifyGive(weather_task)" in weather,
         "Weather refresh on save missing")
 require("weather_numeric_valid = false;" in weather and
@@ -192,9 +194,14 @@ require('class="toolbar-links"' in pages["settings"] and 'class="toolbar-links"'
         and 'class="firmware-link active"' in pages["firmware"],
         "Firmware navigation must use the same toolbar as Settings")
 require('id="refresh-builds"' in pages["firmware"] and 'loadBuilds(true)' in pages["firmware"]
-        and 'entries.sort((a,b)=>versionCompare' in pages["firmware"]
-        and 'OLDER THAN INSTALLED' in pages["firmware"] and ' — NEW' not in pages["firmware"],
-        "Firmware picker must support refresh and correctly order versions")
+        and 'function selectFirmwareRows(available,current)' in pages["firmware"]
+        and 'entries=selectFirmwareRows(entries,installed);' in pages["firmware"]
+        and "rows.push({kind:'Current'" in pages["firmware"]
+        and "kind:'Old'" in pages["firmware"]
+        and "kind:'New'" in pages["firmware"]
+        and 'option.disabled=!!b.disabled;' in pages["firmware"]
+        and 'versionCompare(b.version,installed)>0' in pages["firmware"],
+        "OTA picker must show only Old/Current/New with disabled downgrade/current and verified newer version")
 require("esp_sleep_enable_ext0_wakeup(GPIO_NUM_11,0)" in ui and
         "deep_sleep_retry_after_ms=current+60000ULL" in ui and
         "esp_deep_sleep_start();" in ui,
@@ -536,3 +543,11 @@ require('mic1_rms' in network and 'mic2_rms' in network and
         'mic1_near_rail' in network and 'mic2_near_rail' in network and
         'mic1_rms' in web and 'mic2_near_rail' in web,
         "0.8.33 browser telemetry exposes both microphones")
+
+# Alpha 0.8.34 firmware UI-only release: do not modify microcontroller audio
+# capture, known-good QSPI/LVGL rendering, NVS, network OTA endpoint, or routes.
+require('selectFirmwareRows' in pages['firmware'] and
+        'versionParts(installed)' in pages['firmware'] and
+        'Latest newer version:' in pages['firmware'] and
+        'Only a newer verified OTA image can be installed' in pages['firmware'],
+        "0.8.34 conservative three-version OTA selector")

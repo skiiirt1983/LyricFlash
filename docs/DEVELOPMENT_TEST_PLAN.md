@@ -14,7 +14,14 @@
 
 Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` and `0.8.29` failed screen/touch on physical hardware. `0.8.30` is the targeted display recovery candidate and is not hardware-proven until the user verifies it. Keep 0.8.26 as rollback. Do not merge or publish a stable v1.0 release until the device tests pass. Each functional milestone uses **one isolated change and one gated compile after preflight**, followed by a specific device acceptance test.
 
-## Current milestone: Alpha 0.8.33 — measure RMS and near-rail artifacts
+## Current milestone: Alpha 0.8.34 — 3-option OTA Web UI selector
+
+- **User priority:** replace long GitHub firmware release list with a maximum of three items relative to the version installed on-device: **Old** (closest strictly older published version, disabled), **Current** (device-reported installed version, disabled) and **New** (newest strictly newer validated published OTA, only actionable option). If one category is absent, omit it. Never offer a fourth placeholder entry.
+- **Failure safety:** if installed version cannot be read or parsed, display Current/Unknown only and disable OTA installation. Unknown/prerelease version formats fail closed. Deduplicate identical versions across alpha prereleases, beta catalog and manifest while preserving verified direct GitHub asset preference. Preserve HTTPS remote OTA, local OTA upload, update progress and errors.
+- **Tests:** host-side firmware-browser runtime tests cover Old/Current only, all 3 categories, newest installed, no older available, malformed installed version, duplicate releases, empty/unreachable catalog, refresh, explicit New click, no downgrade, and preferring a verified direct GitHub OTA image. Physical firmware-page acceptance is required after full build.
+- **No audio or display changes:** 0.8.33 dual MIC1/MIC2 24kHz four-slot TDM/24dB gain, per-mic RMS and near-rail count; QSPI/LVGL verified display; settings storage remain unchanged. Rare extreme PCM samples still need a future targeted test. Do not mix additional microphone or UI changes into this build.
+
+## Previous milestone: Alpha 0.8.33 — measure RMS and near-rail artifacts
 
 - **0.8.32 physical test: PASSED dual-microphone response.** Quiet room: 141,824 selected mic samples, combined mean 5, peak 1041; MIC1 mean/peak 6/982; MIC2 4/1041. Low music: 141,824 selected samples, combined mean 96, peak 32768; MIC1 118/32767; MIC2 75/32768. Loud voice: 142,336 samples, combined mean 129, peak 32767; MIC1 127/32767; MIC2 131/32767.
 - **Problem:** rare max-amplitude samples may mean clipping or TDM transport glitches. A single peak cannot establish the prevalence or audio fidelity.
@@ -48,7 +55,7 @@ Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` an
 | Order | Stage | Status | Hardware pass criterion |
 |---|---|---|---|
 | 1 | Manual ES7210 audio-ADC I2C ACK probe via Web UI | **PASS: ES7210 electrical probe on 0.8.29 hardware; remaining display/touch gate pending 0.8.30** | Device Web UI reports `adc_detected` from address 0x40; battery, Wi-Fi, touch and clock still operate |
-| 2 | On-demand ES7210 + I2S PCM amplitude test | **0.8.32 two-mic sound response passed; 0.8.33 RMS/rail diagnostics pending physical test** | User explicitly presses Start; live audio levels differ in quiet/noisy conditions; Stop reliably releases all capture resources; no audio uploaded |
+| 2 | On-demand ES7210 + I2S PCM amplitude test | **0.8.33 signal response and RMS diagnostics physically tested; extreme-sample source under investigation** | User explicitly presses Start; live audio levels differ in quiet/noisy conditions; Stop reliably releases all capture resources; no audio uploaded |
 | 3 | On-device lyrics view using a short original/local timed test fixture | Not started | Readable lines display in order and follow timestamps on the physical 466×466 screen without blocking touch/clock |
 | 4 | Manual song-identification capture and recognition client | Not started | Start captures bounded sample, communicates with configured service over TLS and displays track or clear no-match/quota/error state |
 | 5 | Fetch, parse and cache synced lyrics | Not started | Matched track loads legally available lyric text, timestamps and source/error state; limit external requests |
