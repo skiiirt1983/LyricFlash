@@ -13,11 +13,11 @@ assert 'nvs_set_i32(h, "offset_ms", s->timing_offset_ms)' in settings
 assert "lf_song_cache_load_profile(" in ui
 assert "lf_song_cache_store_profile(" in ui
 assert "timed_song_custom" in ui
-assert '"SAVE CUSTOM"' in ui and '"LOAD DEFAULT"' in ui
+assert '"SAVE CURRENT"' in ui and '"DEFAULT"' in ui
 for token in ("timed_line_label(0,LF_TIMED_TEXT_WIDTH","timed_line_label(1,LF_TIMED_TEXT_WIDTH",
               "timed_line_label(2,LF_TIMED_TEXT_WIDTH","timed_battery=lv_label_create(surface)",
               "timed_controls=lv_obj_create(surface)",
-              "timed_hint_until_ms=now_ms()+5000","SAVE CUSTOM",
+              "timed_hint_until_ms=now_ms()+5000","SAVE CURRENT",
               "LV_EVENT_LONG_PRESSED"):
     assert token in scene,token
 for token in ("lv_label_set_long_mode(line,LV_LABEL_LONG_WRAP)",
