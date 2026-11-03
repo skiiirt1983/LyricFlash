@@ -10,7 +10,8 @@ assert 'LF_VERSION "0.8.54-alpha"' in version
 assert "LF_SYNC_DISPLAY_DELAY_MS 1000U" in sync_h
 assert "lf_sync_visible_position_ms" in ui and "lf_sync_visible_position_ms" in sync
 assert "lf_lyric_clock_position(&timed_clock,current)" in ui
-assert 'lf_lyric_clock_adjust(&timed_clock,prefs->timing_offset_ms);' in ui
+assert "lf_song_cache_load_profile(" in ui
+assert "lf_lyric_clock_adjust(&timed_clock,offset);" in ui
 assert "lf_song_cache_store_profile(" in ui
 a=ui.split("static void timed_set_row(int slot,const char *value)\n{",1)[1].split("static uint16_t timed_line_height_at",1)[0]
 for bad in ("strlen(value)","n>115","n>90","n>62","n>39","lv_obj_set_style_text_font"):
