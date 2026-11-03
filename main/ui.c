@@ -52,6 +52,7 @@ static lv_obj_t *timed_pause_button;
 static lv_obj_t *timed_controls;
 static lv_obj_t *timed_hint;
 static lv_obj_t *timed_battery;
+static uint64_t timed_power_update_ms;
 static lv_obj_t *timed_save_note;
 static uint64_t timed_hint_until_ms;
 static uint64_t timed_controls_until_ms;
@@ -752,6 +753,7 @@ static void make_base(void)
     timed_controls=NULL;
     timed_hint=NULL;
     timed_battery=NULL;
+    timed_power_update_ms=0;
     timed_save_note=NULL;
     timed_hint_until_ms=0;
     timed_controls_until_ms=0;
@@ -1147,7 +1149,8 @@ static void timed_render(uint64_t current,bool force)
         timed_controls_until_ms=0;
     }
     /* Cached AXP2101 status only: no I2C on the UI task. */
-    if(timed_battery){
+    if(timed_battery && (force || current-timed_power_update_ms>=1000)){
+        timed_power_update_ms=current;
         lf_power_state_t battery={0};
         char battery_text[40];
         uint32_t battery_color=0xAFC6DC;
@@ -1419,6 +1422,7 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     timed_active_index=-999;timed_last_second=UINT32_MAX;
     for(size_t i=0;i<4;i++)timed_row_y[i]=INT16_MIN;
     timed_last_update_ms=0;
+    timed_power_update_ms=0;
     timed_render(now_ms(),true);
 }
 
