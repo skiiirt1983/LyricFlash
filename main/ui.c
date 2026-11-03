@@ -949,8 +949,17 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
         else lv_obj_remove_flag(home_record_loading,LV_OBJ_FLAG_HIDDEN);
     }
     if(home_record_caption){
+        char uploading[40]={0};
         const char *word=capturing?"LISTENING":
             song->state==LF_RECOG_UPLOAD?"IDENTIFYING":"FINDING LYRICS";
+        if(song->state==LF_RECOG_UPLOAD && song->upload_bytes_total){
+            if(song->upload_bytes_sent < song->upload_bytes_total){
+                const unsigned pct=(unsigned)(((uint64_t)song->upload_bytes_sent*100U)/
+                                               song->upload_bytes_total);
+                snprintf(uploading,sizeof uploading,"UPLOADING %u%%",pct);
+                word=uploading;
+            }else word="AWAITING SONG ID";
+        }
         if(strcmp(lv_label_get_text(home_record_caption),word)!=0)
             lv_label_set_text(home_record_caption,word);
     }
