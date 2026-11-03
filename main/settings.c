@@ -45,7 +45,9 @@ void lf_settings_defaults(lf_settings_t *s)
     static const uint32_t b[6]={0x070F14,0x030815,0x080C13,0xA7C7A0,0xC8BB94,0x030810};
     static const uint32_t f[6]={0xD8ECE9,0xEDF7FF,0xE5EDF8,0x162C1F,0x332719,0xF0F8FF};
     static const uint32_t a[6]={0x40C0E6,0x7DCEFF,0x6DBFFF,0x364641,0xA88E55,0x268BFF};
+    static const int32_t battery_y[6]={-137,-146,-143,-167,-172,-160};
     for (unsigned i=0;i<6;i++){
+        s->face_battery_x[i]=0;s->face_battery_y[i]=battery_y[i];
         s->face_background[i]=b[i];s->face_foreground[i]=f[i];
         s->face_accent[i]=a[i];s->face_show_date[i]=1;
         s->face_show_seconds[i]=1;s->face_show_battery[i]=1;s->face_24h[i]=0;
@@ -127,6 +129,8 @@ esp_err_t lf_settings_load(lf_settings_t *s)
         snprintf(key,sizeof key,"f%usc",i);(void)nvs_get_u8(h,key,&s->face_show_seconds[i]);
         snprintf(key,sizeof key,"f%ubt",i);(void)nvs_get_u8(h,key,&s->face_show_battery[i]);
         snprintf(key,sizeof key,"f%u24",i);(void)nvs_get_u8(h,key,&s->face_24h[i]);
+        snprintf(key,sizeof key,"f%ubx",i);(void)nvs_get_i32(h,key,&s->face_battery_x[i]);
+        snprintf(key,sizeof key,"f%uby",i);(void)nvs_get_i32(h,key,&s->face_battery_y[i]);
     }
     nvs_close(h);
 
@@ -177,6 +181,9 @@ esp_err_t lf_settings_load(lf_settings_t *s)
         s->face_show_seconds[i]=in_range(s->face_show_seconds[i],0,1,1);
         s->face_show_battery[i]=in_range(s->face_show_battery[i],0,1,1);
         s->face_24h[i]=in_range(s->face_24h[i],0,1,0);
+        if(s->face_battery_x[i]<-150||s->face_battery_x[i]>150)s->face_battery_x[i]=0;
+        if(s->face_battery_y[i]<-180||s->face_battery_y[i]>180)
+            s->face_battery_y[i]=i==0?-137:i==1?-146:i==2?-143:i==3?-167:i==4?-172:-160;
     }
     /* For older settings, Basic face still uses its original saved palette. */
     if(schema<7){s->face_background[5]=s->basic_background;
@@ -235,6 +242,8 @@ esp_err_t lf_settings_save(const lf_settings_t *s)
         snprintf(key,sizeof key,"f%usc",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_seconds[i]));
         snprintf(key,sizeof key,"f%ubt",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_battery[i]));
         snprintf(key,sizeof key,"f%u24",i);TRY_NVS(nvs_set_u8(h,key,s->face_24h[i]));
+        snprintf(key,sizeof key,"f%ubx",i);TRY_NVS(nvs_set_i32(h,key,s->face_battery_x[i]));
+        snprintf(key,sizeof key,"f%uby",i);TRY_NVS(nvs_set_i32(h,key,s->face_battery_y[i]));
     }
     TRY_NVS(nvs_set_u32(h, "schema", LF_CONFIG_SCHEMA));
     err = nvs_commit(h);
