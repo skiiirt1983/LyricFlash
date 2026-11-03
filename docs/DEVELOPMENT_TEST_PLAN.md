@@ -14,6 +14,16 @@
 
 Baseline: `0.8.26-alpha` is hardware-proven for display/touch, while `0.8.28` and `0.8.29` failed screen/touch on physical hardware. `0.8.30` is the targeted display recovery candidate and is not hardware-proven until the user verifies it. Keep 0.8.26 as rollback. Do not merge or publish a stable v1.0 release until the device tests pass. Each functional milestone uses **one isolated change and one gated compile after preflight**, followed by a specific device acceptance test.
 
+## Current milestone: Alpha 0.8.38 — manual song ID followed by synchronized lyrics lookup
+
+- **0.8.37 Stop test confirmed:** Device displayed `Recognition stopped` after user canceled during a manual scan. This confirms the UI/state path; a packet trace was not captured. The firmware checks cancellation before beginning the AudD request.
+- **New:** After a successful manual AudD match, send only artist/title (not audio or token) via verified HTTPS to LRCLIB's `/api/get`. Identify the client with User-Agent. On a genuine 404, optionally normalize known version suffixes such as `(Single Version)`, wait 300ms and retry just once. Do not automatically retry a 429 rate limit. Bound response to 64 KB in PSRAM and parse LRC timestamps with existing parser into a max-160-line PSRAM cache. Return up to four timestamped lines to the Web UI.
+- **No false live-sync claim:** A recognized song and LRC timestamps are not yet a reliable playback clock. Web UI preview is a timestamped sample only; on-device live synchronization awaits real playback position or another verified timing source.
+- **Privacy & stability:** Microphone remains off unless explicitly activated, and audio is sent only to AudD following manual confirmation. LRCLIB sees artist/title only. Preserve 24kHz four-slot 24dB physical MIC1/MIC2, dual-input audibility, smooth 24-row QSPI display, touch, saved Wi-Fi/API key, and three-option OTA including Current reinstall. Prevent new scans until prior worker finishes.
+- **Requested OTA UI fix:** Optional Pages catalog HTTP 404 is hidden from the standard update status. Display `No newer firmware available` if at least one source responds; `Unable to check for updates` when all sources fail. Leave genuine transfer diagnostics available while installing OTA.
+- **Acceptance:** Install 0.8.38, confirm regular UI/touch and firmware selector, then manually identify one known song. Verify artist/title, lyrics state and total timestamped line count or understandable unsynced/not-found message. No repeat of completed microphone amplitude tests. Stop remains available.
+- **Preflight:** Native URL encoding and version suffix tests, LRCLIB source/TLS/metadata guard, no 429 auto-retry, browser firmware catalog mock, all existing audio and display static tests. Full compile only after pass.
+
 ## Physical hardware result: Alpha 0.8.37 — first successful real AudD song recognition
 
 - **PASS (user-confirmed):** Manual 10-second song identification through the Waveshare 1.75-inch ESP32-S3's two-microphone capture → stereo WAV → HTTPS AudD request → parsed title/artist → device Web UI succeeded.

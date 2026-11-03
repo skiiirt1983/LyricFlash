@@ -604,3 +604,26 @@ require('id="song-token"' in pages["settings"] and
         'api/recognize/start' in pages["settings"] and
         'api/recognize/token' in pages["settings"],
         "0.8.37 one-click manual recognition Web UI")
+
+# Alpha 0.8.38 must look up synchronized lyrics only after explicit AudD scan.
+lrclib=read("main/lrclib_client.c")
+recognize=read("main/recognition.c")
+require('https://lrclib.net/api/get?track_name=' in lrclib and
+        '.crt_bundle_attach=esp_crt_bundle_attach' in lrclib and
+        '.user_agent=client_user_agent' in lrclib and
+        'if(status==429)' in lrclib and
+        'lf_parse_lrc(synced->valuestring,out)' in lrclib and
+        'MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT' in lrclib and
+        'lf_lrclib_search_title' in lrclib,
+        "0.8.38 secure bounded LRCLIB lookup with no rate-limit retries")
+require('lookup_lyrics_after_match()' in recognize and
+        'if(ok && !atomic_load(&stop_flag))lookup_lyrics_after_match();' in recognize and
+        'lf_recog_lyric_line' in recognize and
+        'atomic_compare_exchange_strong(&worker_active' in recognize and
+        'status(LF_RECOG_LYRICS' in recognize,
+        "0.8.38 manual lyrics and worker lifecycle")
+require('Synchronized lyrics found:' in pages['settings'] and
+        'Preview (not live synchronized)' in pages['settings'] and
+        'checkedAtLeastOneSource' in pages['firmware'] and
+        'Some sources unavailable:' not in pages['firmware'],
+        "0.8.38 lyrics preview and nontechnical update status")

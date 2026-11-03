@@ -39,6 +39,8 @@ async function fetchStub(url,opts={}){
  assert.equal(opts.cache,"no-store","Catalog/info requests must bypass cache");
  if(url==="/api/info")return makeResponse({version:installed,ota_result:"idle"});
  if(phase===7)throw Error("Network unavailable");
+ if(phase===8&&(url.includes("catalog.json")||url.includes("manifest.json")))
+   return {ok:false,status:404,json:async()=>({})};
  if(url.includes("api.github.com/repos/skiiirt1983/LyricFlash/releases")){
    if(phase!==2&&phase!==3&&phase!==4&&phase!==5)return makeResponse([]);
    return makeResponse([{tag_name:"alpha-build-abc123456789",draft:false,prerelease:true,
@@ -113,7 +115,7 @@ function checkAtMostThree(){
  el("builds").value="2";el("builds").onchange();
  assert.equal(el("install").disabled,false,"Only selected New enables installation");
  assert.equal(requests.filter(x=>x.includes("catalog.json")).length,2);
- assert.match(el("catalog-status").textContent,/checked again/i);
+ assert.match(el("catalog-status").textContent,/Update check complete/i);
 
  phase=2;
  await el("refresh-builds").onclick();
@@ -167,7 +169,16 @@ function checkAtMostThree(){
  await el("refresh-builds").onclick();checkAtMostThree();
  assert.equal(rows().length,1,"Unreachable catalog cannot enable updates");
  assert.equal(el("install").disabled,true);
- assert.match(el("catalog-status").textContent,/unavailable/i);
+ assert.match(el("catalog-status").textContent,/Unable to check for updates/i);
+ assert.doesNotMatch(el("catalog-status").textContent,/HTTP|404|Catalog:|Some sources unavailable/i);
+
+ phase=8;installed="0.8.8-alpha";
+ await el("refresh-builds").onclick();checkAtMostThree();
+ assert.equal(rows().length,1,"Current remains visible when optional Pages endpoints 404");
+ assert.match(el("catalog-status").textContent,/No newer firmware available/i);
+ assert.doesNotMatch(el("catalog-status").textContent,/HTTP|404|Catalog:|Some sources unavailable/i,
+  "Optional GitHub Pages catalog HTTP 404 must never be displayed to end user");
+
 
  assert(script.includes("d.ota_detail")&&script.includes("d.ota_http_status")&&
         script.includes("'no_internet','time_unsynced'"),
@@ -183,5 +194,5 @@ function checkAtMostThree(){
         "Device must not reject reinstallation of the same version");
  assert(script.includes("reinstall is NOT a factory reset"),
         "Confirmation must not misrepresent reinstall as factory reset");
- console.log("PASS: 3-version OTA picker: Old disabled, verified Current reinstallable, New selectable, matching OTA descriptor, safe missing/current-only/empty catalogs, explicit confirmation, refresh and diagnostics");
+ console.log("PASS: friendly optional-catalog 404 status, 3-version OTA picker: Old disabled, verified Current reinstallable, New selectable, matching OTA descriptor, safe missing/current-only/empty catalogs, explicit confirmation, refresh and diagnostics");
 })().catch(e=>{console.error(e);process.exitCode=1});

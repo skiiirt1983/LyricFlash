@@ -1,14 +1,12 @@
 #pragma once
-/* Alpha 0.8.37: First explicit manual AudD song-recognition prototype.
- * Add an opt-in token in NVS (never returned or logged), Web UI Start/Stop,
- * bounded 10-second 24kHz 16-bit MIC1/MIC2 stereo WAV capture in PSRAM,
- * HTTPS-only AudD multipart identification, and status/title/artist response.
- * Recording is never stored in flash or exposed on a local HTTP endpoint;
- * capture and external transmission require each manual scan confirmation.
- * This is deliberately browser-first. Device-screen song ID and synced lyrics
- * will be integrated only after the recognition pipeline is field-verified.
- * MIC 24kHz/4slot/24dB, LVGL/QSPI, touch, battery, OTA/NVS retained.
- * Upload uses AudD quota; no automatic background recording or retry.
- * Physical external service validation required. */
-#define LF_VERSION "0.8.37-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.37"
+/* Alpha 0.8.38: After a manually requested AudD song identification, query
+ * LRCLIB over verified HTTPS using title/artist only (no mic audio or key).
+ * Timestamp-parse synced lyrics into PSRAM and show count + four-line preview
+ * in Device Settings. This is not yet real-time playback synchronization.
+ * One version-neutral title fallback; no automatic 429 retries.
+ * Optional Pages catalog 404 is hidden from end users; total update-check
+ * failure remains a clear nontechnical message. Preserve 24kHz MIC/24dB,
+ * QSPI/LVGL clock/touch, NVS, and Current-version OTA reinstall.
+ * Hardware lyrics lookup and Stop validation required. */
+#define LF_VERSION "0.8.38-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.38"

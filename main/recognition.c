@@ -3,6 +3,8 @@
 #include "network.h"
 #include "mic_pcm.h"
 #include "service_errors.h"
+#include "lrclib_client.h"
+#include "lyrics.h"
 #include "bsp/esp32_s3_touch_amoled_1_75.h"
 #include "esp_codec_dev.h"
 #include "esp_http_client.h"
@@ -32,6 +34,8 @@
 static atomic_int active_state=ATOMIC_VAR_INIT(LF_RECOG_IDLE);
 static atomic_bool stop_flag;
 static atomic_uint attempts;
+static atomic_bool worker_active;
+static lf_lyrics_t *lyrics_cache; /* PSRAM-backed LRC, guarded by result_mux */
 static portMUX_TYPE result_mux=portMUX_INITIALIZER_UNLOCKED;
 static lf_recog_snapshot_t result;
 
@@ -57,8 +61,7 @@ static void set_count(uint32_t frames)
 }
 bool lf_recog_busy(void)
 {
-    const int s=atomic_load(&active_state);
-    return s==LF_RECOG_CAPTURE||s==LF_RECOG_UPLOAD;
+    return atomic_load(&worker_active);
 }
 const char *lf_recog_state_name(lf_recog_state_t state)
 {
@@ -66,6 +69,7 @@ const char *lf_recog_state_name(lf_recog_state_t state)
     case LF_RECOG_IDLE:return "idle";
     case LF_RECOG_CAPTURE:return "capturing";
     case LF_RECOG_UPLOAD:return "identifying";
+    case LF_RECOG_LYRICS:return "finding_lyrics";
     case LF_RECOG_MATCH:return "matched";
     case LF_RECOG_NO_MATCH:return "no_match";
     case LF_RECOG_ERROR:return "error";
@@ -79,6 +83,65 @@ void lf_recog_snapshot(lf_recog_snapshot_t *out)
     portENTER_CRITICAL(&result_mux);
     *out=result;
     portEXIT_CRITICAL(&result_mux);
+}
+/* Copy one line while the shared PSRAM cache is locked; no lifetime escape. */
+bool lf_recog_lyric_line(uint32_t index, lf_lyric_line_t *out)
+{
+    if(!out)return false;
+    bool found=false;
+    portENTER_CRITICAL(&result_mux);
+    if(lyrics_cache && index<lyrics_cache->count) {
+        *out=lyrics_cache->line[index];
+        found=true;
+    }
+    portEXIT_CRITICAL(&result_mux);
+    return found;
+}
+static bool cancelled(void){return atomic_load(&stop_flag);}
+static void lookup_lyrics_after_match(void)
+{
+    lf_recog_snapshot_t song={0};
+    lf_recog_snapshot(&song);
+    if(song.state!=LF_RECOG_MATCH || cancelled())return;
+    status(LF_RECOG_LYRICS,"Identified. Checking for synchronized lyrics...");
+    /* A 160-line parsed LRC can be ~31KB; keep it out of internal DMA RAM. */
+    lf_lyrics_t *parsed=(lf_lyrics_t *)heap_caps_calloc(
+        1,sizeof(lf_lyrics_t),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(!parsed){
+        portENTER_CRITICAL(&result_mux);
+        snprintf(result.lyrics_state,sizeof result.lyrics_state,"unavailable");
+        portEXIT_CRITICAL(&result_mux);
+        if(!cancelled())status(LF_RECOG_MATCH,"Song identified; lyrics memory unavailable");
+        return;
+    }
+    const lf_lrclib_state_t found=lf_lrclib_lookup(
+        song.title,song.artist,parsed,cancelled);
+    if(cancelled()){heap_caps_free(parsed);return;}
+    portENTER_CRITICAL(&result_mux);
+    snprintf(result.lyrics_state,sizeof result.lyrics_state,"%s",
+             lf_lrclib_state_name(found));
+    if(found==LF_LRCLIB_SYNCED && parsed->count>0) {
+        lyrics_cache=parsed;  /* cache was cleared at the start of this scan */
+        result.lyric_lines=(uint32_t)parsed->count;
+        parsed=NULL;
+    }
+    portEXIT_CRITICAL(&result_mux);
+    if(parsed)heap_caps_free(parsed);
+    if(cancelled())return;
+    switch(found){
+        case LF_LRCLIB_SYNCED:
+            status(LF_RECOG_MATCH,"Song identified; synchronized lyrics found");break;
+        case LF_LRCLIB_PLAIN:
+            status(LF_RECOG_MATCH,"Song identified; only unsynchronized lyrics available");break;
+        case LF_LRCLIB_INSTRUMENTAL:
+            status(LF_RECOG_MATCH,"Instrumental track; no lyrics");break;
+        case LF_LRCLIB_NOT_FOUND:
+            status(LF_RECOG_MATCH,"Song identified; lyrics not found");break;
+        case LF_LRCLIB_RATE_LIMIT:
+            status(LF_RECOG_MATCH,"Song identified; lyrics service busy. Try later");break;
+        default:
+            status(LF_RECOG_MATCH,"Song identified; lyrics temporarily unavailable");break;
+    }
 }
 static bool load_token(char out[128])
 {
@@ -267,11 +330,17 @@ static void worker(void *arg)
     ok=send_audio(wav,LF_SCAN_WAV_HEADER+(size_t)frames*4U,token);
     if(!ok&&!atomic_load(&stop_flag))status(LF_RECOG_ERROR,
                         "Music recognition connection failed. Try again.");
+    /* The private WAV is no longer needed once AudD has responded. Wipe it
+     * BEFORE any additional network call so the lyrics lookup is lightweight. */
+    if(wav){clear_secret(wav,LF_SCAN_WAV_BYTES);heap_caps_free(wav);wav=NULL;}
+    clear_secret(token,sizeof token);
+    if(ok && !atomic_load(&stop_flag))lookup_lyrics_after_match();
 done:
     if(opened)(void)esp_codec_dev_close(codec);
     if(wav){clear_secret(wav,LF_SCAN_WAV_BYTES);heap_caps_free(wav);}
     clear_secret(token,sizeof token);
     if(atomic_load(&stop_flag))status(LF_RECOG_STOPPED,"Recognition stopped");
+    atomic_store(&worker_active,false);
     vTaskDelete(NULL);
 }
 bool lf_recog_start(void)
@@ -280,20 +349,23 @@ bool lf_recog_start(void)
     lf_pcm_snapshot(&pcm);
     if(pcm.state==LF_PCM_RUNNING)return false;
     if(!lf_recog_has_token()||!lf_network_is_connected())return false;
-    int state=atomic_load(&active_state);
-    while(state!=LF_RECOG_CAPTURE&&state!=LF_RECOG_UPLOAD){
-        if(atomic_compare_exchange_weak(&active_state,&state,LF_RECOG_CAPTURE))break;
-    }
-    if(state==LF_RECOG_CAPTURE||state==LF_RECOG_UPLOAD)return false;
+    bool expected=false;
+    if(!atomic_compare_exchange_strong(&worker_active,&expected,true))return false;
+    atomic_store(&active_state,LF_RECOG_CAPTURE);
     atomic_store(&stop_flag,false);
+    lf_lyrics_t *previous=NULL;
     portENTER_CRITICAL(&result_mux);
+    previous=lyrics_cache;lyrics_cache=NULL;
     memset(&result,0,sizeof result);
+    snprintf(result.lyrics_state,sizeof result.lyrics_state,"not_checked");
     result.state=LF_RECOG_CAPTURE;
     result.attempts=atomic_fetch_add(&attempts,1)+1;
     snprintf(result.message,sizeof result.message,"Recording up to 10 seconds");
     portEXIT_CRITICAL(&result_mux);
+    if(previous)heap_caps_free(previous);
     if(xTaskCreate(worker,"lf_song_recog",14336,NULL,tskIDLE_PRIORITY+1,NULL)!=pdPASS){
         status(LF_RECOG_ERROR,"Cannot start recognition task");
+        atomic_store(&worker_active,false);
         return false;
     }
     return true;

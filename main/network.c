@@ -526,7 +526,25 @@ static esp_err_t handle_song_status(httpd_req_t *req)
     cJSON_AddNumberToObject(reply,"captured_frames",s.captured_frames);
     cJSON_AddNumberToObject(reply,"capture_seconds",s.capture_seconds);
     cJSON_AddNumberToObject(reply,"attempts",s.attempts);
-    /* Only a status code, never credentials, audio, file or raw response. */
+    cJSON_AddStringToObject(reply,"lyrics_state",
+         s.lyrics_state[0]?s.lyrics_state:"not_checked");
+    cJSON_AddNumberToObject(reply,"lyric_lines",s.lyric_lines);
+    /* A bounded, non-executable preview proves that timestamps were parsed.
+     * Full synchronized LRC remains PSRAM-backed for the future device UI. */
+    cJSON *preview=cJSON_AddArrayToObject(reply,"lyric_preview");
+    if(preview && s.lyric_lines && s.state==LF_RECOG_MATCH) {
+        const uint32_t n=s.lyric_lines<4U?s.lyric_lines:4U;
+        for(uint32_t i=0;i<n;i++) {
+            lf_lyric_line_t line={0};
+            if(!lf_recog_lyric_line(i,&line))break;
+            cJSON *item=cJSON_CreateObject();
+            if(!item)break;
+            cJSON_AddNumberToObject(item,"start_ms",line.start_ms);
+            cJSON_AddStringToObject(item,"text",line.text);
+            cJSON_AddItemToArray(preview,item);
+        }
+    }
+    /* Never return credentials, raw audio, files or the AudD response. */
     return send_json(req,reply);
 }
 static esp_err_t handle_song_token(httpd_req_t *req)

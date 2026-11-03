@@ -7,6 +7,8 @@ idf_component_register(
         "mic_pcm.c"
         "recognition.c"
         "recognition_audio.c"
+        "lrclib_match.c"
+        "lrclib_client.c"
         "ui.c"
         "char_wheel.c"
         "clock_face.c"
