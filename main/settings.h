@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-#define LF_CONFIG_SCHEMA 10U
+#define LF_CONFIG_SCHEMA 11U
 #define LF_CONFIG_NS "lyric_ui"
 
 typedef struct {
@@ -21,6 +21,12 @@ typedef struct {
     /* Basic face is an additional independent, persistently styled option. */
     uint8_t basic_font_style;    // 0 .. 4 typographic presets
     uint8_t basic_font_size;     // 0 .. 100 slider
+    /* Custom Basic dial element geometry, relative to its 466px center. */
+    int32_t basic_time_x, basic_time_y;
+    int32_t basic_battery_x, basic_battery_y;
+    int32_t basic_date_x, basic_date_y;
+    int32_t basic_weather_x, basic_weather_y;
+    uint8_t basic_battery_size, basic_date_size, basic_weather_size; // 0..100
     uint8_t basic_ring_mode;     // 0 solid, 1 two-tone, 2 three-tone
     uint8_t basic_show_date;     // 0 .. 1
     uint8_t basic_weather;       // 0 .. 1
