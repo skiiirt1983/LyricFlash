@@ -85,7 +85,7 @@ with tempfile.TemporaryDirectory(prefix="lf_pcm_test_") as tmp:
         {assert(c);assert(f->sample_rate==24000&&f->channel==4&&f->channel_mask==0xF&&f->bits_per_sample==16);
          opens++;return open_ok?ESP_CODEC_DEV_OK:-1;}
         int esp_codec_dev_set_in_channel_gain(esp_codec_dev_handle_t c,unsigned mask,float gain)
-        {assert(c&&mask==0x03&&gain==24.0f);gains++;return gain_ok?ESP_CODEC_DEV_OK:-1;}
+        {assert(c&&mask==0x03&&gain==27.0f);gains++;return gain_ok?ESP_CODEC_DEV_OK:-1;}
         int esp_codec_dev_read(esp_codec_dev_handle_t c,void *ptr,int bytes)
         {assert(c&&bytes==1024);reads++;if(!read_ok)return -1;
          int16_t *buf=ptr;for(int i=0;i<512;i+=4){buf[i]=silent_mode?0:1000;buf[i+1]=32767;buf[i+2]=silent_mode?0:-2000;buf[i+3]=-32768;}

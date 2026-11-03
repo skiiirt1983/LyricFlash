@@ -527,9 +527,9 @@ require('static esp_codec_dev_handle_t microphone_codec_dev = NULL;' in bsp and
         'microphone_codec_dev = esp_codec_dev_new(&codec_es7210_dev_cfg)' in bsp,
         "0.8.32 microphone codec handle must be shared across repeated tests")
 
-# 0.8.33 diagnostic-only change. No gain, I2S configuration, audio upload,
-# LCD pipeline, web handler count or OTA behavior may be changed.
-require('LF_PCM_FRONT_GAIN_DB (24.0f)' in pcm and
+# Preserve the proven I2S, upload and LCD paths; the enclosed-case alpha
+# intentionally raises the ES7210 gain from 24 to 27 dB for both audio paths.
+require('LF_PCM_FRONT_GAIN_DB (27.0f)' in pcm and
         'LF_PCM_RATE (24000)' in pcm and 'LF_PCM_TDM_SLOTS (4)' in pcm and
         'LF_PCM_FRONT_PHYSICAL_MASK (0x03U)' in pcm and
         'LF_PCM_LIMIT_US (3000000LL)' in pcm,
