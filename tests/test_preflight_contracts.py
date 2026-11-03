@@ -549,7 +549,7 @@ require('mic1_rms' in network and 'mic2_rms' in network and
 # capture, known-good QSPI/LVGL rendering, NVS, network OTA endpoint, or routes.
 require('selectFirmwareRows' in pages['firmware'] and
         'versionParts(installed)' in pages['firmware'] and
-        'Latest newer version:' in pages['firmware'] and
+        'New firmware available:' in pages['firmware'] and
         'currentImage=known?unique.find(b=>b.version===current):null' in pages['firmware'] and
         "kind:'Current'" in pages['firmware'] and 'disabled:!currentImage' in pages['firmware'] and
         "b.kind==='Current'&&b.version===installed" in pages['firmware'] and
