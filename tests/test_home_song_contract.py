@@ -18,7 +18,7 @@ end=ui.index("\nstatic void render_home(void)",start)
 home=ui[start:end]
 refresh=ui[ui.index("static void home_refresh(uint64_t current)\n{"):start]
 on_click=ui[ui.index("static void on_home_scan(lv_event_t *e)\n{"):ui.index("static lv_obj_t *home_decor_ring")]
-check('LF_VERSION "0.8.48-alpha"' in version,"0.8.47 alpha version not set")
+check('LF_VERSION "0.8.49-alpha"' in version,"0.8.47 alpha version not set")
 check('home_scan_button=lv_button_create(parent);' in home,"Missing single circular play surface")
 check(home.count('lv_button_create(')==1,"Home must expose only one visual control")
 check('button(parent,' not in home,"Old rectangular navigation buttons still on Home")
@@ -48,9 +48,10 @@ check('lv_obj_add_event_cb(details[i],on_preview,LV_EVENT_CLICKED,NULL);' not in
 check('LV_OBJ_FLAG_GESTURE_BUBBLE' in home and 'on_lvgl_gesture' in home,
       "Play touch must preserve swipe navigation")
 check('battery_status=home_caption' in home,"Home lost charging/battery indicator")
-check('lv_obj_align(mark,LV_ALIGN_TOP_MID,-111,68);' in home and
+check('lv_obj_set_flex_flow(brand_row,LV_FLEX_FLOW_ROW);' in home and
+      'lv_obj_set_style_pad_column(brand_row,4,0);' in home and
       'lv_obj_set_size(mark,58,58);' in home,
-      "Logo must be large and positioned within circular screen bounds")
+      "Brand icon and labels must use one compact flex row")
 check('home_visual_busy!=(int)busy' in refresh,"Redundant QSPI full-circle redraws")
 check('primary_render_home_content(primary_pager_pages[1]);' in ui and
       'primary_render_settings_content(primary_pager_pages[2]);' in ui and
