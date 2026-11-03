@@ -60,12 +60,13 @@ const runtime=new Function("document","fetch","setInterval",
  }
  el("clock_face").value="5";el("clock_face").dispatch("change");
  const fontPreviews=[];
- for(let i=0;i<5;i++){
+ for(let i=0;i<20;i++){
   el("font_style").value=String(i);
   el("font_style").dispatch("input");
   fontPreviews.push(el("clock-preview").innerHTML);
  }
- assert.equal(new Set(fontPreviews).size,5,"Font presets must produce five visibly different time previews");
+ assert.equal(new Set(fontPreviews).size,20,
+   "All twenty original clock typography options must render distinct previews");
  const oldBatteryPreview=el("clock-preview").innerHTML;
  el("basic_battery_x").value="37";el("basic_battery_x").dispatch("input");
  const newBatteryPreview=el("clock-preview").innerHTML;
@@ -81,6 +82,19 @@ const runtime=new Function("document","fetch","setInterval",
  el("ring_mode").value="2";el("ring_mode").dispatch("change");
  assert.equal(el("ring-c-row").hidden,false,"Three-tone ring needs colour 3");
  el("clock_face").value="2";el("clock_face").dispatch("change");
+ /* Simulate a pointer dragging Classic Analog's battery 39 px right.
+    Save must contain new face-local battery coordinates, not Basic's. */
+ const watch=el("clock-preview");
+ watch.getBoundingClientRect=()=>({width:466,height:466});
+ watch.setPointerCapture=()=>{};
+ const hit={getAttribute:id=>id==="data-part"?"battery":null,closest:()=>hit};
+ const evt=(x,y)=>({target:hit,pointerId:41,clientX:x,clientY:y,preventDefault(){}});
+ const first=watch.innerHTML;
+ watch.listeners.pointerdown(evt(110,120));
+ watch.listeners.pointermove(evt(149,120));
+ watch.listeners.pointerup(evt(149,120));
+ assert.notEqual(watch.innerHTML,first,
+   "Dragging the Classic battery did not update its preview");
  el("face_background").value="#112233";el("face_background").dispatch("input");
  assert(el("clock-preview").innerHTML.includes('fill="#112233"'),
    "Palette editing does not change SVG preview");
@@ -96,9 +110,13 @@ const runtime=new Function("document","fetch","setInterval",
  assert.equal(posts[0].basic_battery_x,37,"Battery X not saved as number");
  assert.equal(posts[0].basic_date_size,93,"Date size not saved as number");
  assert.equal(posts[0].face_profiles[2].background,0x112233);
+ assert.equal(posts[0].face_profiles[2].battery_x,39,
+    "Non-Basic battery drag was not included in saved face profile");
+ assert.equal(posts[0].face_profiles[2].battery_y,-109,
+    "Moving battery horizontally corrupted the vertical position");
  assert.equal(posts[0].face_profiles[3].background,0xa7c7a0);
  el("reset-face").onclick();
  assert.equal(el("face_background").value,"#080c13",
    "Reset selected face failed");
- console.log("PASS: six live SVG clock previews, independent colours, save and reset");
+ console.log("PASS: 20 distinct numeral previews, draggable battery on Classic, saved per-face positions, six clock faces");
 })().catch(err=>{console.error(err);process.exitCode=1});
