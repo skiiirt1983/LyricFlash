@@ -154,7 +154,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     s->charging_color &= 0xFFFFFF;
     s->clock_face = in_range(s->clock_face, 0, 5, 0);
     s->basic_font_style = in_range(s->basic_font_style, 0, 19, 0);
-    s->basic_font_size = in_range(s->basic_font_size, 0, 100, 60);
+    s->basic_font_size = in_range(s->basic_font_size, 0, 200, 60);
     /* Per-element offsets remain bounded inside the AMOLED circle. */
     if(s->basic_time_x<-100||s->basic_time_x>100)s->basic_time_x=0;
     if(s->basic_time_y<-150||s->basic_time_y>150)s->basic_time_y=-6;
@@ -164,9 +164,9 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     if(s->basic_date_y<-180||s->basic_date_y>180)s->basic_date_y=70;
     if(s->basic_weather_x<-150||s->basic_weather_x>150)s->basic_weather_x=0;
     if(s->basic_weather_y<-180||s->basic_weather_y>180)s->basic_weather_y=135;
-    s->basic_battery_size=in_range(s->basic_battery_size,0,100,85);
-    s->basic_date_size=in_range(s->basic_date_size,0,100,70);
-    s->basic_weather_size=in_range(s->basic_weather_size,0,100,70);
+    s->basic_battery_size=in_range(s->basic_battery_size,0,200,85);
+    s->basic_date_size=in_range(s->basic_date_size,0,200,70);
+    s->basic_weather_size=in_range(s->basic_weather_size,0,200,70);
     s->basic_ring_mode = in_range(s->basic_ring_mode, 0, 2, 1);
     s->basic_show_date = in_range(s->basic_show_date, 0, 1, 1);
     s->basic_weather = in_range(s->basic_weather, 0, 1, 0);
