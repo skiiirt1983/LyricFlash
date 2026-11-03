@@ -11,6 +11,9 @@ typedef enum {
 typedef struct {
     lf_recog_state_t state;
     uint32_t captured_frames;
+    uint64_t capture_start_ms; /* monotonic scan start, not wall clock */
+    uint32_t audd_timecode_ms; /* AudD-reported position; estimated alignment */
+    bool audd_timecode_valid;
     uint32_t capture_seconds;
     uint32_t attempts;
     int http_status; /* AudD HTTP status, including legitimate no-match replies */
