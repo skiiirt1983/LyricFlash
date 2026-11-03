@@ -499,7 +499,7 @@ require('"/api/hardware/mic-test"' in network and
         'X-LyricFlash-Manual-Test' in network and
         'X-LyricFlash-Manual-Test' in web and
         'audio_uploaded' in network and 'audio_saved' in network and
-        'max_uri_handlers=26' in network,
+        'max_uri_handlers=27' in network,
         "0.8.31 manual-only Web UI test and no raw audio exposure")
 
 # 0.8.32: frame the physical ES7210 correctly; never touch the display path.
