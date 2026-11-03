@@ -72,7 +72,7 @@ header=(p/'main/version.h').read_text()
 match=re.search(r'^#define LF_VERSION "([^"]+)"',header,re.MULTILINE)
 assert match, "Missing LF_VERSION"
 version=match.group(1)
-assert version in ("0.8.41-alpha","0.8.42-alpha","0.8.43-alpha","0.8.44-alpha","0.8.45-alpha"), version
+assert version in ("0.8.41-alpha","0.8.42-alpha","0.8.43-alpha","0.8.44-alpha","0.8.45-alpha","0.8.46-alpha"), version
 assert f'set(PROJECT_VER "{version}")' in (p/'CMakeLists.txt').read_text(), (
     "ESP-IDF app descriptor PROJECT_VER must agree with LF_VERSION"
 )
