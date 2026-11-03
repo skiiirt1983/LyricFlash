@@ -1,8 +1,11 @@
 
-name: LyricFlash Alpha 0.3 - ESP32-S3 Build
+name: LyricFlash Private Alpha 0.8.42 - ESP32-S3 Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/private-0.8.42-auto-lyrics
 
 permissions:
   contents: read
@@ -31,13 +34,13 @@ jobs:
       - name: Package firmware
         run: |
           mkdir -p dist
-          cp build/lyricflash.bin dist/LyricFlash_Alpha_0.3_ESP32S3_OTA.bin
+          cp build/lyricflash.bin dist/LyricFlash_Private_Alpha_0.8.42_ESP32S3_OTA.bin
           python3 tools/check_build.py build/lyricflash.bin --json > dist/build-checks.json
           sha256sum dist/*.bin > dist/SHA256SUMS.txt
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LyricFlash-Alpha-0.3-ESP32S3-UNTESTED
+          name: LyricFlash-Private-Alpha-0.8.42-ESP32S3-UNTESTED
           path: dist/
           if-no-files-found: error
