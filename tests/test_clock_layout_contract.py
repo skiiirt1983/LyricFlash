@@ -22,7 +22,7 @@ assert "lv_obj_set_style_transform_scale(time,zoom,0)" in basic
 assert "lv_obj_set_style_transform_scale(item,zoom,0)" in clock
 assert "basic_digit_height(" in basic and "basic_digit_cell(" in basic
 assert "0..200" in config
-assert 'max="200"' in html
+assert r'max=\"200\"' in html
 
 assert "LF_CONFIG_SCHEMA 13U" in config
 for source in (settings,config,clock,api,ui):
