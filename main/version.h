@@ -1,7 +1,7 @@
 #pragma once
-/* Private alpha 0.8.48: bounded recognition upload, UI heartbeat diagnostics and lyrics navigation recovery
+/* Private alpha 0.8.49: fixed grouped Home brand and independent recognition/display freeze fail-safes
  * lyric display, independent Weather Studio, four-bar Web UI battery,
  * customizable Basic clock layout and original numeral styles.
- * Source preflight passed; ESP32-S3 release and on-device recovery test pending. */
-#define LF_VERSION "0.8.48-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.48"
+ * Source and ESP32-S3 checks pending; on-device recovery test required. */
+#define LF_VERSION "0.8.49-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.49"
