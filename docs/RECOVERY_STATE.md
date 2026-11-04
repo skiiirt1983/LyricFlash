@@ -35,3 +35,13 @@ No automated build or source-test result substitutes for these device-specific c
 ## Verified recovery preflight
 - Source/native preflight passed on `c32dfde9852e26e837f7600918e6f954f8ec0fcc` (GitHub Actions run 41857987720); the ESP32-S3 compile job was intentionally skipped at that stage.
 - The subsequent explicit compile gate will publish only if preflight, ESP-IDF compilation, image inspection, complete recovery package and OTA download verification all succeed.
+
+## Built and published recovery release
+- **0.8.66-alpha is now built and published**, from exactly `149714c7e215bdefa3379dcbebb08f20ff5e53d2`.
+- GitHub Actions [run 41858180364](https://github.com/skiiirt1983/LyricFlash/actions/runs/41858180364): source/native preflight, all 16 fonts, ESP32-S3 compilation, full USB merge, OTA validation, checksum/package verification, direct OTA download and GitHub prerelease publication **all succeeded**.
+- Immutable prerelease: [alpha-build-149714c7e215](https://github.com/skiiirt1983/LyricFlash/releases/tag/alpha-build-149714c7e215). Contains application-only OTA `lyricflash-ota.bin` and `LyricFlash-0.8.66-alpha-USB-and-OTA.zip`.
+- Verified direct OTA also exists at `alpha-ota/releases/alpha-build-149714c7e215/lyricflash-ota.bin`. Older SHA-specific assets remain untouched.
+- **Physical device verification is outstanding**. A green GitHub build does not prove on-device appearance, wake behaviour or song identification.
+- Recommended path from an existing LyricFlash installation: open **Firmware → Refresh from GitHub**, select **New 0.8.66-alpha**, install via the device's Wi-Fi OTA. It should preserve NVS settings; verify on hardware.
+- The separately hosted GitHub Pages beta USB installer still advertises historic Alpha 0.8.41 because `main` has not been promoted. Do **not** use that old beta page to obtain 0.8.66. Use the GitHub prerelease package for recovery, not as an OTA upload.
+- A future **documentation-only** commit to this file does not change the compiled source or release SHA.
