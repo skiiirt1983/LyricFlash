@@ -384,6 +384,7 @@ require('nav_transition_edge' not in ui and
 # 0.8.22: actual page carousel rather than 0.8.21 post-release strip wipe.
 # Three live sibling panels scroll WITH the user's finger and snap on release.
 # Still only one lv_screen_load() root, and Weather/submenus stay deferred.
+watchdog=ui.split('static void primary_pager_watchdog(uint64_t current)\n{',1)[1].split('static void primary_pager_scroll_event',1)[0]
 pager_impl=ui.split('static void primary_pager_scroll_event(lv_event_t *e)\n{',1)[1].split('static lv_obj_t *primary_page_create',1)[0]
 pager_scene=ui.split('static void primary_pager_create(int target_index)\n{',1)[1].split('static void primary_pager_enter(',1)[0]
 require('static lv_obj_t *primary_pager;' in ui and
@@ -417,7 +418,6 @@ require('if(primary_pager && (page==0 || page==2 || page==6)' in ui and
 # The 0.8.22 physical test showed mid-page freezes and a laggy clock. Guard
 # against missed LVGL scroll-end events with a one-shot page alignment fallback
 # that NEVER takes ownership while the user is still pressing the display.
-watchdog=ui.split('static void primary_pager_watchdog(uint64_t current)\n{',1)[1].split('static void primary_pager_scroll_event',1)[0]
 require('primary_pager_snap_started_ms' in ui and
         'current-primary_pager_snap_started_ms>700' in watchdog and
         'lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_OFF);' in watchdog and
