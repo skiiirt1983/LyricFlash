@@ -61,7 +61,7 @@ void lf_settings_defaults(lf_settings_t *s)
         s->face_background[i]=b[i];s->face_foreground[i]=f[i];
         s->face_accent[i]=a[i];
         s->face_time_color[i]=f[i];s->face_battery_color[i]=a[i];
-        s->face_weather_color[i]=f[i];s->face_date_color[i]=f[i];
+        s->face_weather_color[i]=f[i];s->face_date_color[i]=i==0?0x132B36:f[i];
         s->face_show_date[i]=1;
         s->face_show_seconds[i]=1;s->face_show_battery[i]=1;s->face_24h[i]=0;
     }
@@ -180,7 +180,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
             s->face_time_color[i]=s->face_foreground[i];
             s->face_battery_color[i]=s->face_accent[i];
             s->face_weather_color[i]=s->face_foreground[i];
-            s->face_date_color[i]=s->face_foreground[i];
+            s->face_date_color[i]=i==0?0x132B36:s->face_foreground[i];
         }
     }
     if(schema<15){
