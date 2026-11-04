@@ -259,8 +259,9 @@ on_wake=ui.split('static void on_wake(lv_event_t *e)\n{',1)[1].split('static voi
 sleep=ui.split('static void sleep_display(void)\n{',1)[1].split('static void on_tick',1)[0]
 require('build_home();' not in on_wake and 'make_base();' not in sleep and
         'sleep_overlay=lv_obj_create(screen);' in sleep and
-        'lv_async_call(wake_finish_async,NULL);' in on_wake and
-        'if(cover)lv_obj_delete(cover);' in ui and
+        'lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_TRANSP,0);' in on_wake and
+        'lv_async_call(wake_finish_async,NULL);' not in on_wake and
+        'lv_obj_delete(cover);' in ui and
         'if(asleep) {' in ui,
         "Wake must preserve the current page, not destroy the touch target")
 
@@ -281,7 +282,7 @@ require('invalidate_full_screen();' in ui and
         'lv_obj_invalidate(screen);' in ui and
         'lv_async_call(wake_finish_async,NULL);' in ui and
         'static void wake_finish_async(void *arg)' in ui and
-        'if(cover)lv_obj_delete(cover);' in ui and
+        'lv_obj_delete(cover);' in ui and
         'if(!target)return;' in ui and
         'target();' in ui and
         'lv_display_add_event_cb(disp,display_flush_start_event,LV_EVENT_FLUSH_START,NULL);' in ui and

@@ -175,6 +175,8 @@ static atomic_uint ui_clock_present_max_ms;
 /* LVGL thread only. Measures from entering Clock until first completed refresh. */
 static int64_t clock_present_start_us;
 static lv_obj_t *sleep_overlay;
+/* Keep the waking touch target alive until the physical finger releases. */
+static bool wake_cleanup_queued;
 /* Display diagnostic counters must be readable from the HTTP task without
    taking the LVGL mutex (which could block during a display failure). */
 static atomic_uint ui_touch_count;
@@ -3135,9 +3137,13 @@ static void build_weather_location_now(void)
 static void wake_finish_async(void *arg)
 {
     (void)arg;
+    wake_cleanup_queued=false;
+    /* LVGL async callbacks can run while the same wake finger is pressed.
+       Never delete the active touch target; on_tick retries after release. */
+    if(ui_pointer_is_down() || !sleep_overlay)return;
     lv_obj_t *cover=sleep_overlay;
     sleep_overlay=NULL;
-    if(cover)lv_obj_delete(cover);
+    lv_obj_delete(cover);
     const uint32_t started=atomic_load(&wake_started_ms);
     if(started)atomic_store(&wake_overlay_clear_ms,
                             (uint32_t)now_ms()-started);
@@ -3162,7 +3168,13 @@ static void on_wake(lv_event_t *e)
     asleep=false;
     activity();
     apply_brightness();
-    lv_async_call(wake_finish_async,NULL);
+    /* Reveal the unchanged page immediately, but the transparent clickable
+       cover still captures this entire waking gesture. Removing it on the
+       press (even via lv_async_call) would invalidate the active input target. */
+    if(sleep_overlay){
+        lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_TRANSP,0);
+        invalidate_full_screen();
+    }
     touch_held=false;
     gesture_origin_valid=false;
     gesture_indev=NULL;
@@ -3201,6 +3213,7 @@ static void sleep_display(void)
     gesture_origin_valid=false;
     gesture_indev=NULL;
     swipe_candidate_page=-1;
+    wake_cleanup_queued=false;
     sleep_overlay=lv_obj_create(screen);
     lv_obj_set_size(sleep_overlay,466,466);
     lv_obj_center(sleep_overlay);
@@ -3294,6 +3307,16 @@ static void on_tick(lv_timer_t *timer)
                 return;
             }
             wake=lv_indev_get_next(wake);
+        }
+        return;
+    }
+    /* After waking, consume the entire first press/release on the retained
+       transparent cover. Only remove it from the next LVGL async turn once
+       the physical pointer is up; do not let the wake tap navigate. */
+    if(sleep_overlay){
+        if(!ui_pointer_is_down() && !wake_cleanup_queued){
+            wake_cleanup_queued=true;
+            lv_async_call(wake_finish_async,NULL);
         }
         return;
     }
