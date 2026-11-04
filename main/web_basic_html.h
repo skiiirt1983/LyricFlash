@@ -536,7 +536,7 @@ static const char lf_basic_settings_html[] =
 " $('selected-date-format').value=String(profile.date_format||0);\n"
 " $('selected-weather-visible').checked=!!profile.show_weather;\n"
 " $('selected-font-style').value=String(Math.max(24,nval('font_style')));\n"
-" $('selected-color-label').textContent=part==='time'?'Time font colour':part==='battery'?'Battery icon and % colour':part==='weather'?'Weather colour':'Date colour';\n $('selected-color').value=hex(profile[part+'_color']??(part==='battery'?profile.accent:profile.foreground));\n"
+" $('selected-color-label').textContent=part==='time'?'Time font colour':part==='battery'?'Battery icon and % colour':part==='weather'?'Weather colour':'Date colour';\n $('selected-color').value=hex((profile[part+'_color'] ?? (part==='battery'?profile.accent:profile.foreground)));\n"
 " if(edit.querySelector){const nudges=edit.querySelector('.nudge-controls');if(nudges)nudges.hidden=(part==='time'&&!basic);} $('reset-element').hidden=(part==='time'&&!basic);\n"
 " const sizeRow=edit.querySelector?edit.querySelector('.part-size-line'):null;\n"
 " if(sizeRow)sizeRow.hidden=!(basic||part==='date'||part==='battery'||part==='weather');\n"
