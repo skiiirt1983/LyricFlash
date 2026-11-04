@@ -6,6 +6,7 @@
 #define LF_VERSION "0.8.57-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.57"
 
-/* Release gate: lyrics progress without status label; enclosed mic gain 27 dB. */
+/* 0.8.57 release gate: aligned player rings, fixed brand coordinates, 500ms post-release mic start. */
 /* Preflight validated; run the single ESP32-S3 release build for the
    measured audio waveform and bounded AudD response recovery. */
+/* Recognition HTTP stage instrumentation: on-device proof remains pending. */
