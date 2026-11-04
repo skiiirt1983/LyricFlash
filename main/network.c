@@ -516,16 +516,20 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
 
 static esp_err_t handle_basic_post(httpd_req_t *req)
 {
-    if (req->content_len < 2 || req->content_len > 3500) {
+    if (req->content_len < 2 || req->content_len > 6500) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid request length");
         return ESP_FAIL;
     }
-    char json[3501];
+    /* Multiple independent per-face colours exceed the old 3500-byte POST.
+       Allocate only the bounded request to avoid overflowing HTTP task stack. */
+    char *json=malloc((size_t)req->content_len+1U);
+    if(!json)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory for clock settings");
     int received = 0, retries = 0;
     while (received < req->content_len) {
         int n = httpd_req_recv(req, json + received, req->content_len - received);
         if (n == HTTPD_SOCK_ERR_TIMEOUT && ++retries < 4) continue;
         if (n <= 0) {
+            free(json);
             lf_diag_error("settings", "Web request receive timeout/disconnect");
             httpd_resp_send_err(req, HTTPD_408_REQ_TIMEOUT, "Settings request timed out");
             return ESP_FAIL;
@@ -535,6 +539,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     }
     json[received] = 0;
     cJSON *root = cJSON_Parse(json);
+    free(json);
     lf_settings_t current;
     lf_weather_config_t weather;
     lf_weather_get_config(&weather);
