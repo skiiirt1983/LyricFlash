@@ -1,12 +1,12 @@
 #pragma once
-/* Private alpha 0.8.57: persistent per-track lyrics/timing cache, original icon and navigation recovery
+/* Private alpha 0.8.58: persistent per-track lyrics/timing cache, original icon and navigation recovery
  * lyric display, independent Weather Studio, four-bar Web UI battery,
  * customizable Basic clock layout and original numeral styles.
  * Host regression tests and strict C parser checks passed; hardware test pending. */
-#define LF_VERSION "0.8.57-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.57"
+#define LF_VERSION "0.8.58-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.58"
 
-/* 0.8.57 release gate: aligned player rings, fixed brand coordinates, 500ms post-release mic start. */
+/* 0.8.58 release gate: aligned player rings, fixed brand coordinates, 500ms post-release mic start. */
 /* Preflight validated; run the single ESP32-S3 release build for the
    measured audio waveform and bounded AudD response recovery. */
 /* Recognition HTTP stage instrumentation: on-device proof remains pending. */

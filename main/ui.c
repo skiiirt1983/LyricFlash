@@ -78,6 +78,9 @@ static uint16_t timed_rate_percent=100;
 static uint32_t timed_rate_clock_anchor_ms;
 static uint32_t timed_rate_song_anchor_ms;
 static bool timed_song_custom;
+/* Write only changed per-track timing when a user exits its controls. */
+static bool timed_profile_dirty;
+static void timed_profile_save_if_dirty(void);
 static lv_obj_t *timed_sync_slider;
 static lv_obj_t *timed_rate_slider;
 static lv_obj_t *timed_sync_value;
@@ -118,6 +121,7 @@ static lv_obj_t *home_record_centerline;
 static lv_obj_t *home_record_loading;
 static lv_obj_t *home_record_caption;
 static uint32_t home_record_attempt;
+static uint64_t home_record_cancel_tap_ms; /* two short taps, never single */
 static uint32_t home_record_last_frames;
 static uint64_t home_record_last_tick;
 #define LF_RECORD_WAVE_MAX_POINTS 170U
@@ -775,6 +779,7 @@ static void show_clock_settings_popup(void)
 static void lyrics_overlay_close(void)
 {
     if(!timed_overlay)return;
+    timed_profile_save_if_dirty(); /* preserve song settings before scene cleanup */
     auto_open_pending=false;
     auto_open_transition=false;
     if(home_record_layer)lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
@@ -1116,6 +1121,7 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
     if(!capturing||!home_record_wave)return; /* Finished waveform stays visible. */
     if(song->attempts!=home_record_attempt){
         home_record_attempt=song->attempts;
+        home_record_cancel_tap_ms=0;
         home_record_last_frames=UINT32_MAX;
         home_record_wave_count=1;
         home_record_wave_points[0]=(lv_point_precise_t){0,130};
@@ -1135,7 +1141,12 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
     /* Show real MIC1/MIC2 signed peak excursions, not an endlessly repeated
        eight-point sinusoid. No raw PCM leaves the recognition worker. */
     const int signed_peak=(int)song->capture_visual_signed;
-    int y=130-(signed_peak*115)/100;
+    const int magnitude=signed_peak<0?-signed_peak:signed_peak;
+    /* Display-only gain: silence stays flat; ordinary music spans more of
+       the center of the circle without changing recorded/transmitted PCM. */
+    int swing=magnitude>0?24+(magnitude*7)/2:0;
+    if(swing>108)swing=108;
+    int y=130+(signed_peak<0?swing:-swing);
     if(y<12)y=12;
     if(y>248)y=248;
     home_record_wave_points[home_record_wave_count++]=(lv_point_precise_t){
@@ -1213,6 +1224,30 @@ static void on_home_scan(lv_event_t *e)
     activity();
     home_refresh(now_ms());
 }
+/* Double short tap cancels recording/identification. No LVGL tree delete
+ * here: the unchanged worker handles the cooperative stop and cleanup. */
+static void on_record_cancel_double_tap(lv_event_t *e)
+{
+    (void)e;
+    if(!home_record_layer ||
+       lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN))return;
+    lf_recog_snapshot_t scan={0};
+    lf_recog_snapshot(&scan);
+    if(!lf_recog_busy() ||
+       (scan.state!=LF_RECOG_CAPTURE && scan.state!=LF_RECOG_UPLOAD &&
+        scan.state!=LF_RECOG_LYRICS))return;
+    const uint64_t current=now_ms();
+    if(home_record_cancel_tap_ms && current>=home_record_cancel_tap_ms &&
+       current-home_record_cancel_tap_ms<=400U){
+        home_record_cancel_tap_ms=0;
+        home_stalled_attempt=scan.attempts;
+        home_warning="Cancelling scan...";
+        home_warning_until_ms=current+4500U;
+        lf_recog_stop(); /* atomic flag only; microphone/HTTP owner cleans up */
+        activity();
+        home_refresh(current);
+    }else home_record_cancel_tap_ms=current;
+}
 static lv_obj_t *home_decor_ring(lv_obj_t *parent,int diameter,uint32_t color)
 {
     lv_obj_t *ring=lv_obj_create(parent);
@@ -1234,7 +1269,7 @@ static void primary_render_home_content(lv_obj_t *parent)
        irrespective of glyph widths or round-screen clipping. The previous
        three independent absolute offsets separated logo and text. */
     lv_obj_t *brand_row=lv_obj_create(parent);
-    lv_obj_set_size(brand_row,232,88);
+    lv_obj_set_size(brand_row,218,88);
     lv_obj_align(brand_row,LV_ALIGN_TOP_MID,0,47);
     lv_obj_set_style_bg_opa(brand_row,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(brand_row,0,0);
@@ -1258,7 +1293,7 @@ static void primary_render_home_content(lv_obj_t *parent)
        Compact vertical flex keeps both words within the round display. */
     lv_obj_t *wordmark_col=lv_obj_create(brand_row);
     lv_obj_set_size(wordmark_col,144,84);
-    lv_obj_set_pos(wordmark_col,88,2); /* Actual icon and text nearly touch */
+    lv_obj_set_pos(wordmark_col,73,2); /* visibly tighter to the unchanged original mark */
     lv_obj_set_style_bg_opa(wordmark_col,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(wordmark_col,0,0);
     lv_obj_set_style_pad_all(wordmark_col,0,0);
@@ -1354,6 +1389,8 @@ static void primary_render_home_content(lv_obj_t *parent)
        the capture or bubble a pager gesture from this overlay. */
     lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(home_record_layer,on_record_cancel_double_tap,
+                        LV_EVENT_SHORT_CLICKED,NULL);
     lv_obj_t *record_ring=lv_obj_create(home_record_layer);
     lv_obj_set_size(record_ring,408,408);
     lv_obj_align(record_ring,LV_ALIGN_CENTER,0,-4);
@@ -1371,14 +1408,14 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_align(home_record_centerline,LV_ALIGN_CENTER,0,-4);
     lv_obj_set_style_bg_opa(home_record_centerline,LV_OPA_TRANSP,0);
     lv_obj_set_style_line_color(home_record_centerline,lv_color_hex(0x258854),0);
-    lv_obj_set_style_line_width(home_record_centerline,3,0);
+    lv_obj_set_style_line_width(home_record_centerline,2,0);
     lv_obj_remove_flag(home_record_centerline,LV_OBJ_FLAG_CLICKABLE);
     home_record_wave=lv_line_create(home_record_layer);
     lv_obj_set_size(home_record_wave,360,260);
     lv_obj_align(home_record_wave,LV_ALIGN_CENTER,0,-4);
     lv_obj_set_style_bg_opa(home_record_wave,LV_OPA_TRANSP,0);
     lv_obj_set_style_line_color(home_record_wave,lv_color_hex(0xFFD02C),0);
-    lv_obj_set_style_line_width(home_record_wave,7,0);
+    lv_obj_set_style_line_width(home_record_wave,3,0);
     lv_obj_set_style_line_rounded(home_record_wave,true,0);
     lv_obj_remove_flag(home_record_wave,LV_OBJ_FLAG_CLICKABLE);
     home_record_wave_points[0]=(lv_point_precise_t){0,130};
@@ -1680,6 +1717,7 @@ static void timed_update_slider_labels(void)
 static void timed_change_rate(uint16_t new_rate)
 {
     if(!timed_clock.started || new_rate<75 || new_rate>125)return;
+    if(timed_rate_percent==new_rate)return;
     const uint64_t current=now_ms();
     const uint32_t base=lf_lyric_clock_position(&timed_clock,current);
     const uint32_t song=lf_sync_rate_position(base,timed_rate_clock_anchor_ms,
@@ -1687,6 +1725,7 @@ static void timed_change_rate(uint16_t new_rate)
     timed_rate_clock_anchor_ms=base;
     timed_rate_song_anchor_ms=song;
     timed_rate_percent=new_rate;
+    timed_profile_dirty=true;
     timed_active_index=-999;timed_last_second=UINT32_MAX;
     timed_update_slider_labels();
     activity();timed_render(current,true);
@@ -1701,6 +1740,7 @@ static void timed_change_offset(int32_t new_offset)
     const uint32_t song=lf_sync_rate_position(base,timed_rate_clock_anchor_ms,
                                    timed_rate_song_anchor_ms,timed_rate_percent);
     lf_lyric_clock_adjust(&timed_clock,delta);
+    timed_profile_dirty=true;
     const int64_t updated=(int64_t)song+delta;
     timed_rate_clock_anchor_ms=lf_lyric_clock_position(&timed_clock,current);
     timed_rate_song_anchor_ms=(uint32_t)(updated<0?0:
@@ -1715,13 +1755,11 @@ static void timed_on_sync_slide(lv_event_t *e)
     int32_t v=lv_slider_get_value(lv_event_get_target(e));
     v=((v>=0?v+125:v-125)/250)*250; /* quarter-second steps */
     timed_change_offset(v);
-    if(timed_save_note)lv_label_set_text(timed_save_note,"Save Custom to retain this track");
 }
 static void timed_on_rate_slide(lv_event_t *e)
 {
     if(!timed_lyrics_mode || !timed_clock.started)return;
     timed_change_rate((uint16_t)lv_slider_get_value(lv_event_get_target(e)));
-    if(timed_save_note)lv_label_set_text(timed_save_note,"Save Custom to retain this track");
 }
 static void timed_adjust(lv_event_t *e)
 {
@@ -1730,20 +1768,51 @@ static void timed_adjust(lv_event_t *e)
     timed_change_offset(timed_clock.correction_ms+(int32_t)(direction*500));
     if(timed_sync_slider)lv_slider_set_value(timed_sync_slider,timed_clock.correction_ms,LV_ANIM_OFF);
 }
-static void timed_save_default(lv_event_t *e)
+static void timed_profile_save_if_dirty(void)
 {
-    (void)e;
-    if(!timed_lyrics_mode||!timed_clock.started)return;
-    lf_recog_snapshot_t track={0};lf_recog_snapshot(&track);
-    const bool saved=track.attempts==timed_scan_attempt &&
-        lf_song_cache_store_profile(track.title,track.artist,
-                               timed_clock.correction_ms,timed_rate_percent);
-    if(saved)timed_song_custom=true;
-    if(timed_save_note)lv_label_set_text(timed_save_note,
-        saved?"Saved for this track across restarts":"Save failed - storage unavailable");
-    timed_controls_until_ms=0;
-    if(timed_controls)lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
-    activity();
+    if(!timed_profile_dirty || !timed_lyrics_mode || !timed_clock.started)return;
+    lf_recog_snapshot_t track={0};
+    lf_recog_snapshot(&track);
+    if(track.attempts!=timed_scan_attempt || !track.title[0] || !track.artist[0])
+        return;
+    if(lf_song_cache_store_profile(track.title,track.artist,
+                                   timed_clock.correction_ms,timed_rate_percent)){
+        timed_profile_dirty=false;
+        timed_song_custom=true;
+    }else{
+        ESP_LOGW(TAG,"Per-track lyrics speed could not be saved; keeping it dirty");
+    }
+}
+static void timed_rate_nudge(lv_event_t *e)
+{
+    if(!timed_lyrics_mode || !timed_clock.started)return;
+    const int step=(int)(intptr_t)lv_event_get_user_data(e);
+    int value=(int)timed_rate_percent+step;
+    if(value<75)value=75;
+    if(value>125)value=125;
+    timed_change_rate((uint16_t)value);
+    if(timed_rate_slider)lv_slider_set_value(timed_rate_slider,value,LV_ANIM_OFF);
+}
+/* Minimal +/- actions are separate from the one continuous rate slider. */
+static void timed_add_nudge(lv_obj_t *parent,const char *glyph,int x,int step)
+{
+    lv_obj_t *control=lv_button_create(parent);
+    lv_obj_set_size(control,40,40);
+    lv_obj_align(control,LV_ALIGN_CENTER,x,-112);
+    lv_obj_set_style_radius(control,LV_RADIUS_CIRCLE,0);
+    lv_obj_set_style_bg_color(control,lv_color_hex(0x304455),0);
+    lv_obj_set_style_bg_opa(control,LV_OPA_50,0);
+    lv_obj_set_style_border_width(control,1,0);
+    lv_obj_set_style_border_color(control,lv_color_hex(0x9DBFD5),0);
+    lv_obj_remove_flag(control,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_event_cb(control,timed_rate_nudge,LV_EVENT_CLICKED,
+                        (void *)(intptr_t)step);
+    lv_obj_t *caption=lv_label_create(control);
+    lv_label_set_text(caption,glyph);
+    lv_obj_set_style_text_font(caption,&lv_font_montserrat_28,0);
+    lv_obj_set_style_text_color(caption,lv_color_white(),0);
+    lv_obj_center(caption);
+    lv_obj_remove_flag(caption,LV_OBJ_FLAG_CLICKABLE);
 }
 static void timed_load_default(lv_event_t *e)
 {
@@ -1752,16 +1821,18 @@ static void timed_load_default(lv_event_t *e)
     timed_change_rate(100U);
     if(timed_sync_slider)lv_slider_set_value(timed_sync_slider,timed_clock.correction_ms,LV_ANIM_OFF);
     if(timed_rate_slider)lv_slider_set_value(timed_rate_slider,100,LV_ANIM_OFF);
+    timed_profile_dirty=true; /* RESET must replace any old custom NVS profile */
+    timed_profile_save_if_dirty();
     timed_song_custom=false;
-    if(timed_save_note)lv_label_set_text(timed_save_note,
-        "Defaults active. Save Custom to replace saved track settings.");
     timed_controls_until_ms=0;
     if(timed_controls)lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
     activity();
 }
 static void timed_controls_done(lv_event_t *e)
 {
-    (void)e;
+    /* Tapping empty translucent space closes controls; slider/buttons stay. */
+    if(e && lv_event_get_target(e)!=timed_controls)return;
+    timed_profile_save_if_dirty();
     timed_controls_until_ms=0;
     timed_last_short_tap_ms=0;
     if(timed_controls)lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
@@ -1807,6 +1878,7 @@ static void timed_toggle_controls(lv_event_t *e)
             lv_obj_move_foreground(timed_controls);
             timed_controls_until_ms=0; /* user must press DONE to close */
         }else{
+            timed_profile_save_if_dirty();
             lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
             timed_controls_until_ms=0;
         }
@@ -1890,6 +1962,7 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
             timed_rate_percent=saved_rate;
         }
         timed_scan_attempt=song->attempts;
+        timed_profile_dirty=false; /* freshly loaded profile is already saved */
     }
     timed_line_count=0;
     const size_t maximum=song->lyric_lines<LF_MAX_LINES?
@@ -1986,12 +2059,13 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_align(timed_controls,LV_ALIGN_CENTER,0,0);
     lv_obj_set_style_radius(timed_controls,0,0);
     lv_obj_set_style_bg_color(timed_controls,lv_color_black(),0);
-    lv_obj_set_style_bg_opa(timed_controls,LV_OPA_80,0);
+    lv_obj_set_style_bg_opa(timed_controls,LV_OPA_40,0);
     lv_obj_set_style_border_width(timed_controls,0,0);
     lv_obj_set_style_pad_all(timed_controls,0,0);
     lv_obj_remove_flag(timed_controls,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_event_cb(timed_controls,timed_controls_done,LV_EVENT_SHORT_CLICKED,NULL);
     lv_obj_add_flag(timed_controls,LV_OBJ_FLAG_HIDDEN);
     lv_obj_t *slow_label=lv_label_create(timed_controls);
     lv_label_set_text(slow_label,"SLOW DOWN");
@@ -2003,6 +2077,8 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_style_text_font(fast_label,&lv_font_montserrat_18,0);
     lv_obj_set_style_text_color(fast_label,lv_color_white(),0);
     lv_obj_align(fast_label,LV_ALIGN_CENTER,128,-55);
+    timed_add_nudge(timed_controls,"-",-128,-1);
+    timed_add_nudge(timed_controls,"+",128,1);
     timed_rate_slider=lv_slider_create(timed_controls);
     lv_obj_set_size(timed_rate_slider,348,22);
     lv_slider_set_range(timed_rate_slider,75,125);
@@ -2016,8 +2092,7 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_set_style_text_color(timed_rate_value,lv_color_white(),0);
     lv_obj_align(timed_rate_value,LV_ALIGN_CENTER,0,35);
     timed_update_slider_labels();
-    button(timed_controls,"SAVE CURRENT",150,54,-89,125,0x8BCCFF,timed_save_default,NULL);
-    button(timed_controls,"DEFAULT",150,54,89,125,0x9CB7CB,timed_load_default,NULL);
+    button(timed_controls,"RESET",150,54,0,125,0x9CB7CB,timed_load_default,NULL);
     timed_save_note=NULL;
     lv_obj_remove_event_cb(surface,timed_toggle_controls);
     lv_obj_add_event_cb(surface,timed_toggle_controls,LV_EVENT_LONG_PRESSED,NULL);
