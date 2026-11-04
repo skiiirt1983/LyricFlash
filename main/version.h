@@ -7,3 +7,5 @@
 #define LF_VERSION_LABEL "ALPHA 0.8.56"
 
 /* Release gate: lyrics progress without status label; enclosed mic gain 27 dB. */
+/* Preflight validated; run the single ESP32-S3 release build for the
+   measured audio waveform and bounded AudD response recovery. */
