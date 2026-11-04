@@ -9,4 +9,4 @@
 #define LF_VERSION_LABEL "ALPHA 0.8.74"
 /* Keep 0.8.73 touch wake, audio and screen-off timer unchanged.
  * Limit horizontal pager at physical ends; scroll animation cannot time out.
- * This is not proof the observed black screen is fixed without hardware test. */
+ * Host regression preflight passed. Physical screen wake/scroll test still required. */
