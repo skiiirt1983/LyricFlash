@@ -274,7 +274,7 @@ static void basic_digits_draw(lv_event_t *e)
         const int thick=p->basic_font_style==12?h/6:h/9;
         for(int i=0;i<length;i++)
             segment_digit(layer,start_x+i*(w+gap),start_y,w,h,thick,
-                          custom_time[i],p->basic_foreground);
+                          custom_time[i],p->face_time_color[5]);
     }else if(open_face_family(p->basic_font_style)>=0){
         const int cell=p->basic_font_size<30?1:
             p->basic_font_size<75?2:
@@ -286,7 +286,7 @@ static void basic_digits_draw(lv_event_t *e)
         const int family=open_face_family(p->basic_font_style);
         for(int i=0;i<length;i++)
             open_face_digit(layer,start_x+i*(w+gap),start_y,cell,
-                            custom_time[i],p->basic_foreground,family,
+                            custom_time[i],p->face_time_color[5],family,
                             p->basic_font_style);
     }else{
         /* Only Digital 7, Retro 8, Roadster and Dot Matrix use synthetic
@@ -297,10 +297,10 @@ static void basic_digits_draw(lv_event_t *e)
         for(int i=0;i<length;i++){
             if(p->basic_font_style>=5)
                 styled_digit(layer,start_x+i*(w+gap),start_y,cell,
-                             custom_time[i],p->basic_foreground,p->basic_font_style);
+                             custom_time[i],p->face_time_color[5],p->basic_font_style);
             else
                 pixel_digit(layer,start_x+i*(w+gap),start_y,cell,
-                            custom_time[i],p->basic_foreground,false);
+                            custom_time[i],p->face_time_color[5],false);
         }
     }
 }
@@ -333,7 +333,7 @@ lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
     const int letter_spacing[5]={0,3,1,6,2};
     lv_obj_set_style_text_letter_space(time,
          letter_spacing[p->basic_font_style<5?p->basic_font_style:0],0);
-    lv_obj_set_style_text_color(time,lv_color_hex(p->basic_foreground),0);
+    lv_obj_set_style_text_color(time,lv_color_hex(p->face_time_color[5]),0);
     lv_obj_set_style_text_align(time,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_align(time,LV_ALIGN_CENTER,p->basic_time_x,p->basic_time_y);
     if(p->basic_font_style!=0 && p->basic_font_style!=4 && p->basic_font_style<24){
