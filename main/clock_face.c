@@ -21,6 +21,7 @@ static lv_point_precise_t hand_points[3][2];
 static lv_point_precise_t tick_points[60][2];
 static lv_obj_t *info_label;
 static lv_obj_t *date_label;
+static lv_obj_t *date_window; /* Brolex magnifier moves with its date */
 static lv_obj_t *time_label;
 static lv_obj_t *battery_label;
 static lv_obj_t *weather_label;
@@ -255,6 +256,7 @@ static void build_diver(lv_obj_t *parent)
     draw_ticks(parent, true);
     add_hour_markers(parent);
     lv_obj_t *dw = lv_obj_create(parent);
+    date_window=dw;
     lv_obj_set_size(dw, 45, 34);
     lv_obj_align(dw, LV_ALIGN_CENTER, 99, -2);
     lv_obj_set_style_bg_color(dw, lv_color_hex(0xEFF5EC), 0);
@@ -327,7 +329,7 @@ static void build_retro_lcd(lv_obj_t *parent)
 
     face_text(lcd, "ALARM     CHRONO     LIGHT", 0, -82,
               &lv_font_montserrat_12, 0x384F38);
-    date_label = face_text(lcd, "MON 01-01", 0, -53,
+    date_label = face_text(parent, "MON 01-01", 0, -53,
                            &lv_font_montserrat_20, 0x253A2C);
     time_label = face_text(lcd, "--:--", 0, 7,
                            &lv_font_montserrat_48, colour_fg());
@@ -384,6 +386,8 @@ static void build_sundial(lv_obj_t *parent)
                            &lv_font_montserrat_12, 0x5A4830);
     battery_label = face_text(parent, "BAT --", 0, -172,
                               &lv_font_montserrat_16, 0x443425);
+    date_label = face_text(parent, "--", 0, 135,
+                           &lv_font_montserrat_18, 0x6A5136);
 }
 
 const char *lf_clock_style_name(uint8_t style)
@@ -406,6 +410,7 @@ void lf_clock_clear(void)
     for (int i = 0; i < 3; i++) hands[i] = NULL;
     info_label = NULL;
     date_label = NULL;
+    date_window = NULL;
     time_label = NULL;
     battery_label = NULL;
     weather_label = NULL;
@@ -440,16 +445,14 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
                                     &lv_font_montserrat_16,
                                     settings->basic_foreground);
         battery_label = face_text(parent, LV_SYMBOL_BATTERY_FULL " --%",
-                                  settings->basic_battery_x, settings->basic_battery_y,
-                                  basic_element_font(settings->basic_battery_size),
+                                  settings->face_battery_x[5], settings->face_battery_y[5],
+                                  basic_element_font(settings->face_battery_size[5]),
                                   settings->basic_foreground);
-        basic_scale_element(battery_label,settings->basic_battery_size);
-        if (settings->basic_show_date)
+        if (settings->face_show_date[5])
             date_label = face_text(parent, "--",
-                                   settings->basic_date_x, settings->basic_date_y,
-                                   basic_element_font(settings->basic_date_size),
+                                   settings->face_date_x[5], settings->face_date_y[5],
+                                   basic_element_font(settings->face_date_size[5]),
                                    settings->basic_foreground);
-        basic_scale_element(date_label,settings->basic_date_size);
         info_label = face_text(parent, "", 0, 109, &lv_font_montserrat_16,
                                settings->basic_foreground);
     }
@@ -477,14 +480,38 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
                                     &lv_font_montserrat_24,colour);
         if(current_style==5)basic_scale_element(weather_label,settings->basic_weather_size);
     }
-    if(battery_label && current_style!=5){
-        /* User-adjustable battery location on EVERY non-Basic dial. */
+    /* All six faces independently persist battery/date placement and scale.
+       The diver date window remains a single movable unit, preserving the
+       existing white magnifier instead of separating its label from its frame. */
+    if(battery_label){
+        const uint8_t z=settings->face_battery_size[current_style];
         lv_obj_align(battery_label,LV_ALIGN_CENTER,
                      settings->face_battery_x[current_style],
                      settings->face_battery_y[current_style]);
+        lv_obj_set_style_text_font(battery_label,basic_element_font(z),0);
+        basic_scale_element(battery_label,z);
+    }
+    if(date_window && current_style==0){
+        const uint8_t z=settings->face_date_size[0];
+        const int delta=(int)z-60;
+        lv_obj_set_size(date_window,45+delta/4>34?45+delta/4:34,
+                        34+delta/5>26?34+delta/5:26);
+        lv_obj_align(date_window,LV_ALIGN_CENTER,
+                     settings->face_date_x[0],settings->face_date_y[0]);
+        lv_obj_set_style_text_font(date_label,basic_element_font(z),0);
+        basic_scale_element(date_label,z);
+    }else if(date_label){
+        const uint8_t z=settings->face_date_size[current_style];
+        lv_obj_align(date_label,LV_ALIGN_CENTER,
+                     settings->face_date_x[current_style],
+                     settings->face_date_y[current_style]);
+        lv_obj_set_style_text_font(date_label,basic_element_font(z),0);
+        basic_scale_element(date_label,z);
     }
     if(!settings->face_show_date[current_style] && date_label)
         lv_obj_add_flag(date_label,LV_OBJ_FLAG_HIDDEN);
+    if(!settings->face_show_date[current_style] && date_window)
+        lv_obj_add_flag(date_window,LV_OBJ_FLAG_HIDDEN);
     if(!settings->face_show_seconds[current_style] && hands[2])
         lv_obj_add_flag(hands[2],LV_OBJ_FLAG_HIDDEN);
     if(!settings->face_show_battery[current_style] && battery_label)
@@ -503,8 +530,12 @@ void lf_clock_update(void)
                 state.percentage>=63?LV_SYMBOL_BATTERY_3:
                 state.percentage>=38?LV_SYMBOL_BATTERY_2:
                 state.percentage>=15?LV_SYMBOL_BATTERY_1:LV_SYMBOL_BATTERY_EMPTY;
-            snprintf(text,sizeof text,"%s%s %d%%",
-                     state.charging?LV_SYMBOL_CHARGE:"",symbol,state.percentage);
+            if(clock_settings->face_show_percent[current_style])
+                snprintf(text,sizeof text,"%s%s %d%%",
+                         state.charging?LV_SYMBOL_CHARGE:"",symbol,state.percentage);
+            else
+                snprintf(text,sizeof text,"%s%s",
+                         state.charging?LV_SYMBOL_CHARGE:"",symbol);
         }
         else
             snprintf(text,sizeof text,"%s",state.charging?

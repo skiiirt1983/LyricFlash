@@ -15,6 +15,7 @@
 #include "lyric_clock.h"
 #include "lyric_sync.h"
 #include "song_cache.h"
+#include "song_history.h"
 #include "recognition_audio.h"
 #include "weather.h"
 #include "weather_visual.h"
@@ -114,6 +115,7 @@ static lv_obj_t *home_lyric_line;
 static uint64_t home_last_refresh_ms;
 /* Never let a network request monopolize the round OLED indefinitely. */
 static uint32_t home_stalled_attempt;
+static uint32_t home_history_logged_attempt; /* once per recognized scan */
 static lv_obj_t *home_play_symbol;
 static lv_obj_t *home_play_hint;
 /* Overlay is owned by the existing Home pager, not a second LVGL root. */
@@ -3211,6 +3213,19 @@ static void on_tick(lv_timer_t *timer)
             scan.state==LF_RECOG_LYRICS ||
             !lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN)))
             home_recording_update(&scan,current);
+    }
+    /* Append title/artist after a completed match, whether or not LRCLIB
+       returned synchronized lyrics. No new audio storage or recognition
+       calls; this one-time NVS index is independent of the old song cache. */
+    if(page==0 && !asleep){
+        lf_recog_snapshot_t known={0};
+        lf_recog_snapshot(&known);
+        if(known.state==LF_RECOG_MATCH && known.attempts &&
+           known.attempts!=home_history_logged_attempt &&
+           known.title[0] && known.artist[0]){
+            home_history_logged_attempt=known.attempts;
+            (void)lf_song_history_remember(known.title,known.artist);
+        }
     }
     /* UI-timer retry is independent of Home's 750ms text refresh and
        stale touch_held. Even if the first async request loses a race,

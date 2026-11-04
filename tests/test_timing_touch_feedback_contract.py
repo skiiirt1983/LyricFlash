@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.60 small, reliable controls and the quiet cancel completion path."""
+"""0.8.61 small, reliable controls and the quiet cancel completion path."""
 from pathlib import Path
 s=(Path(__file__).resolve().parents[1]/"main/ui.c").read_text()
 def section(begin,end):

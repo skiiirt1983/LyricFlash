@@ -56,16 +56,16 @@ active_version=(root / "main/version.h").read_text()
 # The experimental private builds have separate ESP32-S3 release gates.
 # A successful compile does not prove hardware operation or catalog publication.
 assert any(f'"{ver}"' in active_version for ver in
-           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.60-alpha")), "Unexpected alpha firmware version"
-if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.8.52","0.8.53","0.8.60")):
+           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha")), "Unexpected alpha firmware version"
+if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.8.52","0.8.53","0.8.61")):
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
-    is_60='"0.8.60-alpha"' in active_version
+    is_61='"0.8.61-alpha"' in active_version
     is_53='"0.8.53-alpha"' in active_version
     is_52='"0.8.52-alpha"' in active_version
     is_51='"0.8.51-alpha"' in active_version
     is_50='"0.8.50-alpha"' in active_version
-    version="0.8.60" if is_60 else "0.8.53" if is_53 else "0.8.52" if is_52 else "0.8.51" if is_51 else "0.8.50" if is_50 else "0.8.49"
-    expected_branch=("feature/private-0.8.60-controls-polish" if is_60
+    version="0.8.61" if is_61 else "0.8.53" if is_53 else "0.8.52" if is_52 else "0.8.51" if is_51 else "0.8.50" if is_50 else "0.8.49"
+    expected_branch=("feature/private-0.8.61-webui-clock-studio-database" if is_61
                      else "feature/private-0.8.53-lyric-timeline" if is_53
                      else "feature/private-0.8.52-upload-ui" if is_52
                      else "feature/private-0.8.51-lyrics-overlay" if is_51

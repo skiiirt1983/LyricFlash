@@ -37,13 +37,16 @@ const settings={
  background:0x030810,foreground:0xf0f8ff,ring_a:0x268bff,
  ring_b:0x8e48ff,ring_c:0x20c9d4,
  face_profiles:colours.map((v,i)=>({background:v,foreground:fronts[i],
- accent:0x40c0e6,show_date:true,show_seconds:true,show_battery:true,time_24h:false}))
+ accent:0x40c0e6,show_date:true,show_seconds:true,show_battery:true,time_24h:false,
+ show_percent:true,battery_size:i===5?85:60,date_size:i===5?70:60,
+ battery_x:0,battery_y:[-137,-146,-109,-167,-172,-160][i],
+ date_x:[99,0,0,0,0,0][i],date_y:[-2,72,106,-53,135,70][i]}))
 };
 const posts=[];
 const sourceFonts=fs.readFileSync("main/basic_open_face.h","utf8");
 const bitmapMatch=sourceFonts.match(/static const char lf_open_face_b64\[\]="([A-Za-z0-9+/]+)"/);
 assert(bitmapMatch,"Device glyphs missing");
-const deviceFonts={digits:bitmapMatch[1],width:15,height:21,families:3};
+const deviceFonts={digits:bitmapMatch[1],width:15,height:21,families:7};
 const fakeFetch=async(url,opts)=>opts?.method==="POST"
  ? (posts.push(JSON.parse(opts.body)),{ok:true,text:async()=>"{\"saved\":true}"})
  : {ok:true,text:async()=>JSON.stringify(String(url).includes('/api/clock-fonts')?deviceFonts:settings)};
@@ -65,7 +68,7 @@ const runtime=new Function("document","fetch","setInterval",
  }
  el("clock_face").value="5";el("clock_face").dispatch("change");
  const fontPreviews=[];
- for(let i=0;i<20;i++){
+ for(let i=0;i<24;i++){
   el("font_style").value=String(i);
   el("font_style").dispatch("input");
   fontPreviews.push(el("clock-preview").innerHTML);
@@ -76,8 +79,8 @@ const runtime=new Function("document","fetch","setInterval",
   else seenGlyphs.set(markup,id);
  });
  console.log("DIAGNOSTIC FONT UNIQUE",seenGlyphs.size);
- assert.equal(seenGlyphs.size,20,
-   "All twenty original clock typography options must render distinct previews");
+ assert.equal(seenGlyphs.size,24,
+   "All twenty-four original clock typography options must render distinct previews");
  assert.match(fontPreviews[3],/data-face-style|<rect/,
    "Actual Garamond-like raster glyphs missing from browser preview");
  assert.notEqual(fontPreviews[3],fontPreviews[2],
@@ -146,5 +149,5 @@ const runtime=new Function("document","fetch","setInterval",
  el("reset-face").onclick();
  assert.equal(el("face_background").value,"#080c13",
    "Reset selected face failed");
- console.log("PASS: 20 distinct numeral previews, draggable battery on Classic, saved per-face positions, six clock faces");
+ console.log("PASS: 24 distinct numeral previews, draggable battery on Classic, saved per-face positions, six clock faces");
 })().catch(err=>{console.error(err);process.exitCode=1});

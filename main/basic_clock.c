@@ -211,6 +211,10 @@ static int open_face_family(uint8_t style)
     case 3:case 9:case 11:case 13:case 19:return 0; /* EB Garamond */
     case 5:case 7:case 8:case 16:case 17:return 1; /* display bold */
     case 6:case 10:case 14:case 15:return 2;       /* rounded */
+    case 20:return 3; /* Cabin Bold */
+    case 21:return 4; /* Comic Neue Bold */
+    case 22:return 5; /* Noto Serif Display black condensed italic */
+    case 23:return 6; /* Go Mono */
     default:return -1;
     }
 }

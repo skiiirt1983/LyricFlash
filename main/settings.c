@@ -46,8 +46,14 @@ void lf_settings_defaults(lf_settings_t *s)
     static const uint32_t f[6]={0xD8ECE9,0xEDF7FF,0xE5EDF8,0x162C1F,0x332719,0xF0F8FF};
     static const uint32_t a[6]={0x40C0E6,0x7DCEFF,0x6DBFFF,0x364641,0xA88E55,0x268BFF};
     static const int32_t battery_y[6]={-137,-146,-109,-167,-172,-160};
+    static const int32_t date_x[6]={99,0,0,0,0,0};
+    static const int32_t date_y[6]={-2,72,106,-53,135,70};
     for (unsigned i=0;i<6;i++){
         s->face_battery_x[i]=0;s->face_battery_y[i]=battery_y[i];
+        s->face_battery_size[i]=i==5?85:60;
+        s->face_show_percent[i]=1;
+        s->face_date_x[i]=date_x[i];s->face_date_y[i]=date_y[i];
+        s->face_date_size[i]=i==5?70:60;
         s->face_background[i]=b[i];s->face_foreground[i]=f[i];
         s->face_accent[i]=a[i];s->face_show_date[i]=1;
         s->face_show_seconds[i]=1;s->face_show_battery[i]=1;s->face_24h[i]=0;
@@ -133,8 +139,20 @@ esp_err_t lf_settings_load(lf_settings_t *s)
         snprintf(key,sizeof key,"f%u24",i);(void)nvs_get_u8(h,key,&s->face_24h[i]);
         snprintf(key,sizeof key,"f%ubx",i);(void)nvs_get_i32(h,key,&s->face_battery_x[i]);
         snprintf(key,sizeof key,"f%uby",i);(void)nvs_get_i32(h,key,&s->face_battery_y[i]);
+        snprintf(key,sizeof key,"f%ubs",i);(void)nvs_get_u8(h,key,&s->face_battery_size[i]);
+        snprintf(key,sizeof key,"f%upc",i);(void)nvs_get_u8(h,key,&s->face_show_percent[i]);
+        snprintf(key,sizeof key,"f%udx",i);(void)nvs_get_i32(h,key,&s->face_date_x[i]);
+        snprintf(key,sizeof key,"f%udy",i);(void)nvs_get_i32(h,key,&s->face_date_y[i]);
+        snprintf(key,sizeof key,"f%udz",i);(void)nvs_get_u8(h,key,&s->face_date_size[i]);
     }
     nvs_close(h);
+    /* New per-face controls must inherit preexisting Basic customization. */
+    if(schema<14){
+        s->face_battery_size[5]=s->basic_battery_size;
+        s->face_date_size[5]=s->basic_date_size;
+        s->face_date_x[5]=s->basic_date_x;
+        s->face_date_y[5]=s->basic_date_y;
+    }
 
     s->brightness = in_range(s->brightness, 5, 100, 55);
     s->scroll_speed = in_range(s->scroll_speed, 0, 100, 70);
@@ -153,7 +171,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     s->show_progress = in_range(s->show_progress, 0, 1, 1);
     s->charging_color &= 0xFFFFFF;
     s->clock_face = in_range(s->clock_face, 0, 5, 0);
-    s->basic_font_style = in_range(s->basic_font_style, 0, 19, 0);
+    s->basic_font_style = in_range(s->basic_font_style, 0, 23, 0);
     s->basic_font_size = in_range(s->basic_font_size, 0, 200, 60);
     /* Per-element offsets remain bounded inside the AMOLED circle. */
     if(s->basic_time_x<-100||s->basic_time_x>100)s->basic_time_x=0;
@@ -183,6 +201,12 @@ esp_err_t lf_settings_load(lf_settings_t *s)
         s->face_show_seconds[i]=in_range(s->face_show_seconds[i],0,1,1);
         s->face_show_battery[i]=in_range(s->face_show_battery[i],0,1,1);
         s->face_24h[i]=in_range(s->face_24h[i],0,1,0);
+        s->face_battery_size[i]=in_range(s->face_battery_size[i],0,200,i==5?85:60);
+        s->face_show_percent[i]=in_range(s->face_show_percent[i],0,1,1);
+        s->face_date_size[i]=in_range(s->face_date_size[i],0,200,i==5?70:60);
+        if(s->face_date_x[i]<-150||s->face_date_x[i]>150)s->face_date_x[i]=i==0?99:0;
+        if(s->face_date_y[i]<-180||s->face_date_y[i]>180)
+            s->face_date_y[i]=i==0?-2:i==1?72:i==2?106:i==3?-53:i==4?135:70;
         if(s->face_battery_x[i]<-150||s->face_battery_x[i]>150)s->face_battery_x[i]=0;
         if(s->face_battery_y[i]<-180||s->face_battery_y[i]>180)
             s->face_battery_y[i]=i==0?-137:i==1?-146:i==2?-109:i==3?-167:i==4?-172:-160;
@@ -246,6 +270,11 @@ esp_err_t lf_settings_save(const lf_settings_t *s)
         snprintf(key,sizeof key,"f%u24",i);TRY_NVS(nvs_set_u8(h,key,s->face_24h[i]));
         snprintf(key,sizeof key,"f%ubx",i);TRY_NVS(nvs_set_i32(h,key,s->face_battery_x[i]));
         snprintf(key,sizeof key,"f%uby",i);TRY_NVS(nvs_set_i32(h,key,s->face_battery_y[i]));
+        snprintf(key,sizeof key,"f%ubs",i);TRY_NVS(nvs_set_u8(h,key,s->face_battery_size[i]));
+        snprintf(key,sizeof key,"f%upc",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_percent[i]));
+        snprintf(key,sizeof key,"f%udx",i);TRY_NVS(nvs_set_i32(h,key,s->face_date_x[i]));
+        snprintf(key,sizeof key,"f%udy",i);TRY_NVS(nvs_set_i32(h,key,s->face_date_y[i]));
+        snprintf(key,sizeof key,"f%udz",i);TRY_NVS(nvs_set_u8(h,key,s->face_date_size[i]));
     }
     TRY_NVS(nvs_set_u32(h, "schema", LF_CONFIG_SCHEMA));
     err = nvs_commit(h);

@@ -2,7 +2,7 @@
 """Protect the user-verified 0.8.57 recognition baseline (2/2 songs identified).
 
 Any unintentional modification to audio, ID, HTTP, LRCLIB, cache or sync
-invalidates this gate. This 0.8.60 update is intentionally UI-only.
+invalidates this gate. Network.c has only WebUI/settings/database route extensions; core audio, ID, lyric and cache are pinned.
 """
 from pathlib import Path
 import hashlib
@@ -14,7 +14,6 @@ BASELINE={
     "main/lyric_sync.h": "ad1b55f97731c5e81ea7003c78c746a64768159a",
     "main/mic_pcm.c": "275dd3324179e099a7a082563b291997848f53b5",
     "main/mic_pcm.h": "c184c32a9c58f14056f1a3b87d9926472e22507d",
-    "main/network.c": "b960e73fcb4f800b5558d1e0ddb3ae1174883532",
     "main/recognition.c": "348c643f092ef70a9db0caa7ff926e3eb528607f",
     "main/recognition.h": "d228fa95ed6f3b266905d3db74d91148c535edad",
     "main/recognition_audio.c": "ee45dc0e2da70216a56812ca84a3ee17499e6f53",

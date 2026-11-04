@@ -7,6 +7,7 @@
 #include "mic_probe.h"
 #include "mic_pcm.h"
 #include "recognition.h"
+#include "song_history.h"
 #include "version.h"
 #include "web_basic_html.h"
 #include "basic_open_face.h"
@@ -28,6 +29,7 @@
 #include "esp_random.h"
 #include "esp_ota_ops.h"
 #include "esp_http_server.h"
+#include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -467,6 +469,11 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
         cJSON_AddBoolToObject(p,"show_battery",s.face_show_battery[i]!=0);
         cJSON_AddNumberToObject(p,"battery_x",s.face_battery_x[i]);
         cJSON_AddNumberToObject(p,"battery_y",s.face_battery_y[i]);
+        cJSON_AddNumberToObject(p,"battery_size",s.face_battery_size[i]);
+        cJSON_AddBoolToObject(p,"show_percent",s.face_show_percent[i]!=0);
+        cJSON_AddNumberToObject(p,"date_x",s.face_date_x[i]);
+        cJSON_AddNumberToObject(p,"date_y",s.face_date_y[i]);
+        cJSON_AddNumberToObject(p,"date_size",s.face_date_size[i]);
         cJSON_AddBoolToObject(p,"time_24h",s.face_24h[i]!=0);
         cJSON_AddItemToArray(faces,p);
     }
@@ -499,11 +506,11 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
 
 static esp_err_t handle_basic_post(httpd_req_t *req)
 {
-    if (req->content_len < 2 || req->content_len > 2500) {
+    if (req->content_len < 2 || req->content_len > 3500) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid request length");
         return ESP_FAIL;
     }
-    char json[2501];
+    char json[3501];
     int received = 0, retries = 0;
     while (received < req->content_len) {
         int n = httpd_req_recv(req, json + received, req->content_len - received);
@@ -533,7 +540,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     bool valid =
         number_in_range(root, "clock_face", 0, 5, &face) &&
         boolean_value(root, "weather_enabled", &weather_enabled) &&
-        number_in_range(root, "font_style", 0, 19, &font_style) &&
+        number_in_range(root, "font_style", 0, 23, &font_style) &&
         number_in_range(root, "font_size", 0, 200, &font_size) &&
         number_in_range(root, "ring_mode", 0, 2, &ring_mode) &&
         number_in_range(root,"basic_time_x",-100,100,&element[0]) &&
@@ -562,6 +569,8 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     uint32_t bg_face[6],fg_face[6],ac_face[6];
     uint8_t dt_face[6],sc_face[6],bt_face[6],hr_face[6];
     int32_t battery_x_face[6],battery_y_face[6];
+    int32_t date_x_face[6],date_y_face[6];
+    uint8_t battery_size_face[6],date_size_face[6],percent_face[6];
     if(!cJSON_IsArray(profiles)||cJSON_GetArraySize(profiles)!=6) valid=false;
     if(valid) for(int i=0;i<6;i++){
         const cJSON *p=cJSON_GetArrayItem(profiles,i);
@@ -583,6 +592,23 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
             valid=false;break;
         }
         battery_x_face[i]=btx;battery_y_face[i]=bty;
+        /* Optional for older local clients; never reset saved new values. */
+        int bsize=current.face_battery_size[i],dsize=current.face_date_size[i];
+        int dx=current.face_date_x[i],dy=current.face_date_y[i];
+        uint8_t pct=current.face_show_percent[i];
+        const cJSON *bs=cJSON_GetObjectItemCaseSensitive(p,"battery_size");
+        const cJSON *ds=cJSON_GetObjectItemCaseSensitive(p,"date_size");
+        const cJSON *x=cJSON_GetObjectItemCaseSensitive(p,"date_x");
+        const cJSON *y=cJSON_GetObjectItemCaseSensitive(p,"date_y");
+        const cJSON *show=cJSON_GetObjectItemCaseSensitive(p,"show_percent");
+        if((bs&&!number_in_range(p,"battery_size",0,200,&bsize))||
+           (ds&&!number_in_range(p,"date_size",0,200,&dsize))||
+           (x&&!number_in_range(p,"date_x",-150,150,&dx))||
+           (y&&!number_in_range(p,"date_y",-180,180,&dy))||
+           (show&&!boolean_value(p,"show_percent",&pct))){valid=false;break;}
+        battery_size_face[i]=(uint8_t)bsize;
+        date_size_face[i]=(uint8_t)dsize;
+        date_x_face[i]=dx;date_y_face[i]=dy;percent_face[i]=pct;
         bg_face[i]=(uint32_t)bgv;fg_face[i]=(uint32_t)fgv;ac_face[i]=(uint32_t)acv;
         dt_face[i]=dv;sc_face[i]=sv;bt_face[i]=bv;hr_face[i]=hv;
     }
@@ -624,7 +650,20 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         current.face_24h[i]=hr_face[i];
         current.face_battery_x[i]=battery_x_face[i];
         current.face_battery_y[i]=battery_y_face[i];
+        current.face_battery_size[i]=battery_size_face[i];
+        current.face_show_percent[i]=percent_face[i];
+        current.face_date_x[i]=date_x_face[i];
+        current.face_date_y[i]=date_y_face[i];
+        current.face_date_size[i]=date_size_face[i];
     }
+    /* Basic face's original editable geometry remains synchronized with the
+       same face-local position/size fields for reliable firmware rollback. */
+    current.basic_battery_x=current.face_battery_x[5];
+    current.basic_battery_y=current.face_battery_y[5];
+    current.basic_battery_size=current.face_battery_size[5];
+    current.basic_date_x=current.face_date_x[5];
+    current.basic_date_y=current.face_date_y[5];
+    current.basic_date_size=current.face_date_size[5];
     /* Basic face keeps existing ring/font controls as well. */
     current.basic_background=current.face_background[5];
     current.basic_foreground=current.face_foreground[5];
@@ -895,6 +934,45 @@ static esp_err_t handle_mic_pcm_stop(httpd_req_t *req)
 {
     lf_pcm_stop();
     return httpd_resp_sendstr(req,"Stop requested");
+}
+
+/* Local, read-only, paginated history of recognized artist/title pairs.
+   The legacy NVS lyric entries can be listed without rewriting them. */
+static esp_err_t handle_song_database(httpd_req_t *req)
+{
+    size_t offset=0;
+    char query[72]={0},raw[16]={0};
+    if(httpd_req_get_url_query_str(req,query,sizeof(query))==ESP_OK &&
+       httpd_query_key_value(query,"offset",raw,sizeof(raw))==ESP_OK){
+        char *end=NULL;unsigned long value=strtoul(raw,&end,10);
+        if(!raw[0]||!end||*end || value>10000U)
+            return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid page offset");
+        offset=(size_t)value;
+    }
+    const size_t limit=20;
+    lf_song_history_item_t *items=heap_caps_calloc(limit,sizeof(*items),
+                                                    MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(!items)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,
+                                         "Insufficient memory");
+    size_t total=0;
+    size_t n=lf_song_history_list(items,limit,offset,&total);
+    cJSON *root=cJSON_CreateObject();
+    cJSON *entries=root?cJSON_AddArrayToObject(root,"songs"):NULL;
+    if(!entries){heap_caps_free(items);cJSON_Delete(root);
+        return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot list songs");}
+    cJSON_AddNumberToObject(root,"total",total);
+    cJSON_AddNumberToObject(root,"offset",offset);
+    cJSON_AddNumberToObject(root,"page_size",limit);
+    for(size_t i=0;i<n;i++){
+        cJSON *entry=cJSON_CreateObject();
+        if(!entry)break;
+        cJSON_AddStringToObject(entry,"title",items[i].title);
+        cJSON_AddStringToObject(entry,"artist",items[i].artist);
+        cJSON_AddBoolToObject(entry,"lyrics_cached",items[i].lyrics_cached);
+        cJSON_AddItemToArray(entries,entry);
+    }
+    heap_caps_free(items);
+    return send_json(req,root);
 }
 
 static esp_err_t handle_diagnostics(httpd_req_t *req)
@@ -1369,7 +1447,7 @@ static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
-    cfg.max_uri_handlers=27; /* Weather, cached power and shared clock-glyph lookup. */
+    cfg.max_uri_handlers=28; /* Read-only song database added; no new audio routes. */
     cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
@@ -1388,6 +1466,7 @@ static bool serve(void)
         {.uri="/api/basic",.method=HTTP_GET,.handler=handle_basic_get},
         {.uri="/api/basic",.method=HTTP_POST,.handler=handle_basic_post},
         {.uri="/api/diagnostics",.method=HTTP_GET,.handler=handle_diagnostics},
+        {.uri="/api/song-database",.method=HTTP_GET,.handler=handle_song_database},
         {.uri="/api/hardware/mic-check",.method=HTTP_POST,.handler=handle_mic_check},
         {.uri="/api/hardware/mic-test",.method=HTTP_GET,.handler=handle_mic_pcm_status},
         {.uri="/api/hardware/mic-test/start",.method=HTTP_POST,.handler=handle_mic_pcm_start},
