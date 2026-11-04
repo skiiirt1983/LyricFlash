@@ -2499,6 +2499,10 @@ static void build_device_settings_now(void)
     lv_obj_set_style_bg_color(slider,lv_color_hex(0x5DC4FF),LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(slider,lv_color_hex(0xF0FAFF),LV_PART_KNOB);
     lv_obj_set_style_pad_all(slider,21,LV_PART_KNOB);
+    /* Keep vertical drags on brightness instead of chaining them to the
+       scrollable Device page. The full-width track remains finger-sized. */
+    lv_obj_remove_flag(slider,LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+    lv_obj_remove_flag(slider,LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
     lv_obj_add_event_cb(slider,on_brightness,LV_EVENT_VALUE_CHANGED,NULL);
     lv_obj_add_event_cb(slider,on_brightness,LV_EVENT_RELEASED,NULL);
 
