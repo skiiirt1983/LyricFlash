@@ -10,3 +10,4 @@
  * independent positions; four new open-licensed numeral families; linked
  * top logo, proper Wi-Fi icon, setup-only AudD page, Maintenance selector,
  * and read-only identified-song Database. Hardware QA still required. */
+/* All host preflight checks green; execute one gated ESP32-S3 release build. */
