@@ -392,14 +392,19 @@ static lv_obj_t *label(lv_obj_t *parent, const char *text, int y,
    animation. Big hit areas and labels clamped to usable circle geometry. */
 static void style_button(lv_obj_t *b, uint32_t color)
 {
-    /* Avoid costly per-widget gradients, shadows and pressed transforms. */
-    lv_obj_set_style_radius(b, 19, 0);
-    lv_obj_set_style_bg_color(b, lv_color_hex(color), 0);
-    lv_obj_set_style_bg_grad_dir(b, LV_GRAD_DIR_NONE, 0);
-    lv_obj_set_style_border_width(b, 1, 0);
-    lv_obj_set_style_border_color(b, lv_color_hex(0xAACBE6), 0);
+    /* Settings use a restrained illuminated glass treatment. Keep the Home
+       playback control unchanged and avoid expensive animated shadows. */
+    const bool settings=(page==2 || page==7 || page==9 ||
+                         page==10 || page==12);
+    lv_obj_set_style_radius(b, settings?17:19, 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(settings?0x143553:color), 0);
+    lv_obj_set_style_bg_grad_color(b, lv_color_hex(0x32658A), 0);
+    lv_obj_set_style_bg_grad_dir(b, settings?LV_GRAD_DIR_VER:LV_GRAD_DIR_NONE, 0);
+    lv_obj_set_style_border_width(b, settings?2:1, 0);
+    lv_obj_set_style_border_color(b, lv_color_hex(settings?0x72C9FF:0xAACBE6), 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
-    lv_obj_set_style_bg_color(b, lv_color_hex(0x9BCFFF), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(b, lv_color_hex(0x418ABE), LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(b, lv_color_hex(0xD6F3FF), LV_STATE_PRESSED);
     lv_obj_set_style_pad_hor(b, 8, 0);
 }
 /* Capture drags that start on the large Home button, not just empty glass. */
@@ -438,7 +443,7 @@ static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int heigh
     if (strlen(text) > 19 && prefs->system_font_size == 2) f = &lv_font_montserrat_20;
     lv_obj_set_style_text_font(l, f, 0);
     lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(l, lv_color_hex(0x0B1C2A), 0);
+    lv_obj_set_style_text_color(l, lv_color_hex((page==2 || page==7 || page==9 || page==10 || page==12)?0xEAF6FF:0x0B1C2A), 0);
     lv_obj_center(l);
     return b;
 }
@@ -478,7 +483,7 @@ static void on_settings(lv_event_t *e)
    input state is RELEASED; use LVGL's gesture detection as a second path.
    Screen construction remains deferred, AFTER physical finger release. */
 #define LF_SWIPE_MIN_PX 38
-#define LF_CLOCK_SETTINGS_HOLD_MS 2000ULL
+#define LF_CLOCK_SETTINGS_HOLD_MS 1050ULL
 #define LF_HOLD_MOVE_CANCEL_PX 20
 static lv_point_t gesture_origin;
 static lv_indev_t *gesture_indev;
@@ -2353,8 +2358,9 @@ static void on_timeout(lv_event_t *e)
     char s[32];
     if (prefs->sleep_seconds) snprintf(s, sizeof s, "Screen timeout  %us", prefs->sleep_seconds);
     else snprintf(s, sizeof s, "Screen timeout  Never");
-    lv_label_set_text(timeout_text, s);
+    if(timeout_text)lv_label_set_text(timeout_text, s);
     save_settings();
+    build_device_settings();
 }
 static void on_color(lv_event_t *e)
 {
@@ -2439,25 +2445,82 @@ static void on_system_font(lv_event_t *e)
     save_settings();
     build_device_settings();
 }
+/* A vertically scrollable device card gives IP, browser URL and firmware
+   version room to breathe without clipping the circular 466px display. */
+static lv_obj_t *device_line(lv_obj_t *parent,const char *text,int top,
+                              const lv_font_t *font,uint32_t color)
+{
+    lv_obj_t *line=lv_label_create(parent);
+    lv_label_set_text(line,text);
+    lv_obj_set_size(line,260,45);
+    lv_obj_set_style_text_font(line,font,0);
+    lv_obj_set_style_text_color(line,lv_color_hex(color),0);
+    lv_obj_set_style_text_align(line,LV_TEXT_ALIGN_CENTER,0);
+    lv_label_set_long_mode(line,LV_LABEL_LONG_WRAP);
+    lv_obj_align(line,LV_ALIGN_TOP_MID,0,top);
+    return line;
+}
 static void build_device_settings_now(void)
 {
-    page = 10;
+    page=10;
     make_base();
-    label(screen, "DEVICE SETTINGS", 39, &lv_font_montserrat_24, prefs->text_color);
-    char text[64];
-    snprintf(text, sizeof text, "System font: %s",
-             prefs->system_font_size == 0 ? "18" : prefs->system_font_size == 1 ? "20" : "24");
-    button(screen, text, 260, 54, 0, -111, 0xB2C6D3, on_system_font, NULL);
-    snprintf(text, sizeof text, "Brightness: %u%%", prefs->brightness);
-    brightness_text = label(screen, text, 156, system_font(), 0xE4EDF3);
-    add_slider(screen, 195, prefs->brightness, 5, 100, on_brightness);
-    snprintf(text, sizeof text, "Screen timeout: %us", prefs->sleep_seconds);
-    timeout_text = label(screen, text, 259, system_font(), 0xE4EDF3);
-    lv_obj_add_flag(timeout_text, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(timeout_text, on_timeout, LV_EVENT_CLICKED, NULL);
-    ota_status = label(screen, "Web settings and updates: no PIN required", 325,
-                       &lv_font_montserrat_16, 0x8BCCFF);
-    button(screen, "BACK", 152, 45, 0, 178, prefs->text_color, on_settings, NULL);
+    label(screen,"DEVICE SETTINGS",37,&lv_font_montserrat_24,0xEAF6FF);
+    lv_obj_t *viewport=lv_obj_create(screen);
+    lv_obj_set_size(viewport,308,306);
+    lv_obj_align(viewport,LV_ALIGN_TOP_MID,0,98);
+    lv_obj_set_style_radius(viewport,18,0);
+    lv_obj_set_style_bg_color(viewport,lv_color_hex(0x0C1A2C),0);
+    lv_obj_set_style_border_color(viewport,lv_color_hex(0x2D5A7B),0);
+    lv_obj_set_style_border_width(viewport,1,0);
+    lv_obj_set_style_pad_all(viewport,9,0);
+    lv_obj_set_scroll_dir(viewport,LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(viewport,LV_SCROLLBAR_MODE_ACTIVE);
+    lv_obj_t *content=lv_obj_create(viewport);
+    lv_obj_set_size(content,272,610);
+    lv_obj_align(content,LV_ALIGN_TOP_MID,0,0);
+    lv_obj_set_style_bg_opa(content,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(content,0,0);
+    lv_obj_set_style_pad_all(content,0,0);
+    lv_obj_remove_flag(content,LV_OBJ_FLAG_SCROLLABLE);
+
+    char text[80];
+    snprintf(text,sizeof text,"System font: %s pt",
+        prefs->system_font_size==0?"18":prefs->system_font_size==1?"20":"24");
+    button(content,text,248,55,0,-264,0xB2C6D3,on_system_font,NULL);
+    snprintf(text,sizeof text,"Brightness: %u%%",prefs->brightness);
+    brightness_text=device_line(content,text,94,&lv_font_montserrat_20,0xD6F0FF);
+    lv_obj_t *slider=lv_slider_create(content);
+    lv_obj_set_size(slider,242,22);
+    lv_obj_align(slider,LV_ALIGN_TOP_MID,0,142);
+    lv_slider_set_range(slider,5,100);
+    lv_slider_set_value(slider,prefs->brightness,LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(slider,lv_color_hex(0x294D69),LV_PART_MAIN);
+    lv_obj_set_style_bg_color(slider,lv_color_hex(0x5DC4FF),LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider,lv_color_hex(0xF0FAFF),LV_PART_KNOB);
+    lv_obj_set_style_pad_all(slider,15,LV_PART_KNOB);
+    lv_obj_add_event_cb(slider,on_brightness,LV_EVENT_VALUE_CHANGED,NULL);
+    lv_obj_add_event_cb(slider,on_brightness,LV_EVENT_RELEASED,NULL);
+
+    snprintf(text,sizeof text,"Screen timeout: %s",
+         prefs->sleep_seconds==0?"Never":
+         prefs->sleep_seconds==15?"15s":
+         prefs->sleep_seconds==30?"30s":"60s");
+    button(content,text,248,55,0,-92,0xB2C6D3,on_timeout,NULL);
+    /* The timeout action keeps its own caption in sync after a tap. */
+    timeout_text=NULL;
+    const char *address=lf_network_address();
+    const bool online=address && address[0] &&
+                       strcmp(address,"Offline")!=0;
+    device_line(content,"IP ADDRESS",285,&lv_font_montserrat_16,0x87B8D9);
+    device_line(content,online?address:"Not connected",308,
+                &lv_font_montserrat_20,0xFFFFFF);
+    device_line(content,"WEB ADDRESS",362,&lv_font_montserrat_16,0x87B8D9);
+    snprintf(text,sizeof text,"%s",online?"":"Connect to Wi-Fi");
+    if(online)snprintf(text,sizeof text,"http://%s/",address);
+    device_line(content,text,388,&lv_font_montserrat_16,0x7FD4FF);
+    device_line(content,"VERSION",460,&lv_font_montserrat_16,0x87B8D9);
+    device_line(content,LF_VERSION,482,&lv_font_montserrat_20,0xF1F7FF);
+    button(content,"BACK",204,50,0,251,0xB2C6D3,on_settings,NULL);
 }
 
 /* Clock dial elements must never consume swipe/hold touch events. */
