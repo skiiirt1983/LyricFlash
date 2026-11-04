@@ -9,4 +9,4 @@
 #define LF_VERSION_LABEL "ALPHA 0.8.73"
 /* Keep 0.8.72's power timer and 0.8.71's wake touch capture.
  * Nested Device Settings touch/scroll must not trip an idle screen timeout.
- * Hardware screen-off wake/release testing is mandatory before acceptance. */
+ * All source/native preflight tests passed; hardware wake/release still pending. */
