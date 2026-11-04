@@ -40,7 +40,8 @@ for guard in ("ui.ui_tick_age_ms>25000U",
 assert "if(uptime_ms>60000 && scan_related && song_page &&" in main
 assert "esp_restart();" in main
 assert "nvs_flash_erase(" not in main
-assert "lf_ota_guard_confirm_startup();" in main
+assert "lf_ota_guard_start_health_check()" in main
+assert "lf_ota_guard_confirm_startup();" not in main
 assert "xTaskCreate(lyricflash_display_recovery_watchdog" in main
 assert "ui_tick_age_ms" in header
 # A real song scan must stay visible past normal 15/30/60s screen timeout.
