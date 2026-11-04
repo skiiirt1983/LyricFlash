@@ -38,6 +38,10 @@ typedef struct {
     uint32_t clock_repaint_recoveries;
     /* Safe cross-thread evidence if the OLED stops while Device Studio lives. */
     uint32_t ui_tick_age_ms;
+    uint32_t last_screen_off_ms;
+    uint32_t wake_count;
+    uint32_t last_wake_frame_ready_ms;
+    uint32_t last_wake_overlay_clear_ms;
     uint32_t ui_page;
     uint32_t ui_navigation_phase;
     uint32_t lyrics_auto_open_queued;
