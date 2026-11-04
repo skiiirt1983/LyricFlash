@@ -2998,12 +2998,10 @@ static void build_basic_settings_now(void)
     lv_slider_set_value(slider, prefs->basic_font_size, LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_RELEASED, NULL);
-    snprintf(text, sizeof text, "Ring: %s", prefs->basic_ring_mode==0?"Solid":
-             prefs->basic_ring_mode==1?"2-color gradient":"3-color gradient");
-    button(list, text, 256, 50, 0, 0, 0xB2C6D3, on_basic_ring_mode, NULL);
-    const char *names[]={"Background color","Time text color","Ring color 1",
-                         "Ring color 2","Ring color 3"};
-    for(uintptr_t i=0;i<5;i++)
+    /* The ring renderer is disabled for performance. Retain saved values for
+       backwards compatibility, but never expose controls that do nothing. */
+    const char *names[]={"Background color","Time text color"};
+    for(uintptr_t i=0;i<2;i++)
         button(list,names[i],256,50,0,0,0xB2C6D3,on_basic_colour,(void*)i);
     button(list, prefs->basic_show_date?"Date: ON":"Date: OFF",256,50,0,0,
            0xB2C6D3,on_basic_date,NULL);
