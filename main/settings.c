@@ -51,7 +51,11 @@ void lf_settings_defaults(lf_settings_t *s)
     for (unsigned i=0;i<6;i++){
         s->face_battery_x[i]=0;s->face_battery_y[i]=battery_y[i];
         s->face_battery_size[i]=i==5?85:60;
-        s->face_show_percent[i]=1;
+        s->face_show_percent[i]=1;s->face_show_icon[i]=1;
+        s->face_date_format[i]=0;
+        s->face_show_weather[i]=0;
+        s->face_weather_x[i]=0;s->face_weather_y[i]=i==5?135:138;
+        s->face_weather_size[i]=i==5?70:60;
         s->face_date_x[i]=date_x[i];s->face_date_y[i]=date_y[i];
         s->face_date_size[i]=i==5?70:60;
         s->face_background[i]=b[i];s->face_foreground[i]=f[i];
@@ -141,6 +145,12 @@ esp_err_t lf_settings_load(lf_settings_t *s)
         snprintf(key,sizeof key,"f%uby",i);(void)nvs_get_i32(h,key,&s->face_battery_y[i]);
         snprintf(key,sizeof key,"f%ubs",i);(void)nvs_get_u8(h,key,&s->face_battery_size[i]);
         snprintf(key,sizeof key,"f%upc",i);(void)nvs_get_u8(h,key,&s->face_show_percent[i]);
+        snprintf(key,sizeof key,"f%uic",i);(void)nvs_get_u8(h,key,&s->face_show_icon[i]);
+        snprintf(key,sizeof key,"f%udf",i);(void)nvs_get_u8(h,key,&s->face_date_format[i]);
+        snprintf(key,sizeof key,"f%uwv",i);(void)nvs_get_u8(h,key,&s->face_show_weather[i]);
+        snprintf(key,sizeof key,"f%uwx",i);(void)nvs_get_i32(h,key,&s->face_weather_x[i]);
+        snprintf(key,sizeof key,"f%uwy",i);(void)nvs_get_i32(h,key,&s->face_weather_y[i]);
+        snprintf(key,sizeof key,"f%uws",i);(void)nvs_get_u8(h,key,&s->face_weather_size[i]);
         snprintf(key,sizeof key,"f%udx",i);(void)nvs_get_i32(h,key,&s->face_date_x[i]);
         snprintf(key,sizeof key,"f%udy",i);(void)nvs_get_i32(h,key,&s->face_date_y[i]);
         snprintf(key,sizeof key,"f%udz",i);(void)nvs_get_u8(h,key,&s->face_date_size[i]);
@@ -154,6 +164,12 @@ esp_err_t lf_settings_load(lf_settings_t *s)
         s->face_date_y[5]=s->basic_date_y;
     }
 
+    if(schema<15){
+        s->face_show_weather[5]=s->basic_weather;
+        s->face_weather_x[5]=s->basic_weather_x;
+        s->face_weather_y[5]=s->basic_weather_y;
+        s->face_weather_size[5]=s->basic_weather_size;
+    }
     s->brightness = in_range(s->brightness, 5, 100, 55);
     s->scroll_speed = in_range(s->scroll_speed, 0, 100, 70);
     s->font_size = in_range(s->font_size, 0, 2, 1);
@@ -202,7 +218,13 @@ esp_err_t lf_settings_load(lf_settings_t *s)
         s->face_show_battery[i]=in_range(s->face_show_battery[i],0,1,1);
         s->face_24h[i]=in_range(s->face_24h[i],0,1,0);
         s->face_battery_size[i]=in_range(s->face_battery_size[i],0,200,i==5?85:60);
-        s->face_show_percent[i]=in_range(s->face_show_percent[i],0,1,1);
+         s->face_show_percent[i]=in_range(s->face_show_percent[i],0,1,1);
+        s->face_show_icon[i]=in_range(s->face_show_icon[i],0,1,1);
+        s->face_date_format[i]=in_range(s->face_date_format[i],0,5,0);
+        s->face_show_weather[i]=in_range(s->face_show_weather[i],0,1,0);
+        s->face_weather_size[i]=in_range(s->face_weather_size[i],0,200,60);
+        if(s->face_weather_x[i]<-150||s->face_weather_x[i]>150)s->face_weather_x[i]=0;
+        if(s->face_weather_y[i]<-180||s->face_weather_y[i]>180)s->face_weather_y[i]=138;
         s->face_date_size[i]=in_range(s->face_date_size[i],0,200,i==5?70:60);
         if(s->face_date_x[i]<-150||s->face_date_x[i]>150)s->face_date_x[i]=i==0?99:0;
         if(s->face_date_y[i]<-180||s->face_date_y[i]>180)
@@ -272,6 +294,12 @@ esp_err_t lf_settings_save(const lf_settings_t *s)
         snprintf(key,sizeof key,"f%uby",i);TRY_NVS(nvs_set_i32(h,key,s->face_battery_y[i]));
         snprintf(key,sizeof key,"f%ubs",i);TRY_NVS(nvs_set_u8(h,key,s->face_battery_size[i]));
         snprintf(key,sizeof key,"f%upc",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_percent[i]));
+        snprintf(key,sizeof key,"f%uic",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_icon[i]));
+        snprintf(key,sizeof key,"f%udf",i);TRY_NVS(nvs_set_u8(h,key,s->face_date_format[i]));
+        snprintf(key,sizeof key,"f%uwv",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_weather[i]));
+        snprintf(key,sizeof key,"f%uwx",i);TRY_NVS(nvs_set_i32(h,key,s->face_weather_x[i]));
+        snprintf(key,sizeof key,"f%uwy",i);TRY_NVS(nvs_set_i32(h,key,s->face_weather_y[i]));
+        snprintf(key,sizeof key,"f%uws",i);TRY_NVS(nvs_set_u8(h,key,s->face_weather_size[i]));
         snprintf(key,sizeof key,"f%udx",i);TRY_NVS(nvs_set_i32(h,key,s->face_date_x[i]));
         snprintf(key,sizeof key,"f%udy",i);TRY_NVS(nvs_set_i32(h,key,s->face_date_y[i]));
         snprintf(key,sizeof key,"f%udz",i);TRY_NVS(nvs_set_u8(h,key,s->face_date_size[i]));
