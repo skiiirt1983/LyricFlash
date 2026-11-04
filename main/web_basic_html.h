@@ -532,7 +532,7 @@ static const char lf_basic_settings_html[] =
 " $('selected-weather-visible').checked=!!profile.show_weather;\n"
 " $('selected-font-style').value=$('font_style').value;\n"
 " const sizeRow=edit.querySelector?edit.querySelector('.part-size-line'):null;\n"
-" if(sizeRow)sizeRow.hidden=!(basic||part==='date'||part==='battery');\n"
+" if(sizeRow)sizeRow.hidden=!(basic||part==='date'||part==='battery'||part==='weather');\n"
 " const size=(part==='battery'||part==='date'||part==='weather')?faceProfiles[activeFace][part+'_size']:nval(info.size);\n"
 " $('selected-size').value=String(size);\n"
 " $('selected-size-value').textContent=String(size)+'%';\n"
