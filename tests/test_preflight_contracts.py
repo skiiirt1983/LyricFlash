@@ -625,11 +625,11 @@ require('lookup_lyrics_after_match()' in recognize and
         'atomic_compare_exchange_strong(&worker_active' in recognize and
         'status(LF_RECOG_LYRICS' in recognize,
         "0.8.38 manual lyrics and worker lifecycle")
-require('Synchronized lyrics found:' in pages['settings'] and
-        'Preview (not live synchronized)' in pages['settings'] and
+require('lf_recog_lyric_line' in recognize and
+        'id="song-token"' in pages['settings'] and
         'checkedAtLeastOneSource' in pages['firmware'] and
         'Some sources unavailable:' not in pages['firmware'],
-        "0.8.38 lyrics preview and nontechnical update status")
+        "0.8.61 retained synchronized lyric engine and friendly firmware update status")
 
 # Alpha 0.8.39: use the proven circular UI to view real parsed LRCLIB lyrics.
 clock=read("main/lyric_clock.c")
