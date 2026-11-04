@@ -546,7 +546,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     bool valid =
         number_in_range(root, "clock_face", 0, 5, &face) &&
         boolean_value(root, "weather_enabled", &weather_enabled) &&
-        number_in_range(root, "font_style", 0, 23, &font_style) &&
+        number_in_range(root, "font_style", 0, 36, &font_style) &&
         number_in_range(root, "font_size", 0, 200, &font_size) &&
         number_in_range(root, "ring_mode", 0, 2, &ring_mode) &&
         number_in_range(root,"basic_time_x",-100,100,&element[0]) &&
