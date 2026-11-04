@@ -2447,10 +2447,20 @@ static void build_lyrics_settings_now(void)
 }
 static void on_system_font(lv_event_t *e)
 {
-    (void)e;
     prefs->system_font_size = (prefs->system_font_size + 1) % 3;
+    /* Do not destroy the tapped LVGL control during its CLICKED callback.
+       The selected font applies to newly rendered controls on navigation. */
+    lv_obj_t *target = lv_event_get_target(e);
+    if (target && lv_obj_get_child_count(target) > 0) {
+        char caption[40];
+        snprintf(caption, sizeof caption, "System font: %s pt",
+                 prefs->system_font_size == 0 ? "18" :
+                 prefs->system_font_size == 1 ? "20" : "24");
+        lv_obj_t *label = lv_obj_get_child(target, 0);
+        lv_label_set_text(label, caption);
+        lv_obj_set_style_text_font(label, system_font(), 0);
+    }
     save_settings();
-    build_device_settings();
 }
 /* A vertically scrollable device card gives IP, browser URL and firmware
    version room to breathe without clipping the circular 466px display. */
