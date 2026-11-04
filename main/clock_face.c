@@ -456,29 +456,36 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
         info_label = face_text(parent, "", 0, 109, &lv_font_montserrat_16,
                                settings->basic_foreground);
     }
+    /* Non-default date formats use a normal movable label instead of
+       forcing a full date into the diver's 34px magnifier. */
+    if(current_style==0 && settings->face_date_format[0]!=0){
+        if(date_window)lv_obj_add_flag(date_window,LV_OBJ_FLAG_HIDDEN);
+        date_label=face_text(parent,"",settings->face_date_x[0],
+                             settings->face_date_y[0],
+                             basic_element_font(settings->face_date_size[0]),colour_fg());
+    }
     lf_weather_config_t weather_cfg;
     lf_weather_get_config(&weather_cfg);
-    /* Fancy faces stay free of forecast overlays. */
-    if (weather_cfg.enabled &&
-        (current_style == 1 || (current_style == 5 && settings->basic_weather))) {
-        uint32_t colour = current_style == 5 ? settings->basic_foreground : 0x9DC9F3;
+    /* Weather is an opt-in, movable part of each independent face. */
+    if (weather_cfg.enabled && settings->face_show_weather[current_style]) {
+        uint32_t colour = settings->face_foreground[current_style];
+        const uint8_t wz=settings->face_weather_size[current_style];
         weather_icon = lv_obj_create(parent);
-        int icon_size=current_style==5?46+settings->basic_weather_size/4:62;
+        int icon_size=46+wz/4;
         lv_obj_set_size(weather_icon,icon_size,icon_size);
         lv_obj_align(weather_icon,LV_ALIGN_CENTER,
-             current_style==5?settings->basic_weather_x-52:-52,
-             current_style==5?settings->basic_weather_y:138);
+             settings->face_weather_x[current_style]-52,
+             settings->face_weather_y[current_style]);
         lv_obj_set_style_bg_opa(weather_icon, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(weather_icon, 0, 0);
         lv_obj_set_style_pad_all(weather_icon, 0, 0);
         lv_obj_remove_flag(weather_icon, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_remove_flag(weather_icon, LV_OBJ_FLAG_SCROLLABLE);
         weather_label = face_text(parent, "-- C",
-                   current_style==5?settings->basic_weather_x+50:50,
-                   current_style==5?settings->basic_weather_y:138,
-                   current_style==5?basic_element_font(settings->basic_weather_size):
-                                    &lv_font_montserrat_24,colour);
-        if(current_style==5)basic_scale_element(weather_label,settings->basic_weather_size);
+                   settings->face_weather_x[current_style]+50,
+                   settings->face_weather_y[current_style],
+                   basic_element_font(wz),colour);
+        basic_scale_element(weather_label,wz);
     }
     /* All six faces independently persist battery/date placement and scale.
        The diver date window remains a single movable unit, preserving the
@@ -491,7 +498,7 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
         lv_obj_set_style_text_font(battery_label,basic_element_font(z),0);
         basic_scale_element(battery_label,z);
     }
-    if(date_window && current_style==0){
+    if(date_window && current_style==0 && settings->face_date_format[0]==0){
         const uint8_t z=settings->face_date_size[0];
         const int delta=(int)z-60;
         lv_obj_set_size(date_window,45+delta/4>34?45+delta/4:34,
@@ -514,7 +521,9 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
         lv_obj_add_flag(date_window,LV_OBJ_FLAG_HIDDEN);
     if(!settings->face_show_seconds[current_style] && hands[2])
         lv_obj_add_flag(hands[2],LV_OBJ_FLAG_HIDDEN);
-    if(!settings->face_show_battery[current_style] && battery_label)
+    if((!settings->face_show_battery[current_style] ||
+        (!settings->face_show_icon[current_style] &&
+         !settings->face_show_percent[current_style])) && battery_label)
         lv_obj_add_flag(battery_label,LV_OBJ_FLAG_HIDDEN);
     clock_active = true;
     lf_clock_update();
@@ -524,22 +533,27 @@ void lf_clock_update(void)
     if (!clock_active) return;
     lf_power_state_t state;
     if (battery_label && lf_power_cached(&state)) {
-        char text[44];
-        if (state.percentage >= 0){
+        char text[44]={0};
+        const bool show_icon=clock_settings->face_show_icon[current_style]!=0;
+        const bool show_percent=clock_settings->face_show_percent[current_style]!=0;
+        if(state.percentage>=0){
             const char *symbol=state.percentage>=88?LV_SYMBOL_BATTERY_FULL:
                 state.percentage>=63?LV_SYMBOL_BATTERY_3:
                 state.percentage>=38?LV_SYMBOL_BATTERY_2:
                 state.percentage>=15?LV_SYMBOL_BATTERY_1:LV_SYMBOL_BATTERY_EMPTY;
-            if(clock_settings->face_show_percent[current_style])
-                snprintf(text,sizeof text,"%s%s %d%%",
-                         state.charging?LV_SYMBOL_CHARGE:"",symbol,state.percentage);
-            else
-                snprintf(text,sizeof text,"%s%s",
-                         state.charging?LV_SYMBOL_CHARGE:"",symbol);
-        }
-        else
+            if(show_icon)snprintf(text,sizeof text,"%s%s",
+                state.charging?LV_SYMBOL_CHARGE:"",symbol);
+            if(show_percent){
+                size_t used=strlen(text);
+                snprintf(text+used,sizeof(text)-used,"%s%d%%",
+                         show_icon?" ":"",state.percentage);
+            }
+        }else if(show_icon){
             snprintf(text,sizeof text,"%s",state.charging?
                      LV_SYMBOL_CHARGE:LV_SYMBOL_BATTERY_EMPTY);
+        }else if(show_percent){
+            snprintf(text,sizeof text,"--%%");
+        }
         update_label_if_changed(battery_label, text);
         uint32_t color = state.usb_connected ? clock_settings->charging_color : lf_power_color(&state);
         if (color != displayed_battery_color) {
@@ -580,9 +594,15 @@ void lf_clock_update(void)
     }
     if (date_label) {
         char date[32];
-        if (current_style == 0) strftime(date, sizeof(date), "%d", &local);
-        else if (current_style == 3) strftime(date, sizeof(date), "%a %m-%d", &local);
-        else strftime(date, sizeof(date), "%a %b %d", &local);
+        const uint8_t format=clock_settings->face_date_format[current_style];
+        const char *fmt=format==1?"%a %b %d":
+                        format==2?"%b %d":
+                        format==3?"%d/%m/%Y":
+                        format==4?"%Y-%m-%d":
+                        format==5?"%A, %B %d":
+                        current_style==0?"%d":
+                        current_style==3?"%a %m-%d":"%a %b %d";
+        strftime(date,sizeof(date),fmt,&local);
         update_label_if_changed(date_label, date);
     }
     if (time_label) {
