@@ -7,3 +7,6 @@
  * remains under investigation, so this build is experimental. */
 #define LF_VERSION "0.8.62-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.62"
+/* Draft font conversion and ESP-IDF compile passed on the source branch.
+ * The release build regenerates all fonts and revalidates its 0.8.62 binary,
+ * USB recovery image, OTA image, and checksummed release package. */
