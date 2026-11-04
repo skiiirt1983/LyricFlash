@@ -8,4 +8,4 @@
 #define LF_VERSION "0.8.72-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.72"
 /* Extend the validated 0.8.71 wake-cover lifecycle; deep sleep stays OFF.
- * Stage source tests before the next gated compile and physical wake check. */
+ * Host regression preflight passed; physical sleep/wake acceptance remains pending. */
