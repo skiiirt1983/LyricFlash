@@ -2490,14 +2490,15 @@ static void build_device_settings_now(void)
     snprintf(text,sizeof text,"Brightness: %u%%",prefs->brightness);
     brightness_text=device_line(content,text,94,&lv_font_montserrat_20,0xD6F0FF);
     lv_obj_t *slider=lv_slider_create(content);
-    lv_obj_set_size(slider,242,22);
+    /* Large touch target for a finger on the 1.75-inch AMOLED. */
+    lv_obj_set_size(slider,242,38);
     lv_obj_align(slider,LV_ALIGN_TOP_MID,0,142);
     lv_slider_set_range(slider,5,100);
     lv_slider_set_value(slider,prefs->brightness,LV_ANIM_OFF);
     lv_obj_set_style_bg_color(slider,lv_color_hex(0x294D69),LV_PART_MAIN);
     lv_obj_set_style_bg_color(slider,lv_color_hex(0x5DC4FF),LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(slider,lv_color_hex(0xF0FAFF),LV_PART_KNOB);
-    lv_obj_set_style_pad_all(slider,15,LV_PART_KNOB);
+    lv_obj_set_style_pad_all(slider,21,LV_PART_KNOB);
     lv_obj_add_event_cb(slider,on_brightness,LV_EVENT_VALUE_CHANGED,NULL);
     lv_obj_add_event_cb(slider,on_brightness,LV_EVENT_RELEASED,NULL);
 
