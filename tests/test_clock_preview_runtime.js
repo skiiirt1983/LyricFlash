@@ -105,13 +105,9 @@ const runtime=new Function("document","fetch","setInterval",
  el("basic_date_size").value="93";el("basic_date_size").dispatch("input");
  assert.equal(el("value_basic_date_size").textContent,"93","Slider value is not shown");
  el("ring_mode").value="0";el("ring_mode").dispatch("input");
- assert.equal(el("ring-b-row").hidden,true,"Solid ring must hide colour 2");
- assert.equal(el("ring-c-row").hidden,true,"Solid ring must hide colour 3");
- el("ring_mode").value="1";el("ring_mode").dispatch("change");
- assert.equal(el("ring-b-row").hidden,false,"Two-tone ring needs colour 2");
- assert.equal(el("ring-c-row").hidden,true,"Two-tone ring must hide colour 3");
- el("ring_mode").value="2";el("ring_mode").dispatch("change");
- assert.equal(el("ring-c-row").hidden,false,"Three-tone ring needs colour 3");
+ assert.equal(el("ring-b-row").hidden,true,"Disabled ring must hide colour 2");
+ assert.equal(el("ring-c-row").hidden,true,"Disabled ring must hide colour 3");
+ assert.ok(!el("clock-preview").innerHTML.includes("basic-gradient"),"Ring must not render in clock preview");
  el("clock_face").value="2";el("clock_face").dispatch("change");
  /* Simulate a pointer dragging Classic Analog's battery 39 px right.
     Save must contain new face-local battery coordinates, not Basic's. */
