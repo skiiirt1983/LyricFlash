@@ -1,12 +1,9 @@
 #pragma once
-/* LyricFlash 0.8.62 private alpha: contextual Clock Studio editor, per-face
- * Weather, Battery (icon and percentage independently), Date formats, and
- * genuine embedded open-licensed clock fonts.
- * Preserves the 0.8.61 recognition/lyrics code and existing NVS settings.
- * Screen-off/wake timing diagnostics added; hardware wake-lag root cause
- * remains under investigation, so this build is experimental. */
-#define LF_VERSION "0.8.62-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.62"
-/* Draft font conversion and ESP-IDF compile passed on the source branch.
- * The release build regenerates all fonts and revalidates its 0.8.62 binary,
- * USB recovery image, OTA image, and checksummed release package. */
+/* LyricFlash 0.8.63 private alpha: premium scrollable device settings,
+ * accessible brightness slider, faster clock hold, and separate full-spectrum
+ * Time/AMPM, Battery, Weather and Date colours on each of six clock faces.
+ * Additive schema 16 preserves NVS and prior users' clock customizations.
+ * New open-licensed clock fonts remain monochrome on embedded LVGL.
+ * Hardware testing and the previous 0.8.62 fallback are retained. */
+#define LF_VERSION "0.8.63-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.63"
