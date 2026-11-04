@@ -1,4 +1,5 @@
 #include "basic_clock.h"
+#include "clock_fonts.h"
 #include <stdint.h>
 #include <string.h>
 #include "basic_open_face.h"
@@ -25,9 +26,10 @@ static uint32_t ring_colour(const lf_settings_t *p, int segment)
 }
 static const lv_font_t *time_font(const lf_settings_t *p)
 {
-    (void)p;
-    /* Standard vector label uses the largest available bundled font and
-       LVGL's static transform scale. No new font assets or redraw loop. */
+    if(p->basic_font_style>=24){
+        const lv_font_t *converted=lf_clock_custom_font(p->basic_font_style);
+        if(converted)return converted;
+    }
     return &lv_font_montserrat_48;
 }
 static uint32_t basic_digit_height(uint8_t v)
@@ -322,7 +324,7 @@ lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
     lv_obj_set_style_text_font(time,time_font(p),0);
     /* 0% is now genuinely small (~18px), 200% roughly 96px. The
        preexisting 60% default stays around the previous visual size. */
-    if(p->basic_font_style==0 || p->basic_font_style==4){
+    if(p->basic_font_style==0 || p->basic_font_style==4 || p->basic_font_style>=24){
         const int32_t zoom=96+(int32_t)p->basic_font_size*416/200;
         lv_obj_set_style_transform_scale(time,zoom,0);
         lv_obj_set_style_transform_pivot_x(time,173,0);
@@ -334,7 +336,7 @@ lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
     lv_obj_set_style_text_color(time,lv_color_hex(p->basic_foreground),0);
     lv_obj_set_style_text_align(time,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_align(time,LV_ALIGN_CENTER,p->basic_time_x,p->basic_time_y);
-    if(p->basic_font_style!=0 && p->basic_font_style!=4){
+    if(p->basic_font_style!=0 && p->basic_font_style!=4 && p->basic_font_style<24){
         lv_obj_add_flag(time,LV_OBJ_FLAG_HIDDEN);
         custom_time_layer=lv_obj_create(parent);
         lv_obj_set_size(custom_time_layer,412,132);
