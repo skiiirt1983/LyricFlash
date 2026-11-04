@@ -11,3 +11,4 @@
  * 0.8.59: cancellation handled after touch release on LVGL timer; explicitly
  * unlock pager, stop redundant hidden-overlay redraws; center waveform via
  * display-only slow-bias removal. Hardware testing required before safe tag. */
+/* Source preflight passed; release-gated ESP32-S3 firmware validation. */
