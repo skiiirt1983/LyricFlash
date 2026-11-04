@@ -56,7 +56,7 @@ clock=text("main/clock_face.c")
 basic_clock=text("main/basic_clock.c")
 history=text("main/song_history.c")
 worker=text("main/recognition.c")
-assert 'LF_CONFIG_SCHEMA 15U' in hdr
+assert 'LF_CONFIG_SCHEMA 16U' in hdr
 for prop in ("face_battery_size[6]","face_show_percent[6]",
              "face_date_x[6]","face_date_y[6]","face_date_size[6]"):
     assert prop in hdr
