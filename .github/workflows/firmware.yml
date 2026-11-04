@@ -1,10 +1,10 @@
-name: LyricFlash Private Alpha 0.8.66 - ESP32-S3 Build
+name: LyricFlash Private Alpha 0.8.67 - ESP32-S3 Build
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - feature/private-0.8.66-recovery-polish
+      - feature/private-0.8.67-touch-release-repaint
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
@@ -86,9 +86,9 @@ jobs:
           python3 tools/create_preserve_usb.py _site
           python3 tools/package_release.py _site
           python3 tools/package_release.py --verify _site
-          cp _site/beta/firmware/LyricFlash-0.8.66-alpha-USB-and-OTA.zip dist/
-          cp build/lyricflash.bin dist/LyricFlash_Private_Alpha_0.8.66_ESP32S3_OTA.bin
-          cp build/lyricflash-full.bin dist/LyricFlash_Private_Alpha_0.8.66_ESP32S3_FULL_USB.bin
+          cp _site/beta/firmware/LyricFlash-0.8.67-alpha-USB-and-OTA.zip dist/
+          cp build/lyricflash.bin dist/LyricFlash_Private_Alpha_0.8.67_ESP32S3_OTA.bin
+          cp build/lyricflash-full.bin dist/LyricFlash_Private_Alpha_0.8.67_ESP32S3_FULL_USB.bin
           cp _site/beta/firmware/SHA256SUMS.txt dist/
           cp main/generated_clock_fonts/manifest.json dist/clock-fonts-manifest.json
           python3 tools/check_build.py build/lyricflash.bin --json > dist/build-checks.json
@@ -96,7 +96,7 @@ jobs:
       - name: Upload complete validated firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: LyricFlash-Private-Alpha-0.8.66-ESP32S3-UNTESTED
+          name: LyricFlash-Private-Alpha-0.8.67-ESP32S3-UNTESTED
           path: dist/
           if-no-files-found: error
       - name: Publish and verify direct HTTPS private alpha OTA image
@@ -111,7 +111,7 @@ jobs:
         run: |
           python3 tools/package_release.py --verify _site
           VERSION=$(awk '/^#define LF_VERSION /{gsub(/"/,"",$3);print $3}' main/version.h)
-          test "$VERSION" = "0.8.66-alpha"
+          test "$VERSION" = "0.8.67-alpha"
           TAG="alpha-build-${GITHUB_SHA:0:12}"
           {
             echo "LyricFlash-OTA-Version: $VERSION"
@@ -122,10 +122,10 @@ jobs:
           } > "$RUNNER_TEMP/lyricflash-release-notes.txt"
           gh release create "$TAG" \
             _site/beta/firmware/lyricflash-ota.bin \
-            _site/beta/firmware/LyricFlash-0.8.66-alpha-USB-and-OTA.zip \
+            _site/beta/firmware/LyricFlash-0.8.67-alpha-USB-and-OTA.zip \
             --target "$GITHUB_SHA" \
             --title "LyricFlash $VERSION - Private Alpha (hardware untested)" \
             --notes-file "$RUNNER_TEMP/lyricflash-release-notes.txt" \
             --prerelease --latest=false
           gh release view "$TAG" --json tagName,isPrerelease,assets | \
-            python3 -c 'import json,sys; p=json.load(sys.stdin); names={a["name"] for a in p["assets"]}; assert p["isPrerelease"]; assert "lyricflash-ota.bin" in names; assert "LyricFlash-0.8.66-alpha-USB-and-OTA.zip" in names; print("PASS: private-alpha GitHub prerelease published with OTA and full USB ZIP")'
+            python3 -c 'import json,sys; p=json.load(sys.stdin); names={a["name"] for a in p["assets"]}; assert p["isPrerelease"]; assert "lyricflash-ota.bin" in names; assert "LyricFlash-0.8.67-alpha-USB-and-OTA.zip" in names; print("PASS: private-alpha GitHub prerelease published with OTA and full USB ZIP")'

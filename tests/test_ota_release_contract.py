@@ -56,9 +56,10 @@ active_version=(root / "main/version.h").read_text()
 # The experimental private builds have separate ESP32-S3 release gates.
 # A successful compile does not prove hardware operation or catalog publication.
 assert any(f'"{ver}"' in active_version for ver in
-           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha")), "Unexpected alpha firmware version"
-if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.8.52","0.8.53","0.8.61","0.8.63","0.8.64","0.8.65","0.8.66")):
+           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha","0.8.67-alpha")), "Unexpected alpha firmware version"
+if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.8.52","0.8.53","0.8.61","0.8.63","0.8.64","0.8.65","0.8.66","0.8.67")):
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
+    is_67='"0.8.67-alpha"' in active_version
     is_66='"0.8.66-alpha"' in active_version
     is_65='"0.8.65-alpha"' in active_version
     is_64='"0.8.64-alpha"' in active_version
@@ -68,8 +69,9 @@ if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.
     is_52='"0.8.52-alpha"' in active_version
     is_51='"0.8.51-alpha"' in active_version
     is_50='"0.8.50-alpha"' in active_version
-    version="0.8.66" if is_66 else "0.8.65" if is_65 else "0.8.64" if is_64 else "0.8.63" if is_63 else "0.8.61" if is_61 else "0.8.53" if is_53 else "0.8.52" if is_52 else "0.8.51" if is_51 else "0.8.50" if is_50 else "0.8.49"
-    expected_branch=("feature/private-0.8.66-recovery-polish" if is_66
+    version="0.8.67" if is_67 else "0.8.66" if is_66 else "0.8.65" if is_65 else "0.8.64" if is_64 else "0.8.63" if is_63 else "0.8.61" if is_61 else "0.8.53" if is_53 else "0.8.52" if is_52 else "0.8.51" if is_51 else "0.8.50" if is_50 else "0.8.49"
+    expected_branch=("feature/private-0.8.67-touch-release-repaint" if is_67
+                      else "feature/private-0.8.66-recovery-polish" if is_66
                       else "feature/private-0.8.63-device-clock-refinement" if (is_65 or is_64 or is_63)
                      else "feature/private-0.8.61-webui-clock-studio-database" if is_61
                      else "feature/private-0.8.53-lyric-timeline" if is_53
