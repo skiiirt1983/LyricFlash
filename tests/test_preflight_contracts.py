@@ -213,7 +213,7 @@ require('id="pref-deep_sleep_minutes"' in pages["settings"] and
         'margin-top:34px!important' in pages["settings"],
         "Slow range, deep sleep and lowered menu missing")
 require('class="subnav"' in pages["settings"], "Settings section menu missing")
-for key in ("network", "clocks", "lyrics", "device", "status-section"):
+for key in ("network", "clocks", "lyrics", "device", "maintenance"):
     require('id="'+key+'"' in pages["settings"],
             "Settings menu target missing: "+key)
 require('"/api/preferences"' in network and "lf_ui_apply_device_settings" in network,
@@ -600,11 +600,13 @@ require('https://api.audd.io/' in song and
         "X-LyricFlash-Manual-Test" in network,
         "0.8.37 private HTTPS-only, manually authorized audio upload")
 require('id="song-token"' in pages["settings"] and
-        'id="song-start"' in pages["settings"] and
-        'id="song-stop"' in pages["settings"] and
-        'api/recognize/start' in pages["settings"] and
-        'api/recognize/token' in pages["settings"],
-        "0.8.37 one-click manual recognition Web UI")
+        'id="song-save"' in pages["settings"] and
+        'id="song-clear"' in pages["settings"] and
+        'id="song-start"' not in pages["settings"] and
+        'id="song-stop"' not in pages["settings"] and
+        'api/recognize/token' in pages["settings"] and
+        '/api/recognize/start' in network,
+        "0.8.61 setup-only WebUI, unchanged physical song recognition")
 
 # Alpha 0.8.38 must look up synchronized lyrics only after explicit AudD scan.
 lrclib=read("main/lrclib_client.c")
