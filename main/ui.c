@@ -96,6 +96,12 @@ static atomic_uint auto_open_completed_count;
  * manual LRC timeline as the Lyrics viewer. These pointers are never used
  * after make_base() destroys its child pager. */
 static lv_obj_t *home_scan_button;
+/* Arm on Play release; begin capture only after a silent 500ms settling gap. */
+static bool home_scan_armed;
+static uint64_t home_scan_released_ms;
+#define LF_HOME_SCAN_SETTLE_MS 500U
+/* Decorative rings and Play share exactly the same player center. */
+#define LF_HOME_PLAYER_CENTER_Y 18
 static lv_obj_t *home_scan_status;
 static lv_obj_t *home_song_title;
 static lv_obj_t *home_song_artist;
@@ -1150,7 +1156,8 @@ static void home_refresh(uint64_t current)
     const bool busy=lf_recog_busy();
     home_recording_update(&song,current);
     const char *message="";
-    if(home_warning && current<home_warning_until_ms)
+    if(home_scan_armed)message="GET READY";
+    else if(home_warning && current<home_warning_until_ms)
         message=home_warning;
     else {
         home_warning=NULL;
@@ -1165,7 +1172,7 @@ static void home_refresh(uint64_t current)
     home_set_text(home_song_title,message);
     if(message[0])lv_obj_remove_flag(home_song_title,LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(home_song_title,LV_OBJ_FLAG_HIDDEN);
-    home_set_text(home_play_symbol,busy?LV_SYMBOL_STOP:LV_SYMBOL_PLAY);
+    home_set_text(home_play_symbol,(busy||home_scan_armed)?LV_SYMBOL_STOP:LV_SYMBOL_PLAY);
     if(home_visual_busy!=(int)busy){
         home_visual_busy=(int)busy;
         lv_obj_set_style_bg_color(home_scan_button,
@@ -1174,7 +1181,7 @@ static void home_refresh(uint64_t current)
             lv_color_hex(busy?0xFDD64D:0xAADFFF),0);
     }
     home_last_refresh_ms=current;
-    if(song.state==LF_RECOG_MATCH && song.lyric_lines>0 &&
+    if(!home_scan_armed && song.state==LF_RECOG_MATCH && song.lyric_lines>0 &&
        strcmp(song.lyrics_state,"synced")==0 &&
        song.attempts!=auto_open_attempt && !auto_open_pending){
         auto_open_pending=true;
@@ -1186,16 +1193,21 @@ static void home_refresh(uint64_t current)
 static void on_home_scan(lv_event_t *e)
 {
     (void)e;
-    if(lf_recog_busy()){
+    if(home_scan_armed) {
+        home_scan_armed=false; /* second tap cancels before capture starts */
+        home_scan_released_ms=0;
+    }else if(lf_recog_busy()) {
         lf_recog_stop();
-    }else if(!lf_recog_start()){
+    }else if(!lf_network_is_connected() || !lf_recog_has_token()) {
         home_warning=!lf_network_is_connected()?
             "Connect to Wi-Fi in Settings":
-            !lf_recog_has_token()?
-                "Configure AudD in Device Studio":
-                "Scanner busy - try again";
-        home_warning_until_ms=now_ms()+4500;
+            "Configure AudD in Device Studio";
+        home_warning_until_ms=now_ms()+4500U;
     }else{
+        /* LV_EVENT_CLICKED follows a finger release; on_tick independently
+           confirms the physical pointer is up before starting the timer. */
+        home_scan_armed=true;
+        home_scan_released_ms=0;
         home_warning=NULL;
     }
     activity();
@@ -1205,7 +1217,7 @@ static lv_obj_t *home_decor_ring(lv_obj_t *parent,int diameter,uint32_t color)
 {
     lv_obj_t *ring=lv_obj_create(parent);
     lv_obj_set_size(ring,diameter,diameter);
-    lv_obj_align(ring,LV_ALIGN_CENTER,0,12);
+    lv_obj_align(ring,LV_ALIGN_CENTER,0,LF_HOME_PLAYER_CENTER_Y);
     lv_obj_set_style_radius(ring,LV_RADIUS_CIRCLE,0);
     lv_obj_set_style_bg_opa(ring,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(ring,2,0);
@@ -1222,22 +1234,20 @@ static void primary_render_home_content(lv_obj_t *parent)
        irrespective of glyph widths or round-screen clipping. The previous
        three independent absolute offsets separated logo and text. */
     lv_obj_t *brand_row=lv_obj_create(parent);
-    lv_obj_set_size(brand_row,258,88);
-    lv_obj_align(brand_row,LV_ALIGN_TOP_MID,0,50);
+    lv_obj_set_size(brand_row,232,88);
+    lv_obj_align(brand_row,LV_ALIGN_TOP_MID,0,47);
     lv_obj_set_style_bg_opa(brand_row,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(brand_row,0,0);
     lv_obj_set_style_shadow_width(brand_row,0,0);
     lv_obj_set_style_pad_all(brand_row,0,0);
-    lv_obj_set_style_pad_column(brand_row,3,0);
     lv_obj_remove_flag(brand_row,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(brand_row,LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(brand_row,LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(brand_row,LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+    /* Explicit pixel anchors eliminate flex gaps on the round AMOLED. */
     /* The exact user-supplied LyricFlash icon, downsampled for the round
        AMOLED, not another hand-drawn cloud/bolt approximation. */
     lv_obj_t *mark=lv_obj_create(brand_row);
     lv_obj_set_size(mark,84,84);
+    lv_obj_set_pos(mark,4,2);
     lv_obj_set_style_bg_opa(mark,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(mark,0,0);
     lv_obj_set_style_pad_all(mark,0,0);
@@ -1248,6 +1258,7 @@ static void primary_render_home_content(lv_obj_t *parent)
        Compact vertical flex keeps both words within the round display. */
     lv_obj_t *wordmark_col=lv_obj_create(brand_row);
     lv_obj_set_size(wordmark_col,144,84);
+    lv_obj_set_pos(wordmark_col,88,2); /* Actual icon and text nearly touch */
     lv_obj_set_style_bg_opa(wordmark_col,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(wordmark_col,0,0);
     lv_obj_set_style_pad_all(wordmark_col,0,0);
@@ -1273,17 +1284,17 @@ static void primary_render_home_content(lv_obj_t *parent)
                                &lv_font_montserrat_16,0x9ACFEA);
     /* Static concentric rings give the circular AMOLED a device-player
      * look without the continuous redraw cost of pulsing gradients. */
-    (void)home_decor_ring(parent,216,0x163C65);
-    (void)home_decor_ring(parent,202,0x23578D);
+    (void)home_decor_ring(parent,200,0x163C65);
+    (void)home_decor_ring(parent,184,0x23578D);
     home_scan_button=lv_button_create(parent);
-    lv_obj_set_size(home_scan_button,170,170);
-    lv_obj_align(home_scan_button,LV_ALIGN_CENTER,0,16);
+    lv_obj_set_size(home_scan_button,154,154);
+    lv_obj_align(home_scan_button,LV_ALIGN_CENTER,0,LF_HOME_PLAYER_CENTER_Y);
     lv_obj_set_style_radius(home_scan_button,LV_RADIUS_CIRCLE,0);
     lv_obj_set_style_bg_color(home_scan_button,lv_color_hex(0x2884EA),0);
     lv_obj_set_style_bg_opa(home_scan_button,LV_OPA_COVER,0);
     lv_obj_set_style_bg_color(home_scan_button,lv_color_hex(0xFFD24A),LV_STATE_PRESSED);
     /* Animated feedback without a continuously running full-screen effect:
-       press grows the 184px button and warms its color, release eases back. */
+       press grows the 154px button and warms its color, release eases back. */
     static const lv_style_prop_t press_props[]={
         LV_STYLE_BG_COLOR,LV_STYLE_TRANSFORM_WIDTH,
         LV_STYLE_TRANSFORM_HEIGHT,LV_STYLE_BORDER_COLOR,0};
@@ -1297,8 +1308,8 @@ static void primary_render_home_content(lv_obj_t *parent)
                                     lv_anim_path_ease_out,160,50,NULL);
         lv_style_init(&press_style);
         lv_style_set_transition(&press_style,&press_enter);
-        lv_style_set_transform_width(&press_style,24);
-        lv_style_set_transform_height(&press_style,24);
+        lv_style_set_transform_width(&press_style,12);
+        lv_style_set_transform_height(&press_style,12);
         lv_style_set_bg_color(&press_style,lv_color_hex(0xFFD24A));
         lv_style_set_border_color(&press_style,lv_color_hex(0xFFFFFF));
         lv_style_init(&release_style);
@@ -2952,6 +2963,25 @@ static void on_tick(lv_timer_t *timer)
     atomic_store(&ui_last_tick_ms,(uint32_t)current);
     atomic_store(&ui_last_page,(uint32_t)page);
     if(primary_pager && !timed_overlay)primary_pager_watchdog(current);
+    /* Never start a deferred microphone capture during touch, swipe or sleep. */
+    if(home_scan_armed){
+        if(page!=0 || asleep || nav_transition_active || nav_queued){
+            home_scan_armed=false;
+            home_scan_released_ms=0;
+        }else if(ui_pointer_is_down()){
+            home_scan_released_ms=0;
+        }else if(!home_scan_released_ms){
+            home_scan_released_ms=current;
+        }else if(current-home_scan_released_ms>=LF_HOME_SCAN_SETTLE_MS){
+            home_scan_armed=false;
+            home_scan_released_ms=0;
+            if(!lf_recog_start()){
+                home_warning="Scanner unavailable - try again";
+                home_warning_until_ms=current+4500U;
+            }
+            home_refresh(current);
+        }
+    }
     if (nav_transition_active) return; /* No UI activity until reveal completes. */
     /* Manual song identification continues after microphone capture,
        including AudD response and lyric lookup. Preserve the OLED until
@@ -3018,7 +3048,7 @@ static void on_tick(lv_timer_t *timer)
     /* UI-timer retry is independent of Home's 750ms text refresh and
        stale touch_held. Even if the first async request loses a race,
        the song reopens when the physical finger is actually released. */
-    if(page==0 && !auto_open_pending && !auto_open_transition &&
+    if(page==0 && !home_scan_armed && !auto_open_pending && !auto_open_transition &&
        current-auto_open_poll_ms>=200){
         auto_open_poll_ms=current;
         lf_recog_snapshot_t latest={0};
