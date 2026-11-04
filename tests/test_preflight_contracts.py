@@ -664,3 +664,20 @@ require('lv_obj_delete_async(old_screen);' in ui and
         'timed_rows[4]' in ui and
         'for(int slot=0;slot<4;slot++)' in ui,
         "0.8.39 retain proven QSPI, pager and redraw-safe 3-row UI")
+
+# Prevent another successful compile from silently dropping restored controls.
+require(all(x in pages["studio"] for x in (
+    'id="selected-battery-icon"', 'id="selected-battery-percent"',
+    'id="selected-date-format"', 'id="selected-weather-visible"',
+    'id="selected-font-style"', 'id="selected-color"',
+    'data-spectrum="1"', "target.dispatchEvent(new Event('input'",
+    "selectedPart+'_color'", 'function selectPart(part)')),
+    "Clock Studio contextual controls or spectrum picker missing")
+require(all(x in ui for x in (
+    'lv_obj_set_scroll_dir(viewport,LV_DIR_VER)',
+    'device_line(content,"IP ADDRESS"',
+    'device_line(content,"WEB ADDRESS"',
+    'device_line(content,"VERSION"',
+    'lv_obj_set_size(slider,242,38)',
+    'lv_obj_set_style_pad_all(slider,21,LV_PART_KNOB)')),
+    "Device scroll, network/version details or brightness touch target regressed")
