@@ -87,6 +87,21 @@ const runtime=new Function("document","fetch","setInterval",
    "Traditional serif face must differ from Retro 8");
  assert.notEqual(fontPreviews[5],fontPreviews[6],
    "Heavy display must differ from rounded geometric digits");
+ /* New font families must produce genuinely distinct SVG preview selections. */
+ const requestedFonts=["Kablammo","Mystery Quest","Moirai One","Rampart One",
+  "Hanalei","Bitcount Grid Double","Iceberg","Montserrat","Sancreek",
+  "Modak","Alumni Sans Collegiate One","Honk","Nabla"];
+ const newFontPreviews=[];
+ for(let i=0;i<requestedFonts.length;i++){
+  el("font_style").value=String(24+i);
+  el("font_style").dispatch("input");
+  const svg=el("clock-preview").innerHTML;
+  assert(svg.includes(requestedFonts[i]),"Missing font in preview: "+requestedFonts[i]);
+  newFontPreviews.push(svg);
+ }
+ assert.equal(new Set(newFontPreviews).size,requestedFonts.length,
+  "Requested font choices are not distinguishable in Clock Studio preview");
+ el("font_style").value="0";el("font_style").dispatch("input");
  el("font_size").value="0";el("font_size").dispatch("input");
  const smallestTime=el("clock-preview").innerHTML;
  el("font_size").value="200";el("font_size").dispatch("input");
