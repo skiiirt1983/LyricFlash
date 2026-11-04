@@ -30,6 +30,9 @@ FONT_SOURCES = (
     ("alumni_sans_collegiate_one", "Alumni Sans Collegiate One", "ofl/alumnisanscollegiateone/AlumniSansCollegiateOne-Regular.ttf"),
     ("honk", "Honk", "ofl/honk/Honk[MORF,SHLN].ttf"),
     ("nabla", "Nabla", "ofl/nabla/Nabla[EDPT,EHLT].ttf"),
+    ("carlito", "Carlito (Calibri-like)", "ofl/carlito/Carlito-Regular.ttf"),
+    ("tinos", "Tinos (Times New Roman-like)", "ofl/tinos/Tinos-Regular.ttf"),
+    ("asap", "Asap (Trebuchet-like)", "ofl/asap/Asap[wdth,wght].ttf"),
 )
 # A clock does not need the entire Unicode corpus. Keep OTA dual-slot safe.
 GLYPHS = "0123456789: AMP-"
