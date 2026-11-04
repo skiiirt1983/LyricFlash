@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/private-0.8.61-webui-clock-studio-database
+      - feature/private-0.8.62-context-clock-studio
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
