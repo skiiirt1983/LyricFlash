@@ -2534,7 +2534,7 @@ static int primary_pager_target(int32_t x)
     if(target<0)target=0;
     if(target>2)target=2;
     int32_t displacement=x-primary_pager_origin*466;
-    if(target==primary_pager_origin && abs(displacement)>=93)
+    if(target==primary_pager_origin && abs(displacement)>=55)
         target=primary_pager_origin+(displacement>0?1:-1);
     if(target<0)target=0;
     if(target>2)target=2;
@@ -2565,7 +2565,7 @@ static void primary_pager_watchdog(uint64_t current)
             atomic_fetch_add(&pager_forced_snap_count,1);
         }
     }else if((pager_scrolling || abs(x-primary_pager_current*466)>4) &&
-             current-primary_pager_last_move_ms>110){
+             current-primary_pager_last_move_ms>75){
         int target=primary_pager_target(x);
         if(abs(x-target*466)<=2)primary_pager_commit(target);
         else primary_pager_start_snap(target);
