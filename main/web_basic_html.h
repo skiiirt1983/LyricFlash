@@ -442,7 +442,7 @@ static const char lf_basic_settings_html[] =
 "const tracking=[0,3,1,4,1][style]||0;\n"
 "const px=Math.round((style>=24?72:48)*(96+fs*416/200)/256);\n"
 "const googleFontFamily={24:'Kablammo',25:'Mystery Quest',26:'Moirai One',27:'Rampart One',28:'Hanalei',29:'Bitcount Grid Double',30:'Iceberg',31:'Montserrat',32:'Sancreek',33:'Modak',34:'Alumni Sans Collegiate One',35:'Honk',36:'Nabla'};\n"
-"const fontFamily=googleFontFamily[style]?('\''+googleFontFamily[style]+'\',Arial,system-ui'):(['system-ui,Arial','monospace','monospace','Georgia,serif','Montserrat,Arial,system-ui'][style]||'system-ui');\n"
+"const fontFamily=googleFontFamily[style]?(googleFontFamily[style]+',Arial,system-ui'):( ['system-ui,Arial','monospace','monospace','Georgia,serif','Montserrat,Arial,system-ui'][style]||'system-ui');\n"
 "const weight=style===0?850:style===2?800:style===3?700:650;\n"
 "const stops=mode===2?[[0,a],[.333,b],[.667,c],[1,a]]:mode===1?[[0,a],[.5,b],[1,a]]:[[0,a],[1,a]];\n"
 "svg+='<defs><linearGradient id=\"basic-gradient\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">'+stops.map(s=>'<stop offset=\"'+s[0]+'\" stop-color=\"'+s[1]+'\"/>').join('')+'</linearGradient></defs><circle cx=\"233\" cy=\"233\" r=\"191\" stroke=\"'+(mode===0?a:'url(#basic-gradient)')+'\" stroke-width=\"12\" fill=\"none\"/>';\n"
