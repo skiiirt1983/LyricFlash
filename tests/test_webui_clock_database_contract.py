@@ -33,7 +33,7 @@ for name in ('Cabin Bold','Comic Neue','Noto Serif Display','Go Mono'):
 assert 'families!==7' in basic
 assert "'date',profile.date_x,profile.date_y" in basic
 assert "if(f.show_percent)" in basic
-assert "faceProfiles[activeFace][part+'_x']" in basic
+assert "face[part+'_x']=xx" in basic
 assert "readProfile();updateFaceControls();syncBasicFromFace();render();" in basic
 assert 'id="song-start"' not in device
 assert 'id="song-stop"' not in device
@@ -62,8 +62,8 @@ for prop in ("face_battery_size[6]","face_show_percent[6]",
     assert prop in hdr
 for key in ('"f%ubs"','"f%upc"','"f%udx"','"f%udy"','"f%udz"'):
     assert key in settings,key
-assert 'number_in_range(root,"date_size",0,200' in network
-assert 'number_in_range(root,"battery_size",0,200' in network
+assert 'number_in_range(p,"date_size",0,200' in network
+assert 'number_in_range(p,"battery_size",0,200' in network
 assert 'handle_song_database(httpd_req_t *req)' in network
 assert '{.uri="/api/song-database",.method=HTTP_GET,.handler=handle_song_database}' in network
 assert "nvs_entry_find(" in history
