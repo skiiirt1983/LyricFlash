@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""0.8.74: no offscreen fourth page at Settings; swipe never triggers screen timeout."""
+from pathlib import Path
+ui=(Path(__file__).resolve().parents[1]/"main/ui.c").read_text()
+commit=ui.split("static void primary_pager_commit(int index)\n{",1)[1].split("/* Start EXACTLY one ease-out snap",1)[0]
+create=ui.split("static void primary_pager_create(int target_index)\n{",1)[1].split("static void primary_pager_enter",1)[0]
+scroll=ui.split("static void primary_pager_scroll_event(lv_event_t *e)\n{",1)[1].split("static lv_obj_t *primary_page_create",1)[0]
+sleep=ui.split("static void sleep_display(void)\n{",1)[1].split("static void on_tick",1)[0]
+tick=ui.split("static void on_tick(lv_timer_t *timer)\n{",1)[1].split("/* Only the active Rolex-style",1)[0]
+assert "index==0 ? LV_DIR_LEFT : index==2 ? LV_DIR_RIGHT : LV_DIR_HOR" in commit
+assert "lv_obj_set_scroll_dir(primary_pager," in commit
+assert "lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_ELASTIC);" in create
+assert "lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_CHAIN_HOR);" in create
+assert "lv_obj_set_scroll_dir(primary_pager,LV_DIR_HOR);" in create
+assert "lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_MOMENTUM);" in create
+assert scroll.count("activity();")>=3, "Physical and animated pager movement must reset inactivity"
+assert "pager_scrolling ||" in sleep and "primary_pager_snapping || nav_transition_active)return;" in sleep
+assert "!pager_scrolling && !primary_pager_snapping && !nav_transition_active &&" in tick
+assert "!asleep && ui_pointer_is_down()" in tick
+assert "lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_TRANSP,LV_STATE_PRESSED);" in ui
+assert "wake_cleanup_queued" in ui
+assert "lv_timer_resume(clock_sweep_timer);" in ui
+print("PASS: pager edge limiting and scroll activity preserve touch wake and avoid mid-swipe timeout")

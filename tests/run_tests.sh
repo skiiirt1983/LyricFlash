@@ -12,6 +12,7 @@ python3 tests/test_touch_release_blackout_contract.py
 python3 tests/test_wake_release_lifecycle_contract.py
 python3 tests/test_wake_timer_power_contract.py
 python3 tests/test_device_settings_wake_while_scrolling_contract.py
+python3 tests/test_pager_edge_timeout_contract.py
 python3 tests/test_safe_id_baseline_contract.py
 python3 tests/test_home_song_contract.py
 python3 tests/test_recording_visual_contract.py

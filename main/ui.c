@@ -2595,6 +2595,11 @@ static void primary_pager_commit(int index)
     primary_pager_snap_to=index;
     primary_pager_snapping=false;
     pager_scrolling=false;
+    /* The rightmost Settings and leftmost Clock have no additional page.
+       Disable outward finger drags at the edges; Home permits both ways.
+       This avoids exposing stale/unpainted panel pixels beyond Settings. */
+    if(primary_pager)lv_obj_set_scroll_dir(primary_pager,
+        index==0 ? LV_DIR_LEFT : index==2 ? LV_DIR_RIGHT : LV_DIR_HOR);
     page=(index==0)?6:(index==1)?0:2;
     last_power_refresh_ms=0;
     clock_last_refresh=0;
@@ -2690,6 +2695,7 @@ static void primary_pager_scroll_event(lv_event_t *e)
         }
         pager_scrolling=true;
         primary_pager_last_move_ms=now_ms();
+        activity(); /* A gesture in progress is never idle/screen-off. */
         lv_indev_t *indev=lv_indev_active();
         if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED){
             primary_pager_snapping=false; /* Finger interrupts existing snap. */
@@ -2699,6 +2705,7 @@ static void primary_pager_scroll_event(lv_event_t *e)
     }
     if(code==LV_EVENT_SCROLL){
         primary_pager_last_move_ms=now_ms();
+        activity();
         return;
     }
     if(code!=LV_EVENT_SCROLL_END)return;
@@ -2716,6 +2723,7 @@ static void primary_pager_scroll_event(lv_event_t *e)
     /* Do not start a second LVGL scroll animation inside SCROLL_END.
        The existing 50 ms watchdog performs one snap after finger-up. */
     primary_pager_last_move_ms=now_ms();
+    activity();
 }
 static lv_obj_t *primary_page_create(lv_obj_t *pager,int index)
 {
@@ -2785,6 +2793,9 @@ static void primary_pager_create(int target_index)
     lv_obj_set_scroll_snap_x(primary_pager,LV_SCROLL_SNAP_NONE);
     lv_obj_set_scrollbar_mode(primary_pager,LV_SCROLLBAR_MODE_OFF);
     lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_ELASTIC);
+    /* At either end there is no fourth page. Do not forward an outward
+       horizontal swipe to the root (or another nested scrollable widget). */
+    lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
     /* One controlled snap on release; disable competing momentum. */
     lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_SCROLLABLE);
@@ -3217,7 +3228,8 @@ static void sleep_display(void)
 {
     /* Screen timeout must never conceal a panel being actively touched,
        including nested Device Settings scroll/slider event targets. */
-    if(asleep || ui_pointer_is_down())return;
+    if(asleep || ui_pointer_is_down() || pager_scrolling ||
+       primary_pager_snapping || nav_transition_active)return;
     /* Preserve the current page, clock pointers and button tree. A single
        black touch-capture child handles wake without screen reconstruction. */
     asleep=true;
@@ -3542,7 +3554,10 @@ static void on_tick(lv_timer_t *timer)
     /* Preserve the live song and alignment modal during calibration.
        The old paused-song sleep blacked out controls without restoration. */
     if(page==1 && timed_lyrics_mode)last_activity_ms=current;
-    if (prefs->sleep_seconds && !(page == 1 && timed_lyrics_mode) && page != 14 && page != 15 && !ui_pointer_is_down() && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
+    if (prefs->sleep_seconds && !(page == 1 && timed_lyrics_mode) &&
+        page != 14 && page != 15 && !ui_pointer_is_down() &&
+        !pager_scrolling && !primary_pager_snapping && !nav_transition_active &&
+        current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
         sleep_display();
         return;
     }
