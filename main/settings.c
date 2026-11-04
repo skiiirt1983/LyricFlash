@@ -59,7 +59,10 @@ void lf_settings_defaults(lf_settings_t *s)
         s->face_date_x[i]=date_x[i];s->face_date_y[i]=date_y[i];
         s->face_date_size[i]=i==5?70:60;
         s->face_background[i]=b[i];s->face_foreground[i]=f[i];
-        s->face_accent[i]=a[i];s->face_show_date[i]=1;
+        s->face_accent[i]=a[i];
+        s->face_time_color[i]=f[i];s->face_battery_color[i]=a[i];
+        s->face_weather_color[i]=f[i];s->face_date_color[i]=f[i];
+        s->face_show_date[i]=1;
         s->face_show_seconds[i]=1;s->face_show_battery[i]=1;s->face_24h[i]=0;
     }
 }
@@ -137,6 +140,12 @@ esp_err_t lf_settings_load(lf_settings_t *s)
         snprintf(key,sizeof key,"f%ubg",i);(void)nvs_get_u32(h,key,&s->face_background[i]);
         snprintf(key,sizeof key,"f%ufg",i);(void)nvs_get_u32(h,key,&s->face_foreground[i]);
         snprintf(key,sizeof key,"f%uac",i);(void)nvs_get_u32(h,key,&s->face_accent[i]);
+        if(schema>=16){
+            snprintf(key,sizeof key,"f%utc",i);(void)nvs_get_u32(h,key,&s->face_time_color[i]);
+            snprintf(key,sizeof key,"f%ubc",i);(void)nvs_get_u32(h,key,&s->face_battery_color[i]);
+            snprintf(key,sizeof key,"f%uwc",i);(void)nvs_get_u32(h,key,&s->face_weather_color[i]);
+            snprintf(key,sizeof key,"f%udc",i);(void)nvs_get_u32(h,key,&s->face_date_color[i]);
+        }
         snprintf(key,sizeof key,"f%udt",i);(void)nvs_get_u8(h,key,&s->face_show_date[i]);
         snprintf(key,sizeof key,"f%usc",i);(void)nvs_get_u8(h,key,&s->face_show_seconds[i]);
         snprintf(key,sizeof key,"f%ubt",i);(void)nvs_get_u8(h,key,&s->face_show_battery[i]);
@@ -164,6 +173,16 @@ esp_err_t lf_settings_load(lf_settings_t *s)
         s->face_date_y[5]=s->basic_date_y;
     }
 
+    if(schema<16){
+        /* Migrating older releases must inherit each face's saved colours,
+           rather than resetting the user's custom palette. */
+        for(unsigned i=0;i<6;i++){
+            s->face_time_color[i]=s->face_foreground[i];
+            s->face_battery_color[i]=s->face_accent[i];
+            s->face_weather_color[i]=s->face_foreground[i];
+            s->face_date_color[i]=s->face_foreground[i];
+        }
+    }
     if(schema<15){
         s->face_show_weather[5]=s->basic_weather;
         s->face_weather_x[5]=s->basic_weather_x;
@@ -286,6 +305,10 @@ esp_err_t lf_settings_save(const lf_settings_t *s)
         snprintf(key,sizeof key,"f%ubg",i);TRY_NVS(nvs_set_u32(h,key,s->face_background[i]));
         snprintf(key,sizeof key,"f%ufg",i);TRY_NVS(nvs_set_u32(h,key,s->face_foreground[i]));
         snprintf(key,sizeof key,"f%uac",i);TRY_NVS(nvs_set_u32(h,key,s->face_accent[i]));
+        snprintf(key,sizeof key,"f%utc",i);TRY_NVS(nvs_set_u32(h,key,s->face_time_color[i]));
+        snprintf(key,sizeof key,"f%ubc",i);TRY_NVS(nvs_set_u32(h,key,s->face_battery_color[i]));
+        snprintf(key,sizeof key,"f%uwc",i);TRY_NVS(nvs_set_u32(h,key,s->face_weather_color[i]));
+        snprintf(key,sizeof key,"f%udc",i);TRY_NVS(nvs_set_u32(h,key,s->face_date_color[i]));
         snprintf(key,sizeof key,"f%udt",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_date[i]));
         snprintf(key,sizeof key,"f%usc",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_seconds[i]));
         snprintf(key,sizeof key,"f%ubt",i);TRY_NVS(nvs_set_u8(h,key,s->face_show_battery[i]));
