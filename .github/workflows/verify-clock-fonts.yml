@@ -27,7 +27,7 @@ jobs:
           node-version: '24'
       - name: Install pinned LVGL font converter
         run: npm install --global lv_font_conv@1.5.3
-      - name: Download 13 OFL sources and generate compact numeric LVGL fonts
+      - name: Download 16 OFL sources (13 requested, 3 compatible replacements)
         run: python3 tools/generate_clock_fonts.py
       - name: Verify font coverage and generated sizes
         run: |
@@ -35,9 +35,9 @@ jobs:
           import json
           from pathlib import Path
           manifest=json.loads(Path('main/generated_clock_fonts/manifest.json').read_text())
-          assert len(manifest)==13
+          assert len(manifest)==16
           assert all(x['size_bytes']>1000 and x['size_bytes']<2000000 for x in manifest)
-          print('PASS: 13 converted families validated')
+          print('PASS: 16 converted families validated')
           PY
       - name: ESP-IDF ESP32-S3 compile, do not publish firmware
         uses: espressif/esp-idf-ci-action@v1
