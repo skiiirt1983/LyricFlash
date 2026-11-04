@@ -2360,9 +2360,14 @@ static void on_timeout(lv_event_t *e)
     char s[32];
     if (prefs->sleep_seconds) snprintf(s, sizeof s, "Screen timeout  %us", prefs->sleep_seconds);
     else snprintf(s, sizeof s, "Screen timeout  Never");
-    if(timeout_text)lv_label_set_text(timeout_text, s);
+    /* Update the tapped control in place; rebuilding the page here destroys
+       the active LVGL event target and causes visible menu jumps. */
+    lv_obj_t *target = lv_event_get_target(e);
+    if (target && lv_obj_get_child_count(target) > 0) {
+        lv_obj_t *caption = lv_obj_get_child(target, 0);
+        lv_label_set_text(caption, s);
+    }
     save_settings();
-    build_device_settings();
 }
 static void on_color(lv_event_t *e)
 {
