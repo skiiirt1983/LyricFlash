@@ -7,5 +7,5 @@
  * Working 0.8.69/0.8.68/0.8.67 remain immutable; experimental 0.8.70 stays separate. */
 #define LF_VERSION "0.8.71-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.71"
-/* Wake-release safety hotfix; preserve the 0.8.69 audio/UI baseline.
- * Hardware wake/release testing is REQUIRED before considering this stable. */
+/* Wake-release safety preflight passed. Keep the 0.8.69 audio/UI baseline.
+ * Hardware wake/release testing is REQUIRED before accepting this release. */
