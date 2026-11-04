@@ -1,4 +1,4 @@
-name: LyricFlash Private Alpha 0.8.65 - ESP32-S3 Build (version contracts aligned)
+name: LyricFlash Private Alpha 0.8.65 - ESP32-S3 Build
 
 on:
   workflow_dispatch:
