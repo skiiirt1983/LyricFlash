@@ -30,21 +30,22 @@ assert '"api_token"' in src and 'nvs_set_str' in src and 'nvs_erase_key' in src
 assert 'lf_scan_token_valid' in aud
 assert 'printf("%s",token)' not in src and 'ESP_LOG_BUFFER_HEX' not in src
 assert 'audio_uploaded' in net and 'audio_saved' in net
-for route in ('/api/recognize','/api/recognize/token',
-              '/api/recognize/start','/api/recognize/stop'):
+for route in ('/api/recognize','/api/recognize/token'):
     assert route in net and route in html,route
+for route in ('/api/recognize/start','/api/recognize/stop'):
+    assert route in net,route  # physical scan API retained, removed from browser UI
 assert 'cJSON_AddStringToObject(reply,"title",s.title)' in net
 assert 'cJSON_AddStringToObject(reply,"artist",s.artist)' in net
 assert 'cJSON_AddBoolToObject(reply,"token_configured",lf_recog_has_token())' in net
 assert 'cJSON_AddStringToObject(reply,"api_token",' not in net
 assert "if(!manual_audio_header(req))" in net
-assert 'cfg.max_uri_handlers=27' in net
+assert 'cfg.max_uri_handlers=28' in net
 assert 'lf_recog_busy()' in net
 assert "lf_recog_start()" in net
 assert "lf_recog_stop()" in net
 assert 'id=\"song-token\"' in html.replace(r'\"','"')
-assert 'song-start' in html and 'song-stop' in html
-assert 'if(!confirm(' in html and 'AudD' in html
+assert 'id=\\"song-start\\"' not in html and 'id=\\"song-stop\\"' not in html
+assert 'AudD' in html and 'song-save' in html and 'song-clear' in html
 with tempfile.TemporaryDirectory(prefix="lf_song_wav_") as tmp:
     out=Path(tmp)/"wav"
     subprocess.run(["cc","-std=c11","-Wall","-Wextra","-Werror","-pedantic",
