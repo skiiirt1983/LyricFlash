@@ -286,7 +286,7 @@ static const char lf_basic_settings_html[] =
 "function tickMarks(c,r=185){let lines='';for(let i=0;i<60;i++){let a=(i*6-90)*Math.PI/180,m=i%5===0,inner=m?r-18:r-5;lines+='<line x1=\"'+(233+Math.cos(a)*inner)+'\" y1=\"'+(233+Math.sin(a)*inner)+'\" x2=\"'+(233+Math.cos(a)*r)+'\" y2=\"'+(233+Math.sin(a)*r)+'\" stroke=\"'+c+'\" stroke-width=\"'+(m?5:2)+'\"/>'}return lines;}\n"
 "function analogHands(f,minutes,seconds,thin=false){let hour=(new Date().getHours()%12)*30+minutes*.5,min=minutes*6,sec=seconds*6;\n"
 " let hand=(a,len,w,col)=>{let theta=(a-90)*Math.PI/180;return '<line x1=\"233\" y1=\"233\" x2=\"'+(233+Math.cos(theta)*len)+'\" y2=\"'+(233+Math.sin(theta)*len)+'\" stroke=\"'+col+'\" stroke-linecap=\"round\" stroke-width=\"'+w+'\"/>'};\n"
-" return hand(hour,94,thin?5:11,f.time_color)+hand(min,133,thin?3:7,f.foreground)+(f.show_seconds?hand(sec,164,thin?1:3,f.accent):'')+'<circle cx=\"233\" cy=\"233\" r=\"10\" fill=\"'+f.foreground+'\"/>';}\n"
+" return hand(hour,94,thin?5:11,f.time_color)+hand(min,133,thin?3:7,f.time_color)+(f.show_seconds?hand(sec,164,thin?1:3,f.accent):'')+'<circle cx=\"233\" cy=\"233\" r=\"10\" fill=\"'+f.time_color+'\"/>';}\n"
 "/* The preview draws the SAME original numeral categories as the device.\n"
 "   Digital 7 is segmented; Retro 8 is pixelated; Vintage has serif strokes. */\n"
 "const glyphRows=[[14,17,19,21,25,17,14],[4,12,4,4,4,4,14],\n"
