@@ -392,7 +392,8 @@ require('static lv_obj_t *primary_pager;' in ui and
         'LV_EVENT_SCROLL_BEGIN' in pager_impl and
         'LV_EVENT_SCROLL_END' in pager_impl and
         'primary_pager_start_snap(target);' in pager_impl and
-        'abs(displacement)>=93' in ui and
+        'abs(displacement)>=55' in ui and
+        'current-primary_pager_last_move_ms>75' in ui and
         'lv_obj_set_scroll_dir(primary_pager,LV_DIR_HOR);' in pager_scene and
         'LV_SCROLL_SNAP_NONE' in pager_scene and
         'lv_obj_scroll_to_x(primary_pager,target_index*466,LV_ANIM_OFF);' in pager_scene and
