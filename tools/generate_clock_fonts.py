@@ -67,7 +67,7 @@ def main() -> None:
             "lv_font_conv", "--font", str(temp),
             "--symbols", GLYPHS, "--size", str(SIZE),
             "--bpp", str(BPP), "--format", "lvgl",
-            "--lv-font-name", font_name, "--no-compress",
+            "--lv-font-name", font_name, "--lv-include", "lvgl.h", "--no-compress",
             "-o", str(output),
         ]
         # Color fonts (Honk/Nabla) are flattened to grayscale alpha masks
