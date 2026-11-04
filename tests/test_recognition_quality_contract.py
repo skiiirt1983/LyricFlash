@@ -41,8 +41,10 @@ for field in ('mic1_rms','mic2_rms','audio_measured_frames',
 assert 'esp_codec_dev_set_in_channel_gain(codec,0x03,27.0f)' in recog
 assert 'https://api.audd.io/' in recog and 'lf_recog_start(void)' in recog
 assert 'lf_recog_has_token()' in recog
-assert 'Open complete scan diagnostics (JSON)' in page
-assert "'Scan audio quality:" in page and "'AudD HTTP '" in page
+assert 'id=\\"maintenance-view\\"' in page
+assert 'id=\\"maintenance-diagnostics\\" hidden' in page
+assert 'id=\\"diagnostics\\"' in page and 'mic-pcm-result' in page
+assert '/api/diagnostics' in page and 'AudD' in page
 assert 'cJSON_AddStringToObject(reply,"api_token",' not in net
 assert 'cJSON_AddStringToObject(reply,"wav",' not in net
 print("PASS: 0.8.41 measured stereo AudD scan levels, HTTP status, privacy and Web UI")
