@@ -7,3 +7,5 @@
  * Hardware testing and the previous 0.8.62 fallback are retained. */
 #define LF_VERSION "0.8.63-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.63"
+/* Release candidate is gated by the full source/native preflight; physical
+ * validation remains pending after successful firmware packaging. */
