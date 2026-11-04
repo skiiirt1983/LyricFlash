@@ -194,6 +194,15 @@ static atomic_uint ui_last_page;
 static atomic_uint ui_nav_phase;
 static atomic_uint auto_open_recovery_count;
 static atomic_uint ui_lyrics_scene_phase; /* 0 idle, 1..5 building, 6 committed */
+/* Measure wake performance after different off durations without adding
+   any screen-refresh work to the critical wake path. */
+static atomic_uint screen_off_started_ms;
+static atomic_uint last_screen_off_ms;
+static atomic_uint wake_count;
+static atomic_uint wake_started_ms;
+static atomic_uint wake_frame_pending_ms;
+static atomic_uint wake_frame_ready_ms;
+static atomic_uint wake_overlay_clear_ms;
 
 void lf_ui_display_stats(lf_ui_display_stats_t *out)
 {
@@ -223,6 +232,10 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     const uint32_t tick=atomic_load(&ui_last_tick_ms);
     out->ui_tick_age_ms=tick?current-tick:UINT32_MAX;
     out->ui_page=atomic_load(&ui_last_page);
+    out->last_screen_off_ms=atomic_load(&last_screen_off_ms);
+    out->wake_count=atomic_load(&wake_count);
+    out->last_wake_frame_ready_ms=atomic_load(&wake_frame_ready_ms);
+    out->last_wake_overlay_clear_ms=atomic_load(&wake_overlay_clear_ms);
     out->ui_navigation_phase=atomic_load(&ui_nav_phase);
     out->lyrics_auto_open_queued=atomic_load(&auto_open_queued_count);
     out->lyrics_auto_open_completed=atomic_load(&auto_open_completed_count);
@@ -249,6 +262,9 @@ static void display_refresh_ready_event(lv_event_t *e)
 {
     (void)e;
     atomic_fetch_add(&ui_refresh_ready_count,1);
+    const uint32_t started=atomic_exchange(&wake_frame_pending_ms,0);
+    if(started)atomic_store(&wake_frame_ready_ms,
+                              (uint32_t)(esp_timer_get_time()/1000LL)-started);
     if(render_cycle_start_us) {
         int64_t elapsed=esp_timer_get_time()-render_cycle_start_us;
         render_cycle_start_us=0;
@@ -3026,6 +3042,9 @@ static void wake_finish_async(void *arg)
     lv_obj_t *cover=sleep_overlay;
     sleep_overlay=NULL;
     if(cover)lv_obj_delete(cover);
+    const uint32_t started=atomic_load(&wake_started_ms);
+    if(started)atomic_store(&wake_overlay_clear_ms,
+                            (uint32_t)now_ms()-started);
     if(primary_pager && page==0 && home_record_layer){
         lf_recog_snapshot_t song={0};lf_recog_snapshot(&song);
         if(song.state!=LF_RECOG_CAPTURE && song.state!=LF_RECOG_UPLOAD &&
@@ -3038,6 +3057,12 @@ static void on_wake(lv_event_t *e)
 {
     (void)e;
     if(!asleep)return;
+    const uint32_t current=(uint32_t)now_ms();
+    const uint32_t started=atomic_load(&screen_off_started_ms);
+    if(started)atomic_store(&last_screen_off_ms,current-started);
+    atomic_fetch_add(&wake_count,1);
+    atomic_store(&wake_started_ms,current);
+    atomic_store(&wake_frame_pending_ms,current);
     asleep=false;
     activity();
     apply_brightness();
@@ -3075,6 +3100,7 @@ static void sleep_display(void)
     /* Preserve the current page, clock pointers and button tree. A single
        black touch-capture child handles wake without screen reconstruction. */
     asleep=true;
+    atomic_store(&screen_off_started_ms,(uint32_t)now_ms());
     touch_held=false;
     gesture_origin_valid=false;
     gesture_indev=NULL;
