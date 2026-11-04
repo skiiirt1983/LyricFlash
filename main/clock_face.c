@@ -238,7 +238,9 @@ static void add_hour_markers(lv_obj_t *parent)
 static void create_hands(lv_obj_t *parent, bool diver)
 {
     int widths[3] = {diver ? 11 : 5, diver ? 7 : 3, diver ? 2 : 1};
-    uint32_t colours[3] = {colour_fg(),colour_fg(),colour_ac()};
+    uint32_t colours[3] = {clock_settings->face_time_color[current_style],
+        clock_settings->face_time_color[current_style],
+        clock_settings->face_time_color[current_style]};
     for (int i = 0; i < 3; i++) {
         hand_points[i][0] = (lv_point_precise_t){CC, CC};
         hand_points[i][1] = (lv_point_precise_t){CC, CC};
