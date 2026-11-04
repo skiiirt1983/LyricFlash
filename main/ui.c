@@ -3179,7 +3179,11 @@ static void on_wake(lv_event_t *e)
        cover still captures this entire waking gesture. Removing it on the
        press (even via lv_async_call) would invalidate the active input target. */
     if(sleep_overlay){
+        /* A pressed LVGL state can override the default style. Make both
+           states transparent so releasing the waking finger cannot reveal
+           an inherited opaque black cover before asynchronous cleanup. */
         lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_TRANSP,0);
+        lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_TRANSP,LV_STATE_PRESSED);
         invalidate_full_screen();
     }
     touch_held=false;
@@ -3211,7 +3215,9 @@ static void sleep_deep(void)
 }
 static void sleep_display(void)
 {
-    if(asleep)return;
+    /* Screen timeout must never conceal a panel being actively touched,
+       including nested Device Settings scroll/slider event targets. */
+    if(asleep || ui_pointer_is_down())return;
     /* Preserve the current page, clock pointers and button tree. A single
        black touch-capture child handles wake without screen reconstruction. */
     asleep=true;
@@ -3246,6 +3252,11 @@ static void on_tick(lv_timer_t *timer)
     last_ui_tick_ms = current;
     atomic_store(&ui_last_tick_ms,(uint32_t)current);
     atomic_store(&ui_last_page,(uint32_t)page);
+    /* Nested LVGL scrollable children do not always bubble PRESSED to the
+       screen's on_gesture_press() callback. Polling the actual pointer
+       keeps activity fresh on every page, including the device scroller,
+       before nav-transition / overlay early-returns. */
+    if(!asleep && ui_pointer_is_down())last_activity_ms=current;
     if(primary_pager && !timed_overlay)primary_pager_watchdog(current);
     /* Process a confirmed double-tap only after input dispatch and the
        physical release. No overlay mutation or networking in the touch
@@ -3531,7 +3542,7 @@ static void on_tick(lv_timer_t *timer)
     /* Preserve the live song and alignment modal during calibration.
        The old paused-song sleep blacked out controls without restoration. */
     if(page==1 && timed_lyrics_mode)last_activity_ms=current;
-    if (prefs->sleep_seconds && !(page == 1 && timed_lyrics_mode) && page != 14 && page != 15 && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
+    if (prefs->sleep_seconds && !(page == 1 && timed_lyrics_mode) && page != 14 && page != 15 && !ui_pointer_is_down() && current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
         sleep_display();
         return;
     }

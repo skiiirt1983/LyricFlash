@@ -56,9 +56,10 @@ active_version=(root / "main/version.h").read_text()
 # The experimental private builds have separate ESP32-S3 release gates.
 # A successful compile does not prove hardware operation or catalog publication.
 assert any(f'"{ver}"' in active_version for ver in
-           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha","0.8.67-alpha","0.8.68-alpha","0.8.69-alpha","0.8.71-alpha","0.8.72-alpha")), "Unexpected alpha firmware version"
-if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.8.52","0.8.53","0.8.61","0.8.63","0.8.64","0.8.65","0.8.66","0.8.67","0.8.68","0.8.69","0.8.71","0.8.72")):
+           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha","0.8.67-alpha","0.8.68-alpha","0.8.69-alpha","0.8.71-alpha","0.8.72-alpha","0.8.73-alpha")), "Unexpected alpha firmware version"
+if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.8.52","0.8.53","0.8.61","0.8.63","0.8.64","0.8.65","0.8.66","0.8.67","0.8.68","0.8.69","0.8.71","0.8.72","0.8.73")):
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
+    is_73='"0.8.73-alpha"' in active_version
     is_72='"0.8.72-alpha"' in active_version
     is_71='"0.8.71-alpha"' in active_version
     is_69='"0.8.69-alpha"' in active_version
@@ -73,8 +74,9 @@ if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.
     is_52='"0.8.52-alpha"' in active_version
     is_51='"0.8.51-alpha"' in active_version
     is_50='"0.8.50-alpha"' in active_version
-    version="0.8.72" if is_72 else "0.8.71" if is_71 else "0.8.69" if is_69 else "0.8.68" if is_68 else "0.8.67" if is_67 else "0.8.66" if is_66 else "0.8.65" if is_65 else "0.8.64" if is_64 else "0.8.63" if is_63 else "0.8.61" if is_61 else "0.8.53" if is_53 else "0.8.52" if is_52 else "0.8.51" if is_51 else "0.8.50" if is_50 else "0.8.49"
-    expected_branch=("feature/private-0.8.72-sleep-timer-with-wake-fix" if is_72
+    version="0.8.73" if is_73 else "0.8.72" if is_72 else "0.8.71" if is_71 else "0.8.69" if is_69 else "0.8.68" if is_68 else "0.8.67" if is_67 else "0.8.66" if is_66 else "0.8.65" if is_65 else "0.8.64" if is_64 else "0.8.63" if is_63 else "0.8.61" if is_61 else "0.8.53" if is_53 else "0.8.52" if is_52 else "0.8.51" if is_51 else "0.8.50" if is_50 else "0.8.49"
+    expected_branch=("feature/private-0.8.73-device-settings-wake-guard" if is_73
+                      else "feature/private-0.8.72-sleep-timer-with-wake-fix" if is_72
                       else "feature/private-0.8.71-wake-release-reliability" if is_71
                       else "feature/private-0.8.69-waveform-amplitude" if is_69
                       else "feature/private-0.8.68-ota-health-gate" if is_68
