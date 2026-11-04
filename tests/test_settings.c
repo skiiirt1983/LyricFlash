@@ -39,6 +39,10 @@ int main(void)
     initial.line_spacing_px=13;
     initial.face_background[0]=0x445566;
     initial.face_accent[2]=0xF0AC22;
+    initial.face_time_color[2]=0x112233;
+    initial.face_battery_color[2]=0xAABBCC;
+    initial.face_weather_color[2]=0x445566;
+    initial.face_date_color[2]=0x778899;
     initial.face_show_seconds[0]=0;
     initial.face_24h[1]=1;
     initial.face_battery_x[2]=39;
@@ -57,6 +61,11 @@ int main(void)
     assert(next.basic_font_size==200 && next.basic_weather_size==0);
     assert(next.face_background[0]==0x445566);
     assert(next.face_accent[2]==0xF0AC22);
+    assert(next.face_time_color[2]==0x112233);
+    assert(next.face_battery_color[2]==0xAABBCC);
+    assert(next.face_weather_color[2]==0x445566);
+    assert(next.face_date_color[2]==0x778899);
+    assert(next.face_time_color[0]!=next.face_time_color[2]);
     assert(next.face_show_seconds[0]==0 && next.face_24h[1]==1);
     assert(next.face_battery_x[2]==39 && next.face_battery_y[2]==-72);
 
