@@ -9,4 +9,4 @@
 #define LF_VERSION_LABEL "ALPHA 0.8.75"
 /* LVGL low-level scroll checks confirm end flags use opposite sign from
  * finger motion. Preserve 0.8.73 wake guards and all audio/OTA behavior.
- * On-device edge swipes and wake must still be physically validated. */
+ * Source/native preflight passed. Edge-swipes and wake still need hardware validation. */
