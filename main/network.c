@@ -464,6 +464,10 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
         cJSON_AddNumberToObject(p,"background",s.face_background[i]);
         cJSON_AddNumberToObject(p,"foreground",s.face_foreground[i]);
         cJSON_AddNumberToObject(p,"accent",s.face_accent[i]);
+        cJSON_AddNumberToObject(p,"time_color",s.face_time_color[i]);
+        cJSON_AddNumberToObject(p,"battery_color",s.face_battery_color[i]);
+        cJSON_AddNumberToObject(p,"weather_color",s.face_weather_color[i]);
+        cJSON_AddNumberToObject(p,"date_color",s.face_date_color[i]);
         cJSON_AddBoolToObject(p,"show_date",s.face_show_date[i]!=0);
         cJSON_AddBoolToObject(p,"show_seconds",s.face_show_seconds[i]!=0);
         cJSON_AddBoolToObject(p,"show_battery",s.face_show_battery[i]!=0);
@@ -573,6 +577,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         strlen(city->valuestring) <= LF_WEATHER_CITY_MAX;
     const cJSON *profiles=cJSON_GetObjectItemCaseSensitive(root,"face_profiles");
     uint32_t bg_face[6],fg_face[6],ac_face[6];
+    uint32_t time_face[6],battery_face[6],weather_colour_face[6],date_colour_face[6];
     uint8_t dt_face[6],sc_face[6],bt_face[6],hr_face[6];
     int32_t battery_x_face[6],battery_y_face[6];
     int32_t date_x_face[6],date_y_face[6];
@@ -600,6 +605,20 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
             valid=false;break;
         }
         battery_x_face[i]=btx;battery_y_face[i]=bty;
+        /* Optional for older local browser pages: absent fields preserve the
+           independent saved colours rather than overwriting with accents. */
+        int tc=(int)current.face_time_color[i],bc=(int)current.face_battery_color[i];
+        int wc=(int)current.face_weather_color[i],dc=(int)current.face_date_color[i];
+        const cJSON *tf=cJSON_GetObjectItemCaseSensitive(p,"time_color");
+        const cJSON *bf=cJSON_GetObjectItemCaseSensitive(p,"battery_color");
+        const cJSON *wf=cJSON_GetObjectItemCaseSensitive(p,"weather_color");
+        const cJSON *df=cJSON_GetObjectItemCaseSensitive(p,"date_color");
+        if((tf&&!number_in_range(p,"time_color",0,0xFFFFFF,&tc)) ||
+           (bf&&!number_in_range(p,"battery_color",0,0xFFFFFF,&bc)) ||
+           (wf&&!number_in_range(p,"weather_color",0,0xFFFFFF,&wc)) ||
+           (df&&!number_in_range(p,"date_color",0,0xFFFFFF,&dc))){valid=false;break;}
+        time_face[i]=(uint32_t)tc;battery_face[i]=(uint32_t)bc;
+        weather_colour_face[i]=(uint32_t)wc;date_colour_face[i]=(uint32_t)dc;
         /* Optional for older local clients; never reset saved new values. */
         int bsize=current.face_battery_size[i],dsize=current.face_date_size[i];
         int dx=current.face_date_x[i],dy=current.face_date_y[i];
@@ -672,6 +691,10 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     for(int i=0;i<6;i++){
         current.face_background[i]=bg_face[i];current.face_foreground[i]=fg_face[i];
         current.face_accent[i]=ac_face[i];current.face_show_date[i]=dt_face[i];
+        current.face_time_color[i]=time_face[i];
+        current.face_battery_color[i]=battery_face[i];
+        current.face_weather_color[i]=weather_colour_face[i];
+        current.face_date_color[i]=date_colour_face[i];
         current.face_show_seconds[i]=sc_face[i];current.face_show_battery[i]=bt_face[i];
         current.face_24h[i]=hr_face[i];
         current.face_battery_x[i]=battery_x_face[i];
