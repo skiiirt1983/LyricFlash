@@ -61,6 +61,8 @@ static lv_obj_t *timed_overlay; /* removable child of the one LVGL root */
 static lv_obj_t *timed_viewport; /* fixed clipping boundary; never translated */
 static lv_obj_t *timed_scroll_group;
 static lv_timer_t *timed_scroll_timer;
+/* Stop unused 16ms clock sweep while black screen-off cover is active. */
+static lv_timer_t *clock_sweep_timer;
 static int16_t timed_scroll_y=INT16_MIN;
 static uint8_t timed_row_opa[4]={255,255,255,255};
 static lv_obj_t *timed_status;
@@ -3154,6 +3156,11 @@ static void wake_finish_async(void *arg)
             lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
     }
     invalidate_full_screen();
+    /* Resume after deleting the wake cover, not during the active press. */
+    if(clock_sweep_timer){
+        lv_timer_reset(clock_sweep_timer);
+        lv_timer_resume(clock_sweep_timer);
+    }
 }
 static void on_wake(lv_event_t *e)
 {
@@ -3224,6 +3231,8 @@ static void sleep_display(void)
     lv_obj_remove_flag(sleep_overlay,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(sleep_overlay,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(sleep_overlay,on_wake,LV_EVENT_PRESSED,NULL);
+    /* Keep 50ms touch-to-wake live; suspend only idle 16ms clock callbacks. */
+    if(clock_sweep_timer)lv_timer_pause(clock_sweep_timer);
     apply_brightness();
 }
 static void on_tick(lv_timer_t *timer)
@@ -3766,7 +3775,7 @@ bool lf_ui_start(lf_settings_t *s)
         touch=lv_indev_get_next(touch);
     }
     lv_timer_create(on_tick, 50, NULL);
-    lv_timer_create(on_clock_sweep, 16, NULL);
+    clock_sweep_timer=lv_timer_create(on_clock_sweep, 16, NULL);
     esp_lv_adapter_unlock();
     return true;
 }

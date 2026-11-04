@@ -10,6 +10,7 @@ rm -f /tmp/lyricflash_test_ota_health
 python3 tests/test_preflight_contracts.py
 python3 tests/test_touch_release_blackout_contract.py
 python3 tests/test_wake_release_lifecycle_contract.py
+python3 tests/test_wake_timer_power_contract.py
 python3 tests/test_safe_id_baseline_contract.py
 python3 tests/test_home_song_contract.py
 python3 tests/test_recording_visual_contract.py
