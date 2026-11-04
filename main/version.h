@@ -7,5 +7,6 @@
  * Working 0.8.68 and verified 0.8.67 remain published unchanged. */
 #define LF_VERSION "0.8.69-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.69"
-/* Source/native preflight passed. The OTA health gate is isolated;
- * on-device validation remains required after verified firmware packaging. */
+/* Waveform-only source/native regression preflight passed.
+ * The previous 0.8.68 firmware remains unchanged for safe fallback;
+ * physical waveform-height validation remains pending after compilation. */
