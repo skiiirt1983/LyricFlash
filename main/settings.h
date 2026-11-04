@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-#define LF_CONFIG_SCHEMA 15U
+#define LF_CONFIG_SCHEMA 16U
 #define LF_CONFIG_NS "lyric_ui"
 
 typedef struct {
@@ -39,6 +39,12 @@ typedef struct {
     uint32_t face_background[6];
     uint32_t face_foreground[6];
     uint32_t face_accent[6];
+    /* Independently customizable per-face text colours. Time and AM/PM share
+       one colour; Battery icon/% and Weather each have their own. */
+    uint32_t face_time_color[6];
+    uint32_t face_battery_color[6];
+    uint32_t face_weather_color[6];
+    uint32_t face_date_color[6];
     uint8_t face_show_date[6];
     uint8_t face_show_seconds[6];
     uint8_t face_show_battery[6];
