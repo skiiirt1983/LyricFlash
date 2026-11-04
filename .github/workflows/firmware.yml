@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/private-0.8.62-context-clock-studio
+      - feature/private-0.8.63-device-clock-refinement
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
