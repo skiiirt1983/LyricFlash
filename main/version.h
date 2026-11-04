@@ -10,3 +10,4 @@
  * on-contact highlight and 280ms confirmation glow; lyrics timing overlay
  * is 15% opaque. Existing reliable deferred scan cancellation preserved.
  * Build verification does not establish hardware reliability. */
+/* Preflight and safe-ID content gates passed; run one ESP32-S3 release build. */
