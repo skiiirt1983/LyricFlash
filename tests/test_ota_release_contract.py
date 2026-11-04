@@ -60,7 +60,7 @@ assert any(f'"{ver}"' in active_version for ver in
 if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.8.52","0.8.53","0.8.61","0.8.63","0.8.64","0.8.65")):
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
     is_65='"0.8.65-alpha"' in active_version
-    is_64='"0.8.65-alpha"' in active_version
+    is_64='"0.8.64-alpha"' in active_version
     is_63='"0.8.63-alpha"' in active_version
     is_61='"0.8.61-alpha"' in active_version
     is_53='"0.8.53-alpha"' in active_version
