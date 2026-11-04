@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""0.8.55: audio transport stall visibility, stacked logo, lyrics touch semantics."""
+"""0.8.56: audio transport stall visibility, stacked logo, lyrics touch semantics."""
 from pathlib import Path
 r=Path(__file__).resolve().parents[1]
 ui=(r/"main/ui.c").read_text()
 worker=(r/"main/recognition.c").read_text()
 header=(r/"main/recognition.h").read_text()
 network=(r/"main/network.c").read_text()
-assert 'LF_VERSION "0.8.55-alpha"' in (r/"main/version.h").read_text()
+assert 'LF_VERSION "0.8.56-alpha"' in (r/"main/version.h").read_text()
 assert "uint64_t upload_progress_ms;" in header
 assert "result.upload_progress_ms=lf_recog_now_ms();" in worker
 assert "result.upload_bytes_sent+=(uint32_t)written;" in worker
 assert '"upload_progress_age_ms"' in network
 assert "current-song->upload_progress_ms>18000U" in ui
-assert 'home_warning=upload_stalled?"Upload stalled - retry":"Identification timed out";' in ui
+assert 'home_warning=upload_stalled?"Upload stalled - retry":' in ui
 assert "lf_recog_stop(); /* cooperative cancel" in ui
 home=ui.split("static void primary_render_home_content(lv_obj_t *parent)\n{",1)[1].split("static void render_home(void)",1)[0]
-assert "lv_obj_set_size(brand_row,304,88);" in home
+assert "lv_obj_set_size(brand_row,258,88);" in home
 assert "lv_obj_set_size(mark,84,84);" in home
 assert "lv_obj_set_flex_flow(wordmark_col,LV_FLEX_FLOW_COLUMN);" in home
 assert 'lv_label_set_text(lyric_mark,"LYRIC");' in home

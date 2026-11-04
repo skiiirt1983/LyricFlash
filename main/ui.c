@@ -1027,17 +1027,26 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
         song->upload_bytes_sent<song->upload_bytes_total &&
         song->upload_progress_ms && current>song->upload_progress_ms &&
         current-song->upload_progress_ms>18000U;
+    /* A complete WAV upload does not imply AudD responded. Recover the
+       display if the service never supplies the song ID. */
+    const bool response_stalled=song->state==LF_RECOG_UPLOAD &&
+        song->upload_bytes_total>0 &&
+        song->upload_bytes_sent>=song->upload_bytes_total &&
+        song->upload_progress_ms && current>song->upload_progress_ms &&
+        current-song->upload_progress_ms>30000U;
     const bool overdue=song->stage_started_ms &&
         current>song->stage_started_ms &&
         ((song->state==LF_RECOG_CAPTURE &&
           current-song->stage_started_ms>30000U) ||
          (song->state==LF_RECOG_UPLOAD &&
-          current-song->stage_started_ms>80000U) ||
+          current-song->stage_started_ms>65000U) ||
          (song->state==LF_RECOG_LYRICS &&
           current-song->stage_started_ms>40000U));
-    if((overdue || upload_stalled) && song->attempts!=home_stalled_attempt){
+    if((overdue || upload_stalled || response_stalled) && song->attempts!=home_stalled_attempt){
         home_stalled_attempt=song->attempts;
-        home_warning=upload_stalled?"Upload stalled - retry":"Identification timed out";
+        home_warning=upload_stalled?"Upload stalled - retry":
+            response_stalled?"Song ID response timed out - retry":
+            "Identification timed out";
         home_warning_until_ms=current+10000U;
         lf_recog_stop(); /* cooperative cancel; no UI mutex or audio read */
         ESP_LOGW(TAG,"Recognition stage exceeded UI deadline, attempt=%lu",
@@ -1117,17 +1126,10 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
        near the baseline; real sound moves the trace above and below it. */
     const uint32_t x=(uint32_t)(((uint64_t)song->captured_frames*360U)/
                                 LF_SCAN_MAX_FRAMES);
-    const static int8_t phases[8]={0,-4,-8,-3,2,8,4,-2};
-    const int8_t wave=phases[home_record_wave_count%8];
-    const int amplitude=(int)song->capture_visual_level;
-    /* Triple the visible gain, clamped to the ring interior (no overflow).
-       Old visual was 72 + amplitude*wave/12; now x3. */
-    /* Quiet recordings previously moved just 5-12px: use a bounded
-       nonlinear visual gain so ordinary music makes obvious 50-100px arcs.
-       This changes display pixels only, never AudD audio or gain. */
-    int swing=amplitude>0?30+amplitude*4:0;
-    if(swing>115)swing=115;
-    int y=130+swing*wave/8;
+    /* Show real MIC1/MIC2 signed peak excursions, not an endlessly repeated
+       eight-point sinusoid. No raw PCM leaves the recognition worker. */
+    const int signed_peak=(int)song->capture_visual_signed;
+    int y=130-(signed_peak*115)/100;
     if(y<12)y=12;
     if(y>248)y=248;
     home_record_wave_points[home_record_wave_count++]=(lv_point_precise_t){
@@ -1220,13 +1222,13 @@ static void primary_render_home_content(lv_obj_t *parent)
        irrespective of glyph widths or round-screen clipping. The previous
        three independent absolute offsets separated logo and text. */
     lv_obj_t *brand_row=lv_obj_create(parent);
-    lv_obj_set_size(brand_row,304,88);
-    lv_obj_align(brand_row,LV_ALIGN_TOP_MID,0,55);
+    lv_obj_set_size(brand_row,258,88);
+    lv_obj_align(brand_row,LV_ALIGN_TOP_MID,0,50);
     lv_obj_set_style_bg_opa(brand_row,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(brand_row,0,0);
     lv_obj_set_style_shadow_width(brand_row,0,0);
     lv_obj_set_style_pad_all(brand_row,0,0);
-    lv_obj_set_style_pad_column(brand_row,10,0);
+    lv_obj_set_style_pad_column(brand_row,3,0);
     lv_obj_remove_flag(brand_row,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(brand_row,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(brand_row,LV_FLEX_FLOW_ROW);
@@ -1274,8 +1276,8 @@ static void primary_render_home_content(lv_obj_t *parent)
     (void)home_decor_ring(parent,216,0x163C65);
     (void)home_decor_ring(parent,202,0x23578D);
     home_scan_button=lv_button_create(parent);
-    lv_obj_set_size(home_scan_button,184,184);
-    lv_obj_align(home_scan_button,LV_ALIGN_CENTER,0,12);
+    lv_obj_set_size(home_scan_button,170,170);
+    lv_obj_align(home_scan_button,LV_ALIGN_CENTER,0,16);
     lv_obj_set_style_radius(home_scan_button,LV_RADIUS_CIRCLE,0);
     lv_obj_set_style_bg_color(home_scan_button,lv_color_hex(0x2884EA),0);
     lv_obj_set_style_bg_opa(home_scan_button,LV_OPA_COVER,0);
@@ -1377,7 +1379,7 @@ static void primary_render_home_content(lv_obj_t *parent)
     home_record_caption=home_caption(home_record_layer,"LISTENING",356,206,
                                     &lv_font_montserrat_16,0x4A946F);
     home_record_loading=lv_label_create(home_record_layer);
-    lv_label_set_text(home_record_loading,"LOADING...");
+    lv_label_set_text(home_record_loading,"IDENTIFYING...");
     lv_obj_set_width(home_record_loading,360);
     lv_obj_set_style_text_align(home_record_loading,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_set_style_text_font(home_record_loading,&lv_font_montserrat_36,0);

@@ -701,6 +701,8 @@ static esp_err_t handle_song_status(httpd_req_t *req)
     cJSON_AddStringToObject(reply,"title",s.title);
     cJSON_AddStringToObject(reply,"artist",s.artist);
     cJSON_AddNumberToObject(reply,"captured_frames",s.captured_frames);
+    cJSON_AddNumberToObject(reply,"waveform_level",s.capture_visual_level);
+    cJSON_AddNumberToObject(reply,"waveform_signed_level",s.capture_visual_signed);
     cJSON_AddNumberToObject(reply,"capture_seconds",s.capture_seconds);
     cJSON_AddNumberToObject(reply,"attempts",s.attempts);
     cJSON_AddBoolToObject(reply,"worker_busy",lf_recog_busy());
@@ -731,7 +733,7 @@ static esp_err_t handle_song_status(httpd_req_t *req)
     cJSON_AddNumberToObject(reply,"audd_http_status",s.http_status);
     cJSON_AddNumberToObject(reply,"audd_api_error_code",s.audd_api_error_code);
     cJSON_AddNumberToObject(reply,"audd_transport_error_code",s.audd_transport_error_code);
-    cJSON_AddNumberToObject(reply,"mic_gain_db",24);
+    cJSON_AddNumberToObject(reply,"mic_gain_db",27);
     cJSON_AddNumberToObject(reply,"audio_measured_frames",s.audio_measured_frames);
     cJSON_AddNumberToObject(reply,"mic1_peak",s.mic1_peak);
     cJSON_AddNumberToObject(reply,"mic2_peak",s.mic2_peak);

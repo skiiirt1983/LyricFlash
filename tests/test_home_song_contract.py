@@ -18,11 +18,11 @@ end=ui.index("\nstatic void render_home(void)",start)
 home=ui[start:end]
 refresh=ui[ui.index("static void home_refresh(uint64_t current)\n{"):start]
 on_click=ui[ui.index("static void on_home_scan(lv_event_t *e)\n{"):ui.index("static lv_obj_t *home_decor_ring")]
-check('LF_VERSION "0.8.55-alpha"' in version,"0.8.47 alpha version not set")
+check('LF_VERSION "0.8.56-alpha"' in version,"0.8.47 alpha version not set")
 check('home_scan_button=lv_button_create(parent);' in home,"Missing single circular play surface")
 check(home.count('lv_button_create(')==1,"Home must expose only one visual control")
 check('button(parent,' not in home,"Old rectangular navigation buttons still on Home")
-check('lv_obj_set_size(home_scan_button,184,184);' in home,"Insufficient play touch target")
+check('lv_obj_set_size(home_scan_button,170,170);' in home,"Insufficient play touch target")
 check('LV_RADIUS_CIRCLE' in home,"Play control must be circular")
 check('LV_SYMBOL_PLAY' in home and 'LV_SYMBOL_STOP' in refresh,"Play must switch to Stop when busy")
 check('lv_font_montserrat_48' in home,"Large play symbol is missing")
@@ -49,7 +49,7 @@ check('LV_OBJ_FLAG_GESTURE_BUBBLE' in home and 'on_lvgl_gesture' in home,
       "Play touch must preserve swipe navigation")
 check('battery_status=home_caption' in home,"Home lost charging/battery indicator")
 check('lv_obj_set_flex_flow(brand_row,LV_FLEX_FLOW_ROW);' in home and
-      'lv_obj_set_style_pad_column(brand_row,10,0);' in home and
+      'lv_obj_set_style_pad_column(brand_row,3,0);' in home and
       'lv_obj_set_size(mark,84,84);' in home and
       'lv_obj_set_flex_flow(wordmark_col,LV_FLEX_FLOW_COLUMN);' in home,
       "Brand icon and labels must use one compact flex row")

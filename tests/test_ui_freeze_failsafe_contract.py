@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.55: a failed song lookup must never leave the OLED permanently frozen."""
+"""0.8.56: a failed song lookup must never leave the OLED permanently frozen."""
 from pathlib import Path
 p=Path(__file__).resolve().parents[1]
 ui=(p/"main/ui.c").read_text()
@@ -7,23 +7,23 @@ main=(p/"main/main.c").read_text()
 header=(p/"main/ui.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.55-alpha"' in version
+assert 'LF_VERSION "0.8.56-alpha"' in version
 # One spatially linked Home logo + white/blue wordmark, no off-screen label.
 assert "brand_row=lv_obj_create(parent)" in ui
-assert "lv_obj_set_size(brand_row,304,88)" in ui
+assert "lv_obj_set_size(brand_row,258,88)" in ui
 assert "lv_obj_set_flex_flow(brand_row,LV_FLEX_FLOW_ROW)" in ui
 assert "lv_obj_set_flex_align(brand_row,LV_FLEX_ALIGN_CENTER" in ui
-assert "lv_obj_set_style_pad_column(brand_row,10,0)" in ui
+assert "lv_obj_set_style_pad_column(brand_row,3,0)" in ui
 assert 'lv_label_set_text(lyric_mark,"LYRIC")' in ui
 assert 'lv_label_set_text(flash_mark,"FLASH")' in ui
 assert "lv_obj_align(mark,LV_ALIGN_TOP_MID,-111,68)" not in ui
 # Keep normal UI responsive on slow AudD / LRCLIB connections.
 assert "static uint32_t home_stalled_attempt;" in ui
 for condition in ("current-song->stage_started_ms>30000U",
-                  "current-song->stage_started_ms>80000U",
+                  "current-song->stage_started_ms>65000U",
                   "current-song->stage_started_ms>40000U"):
     assert condition in ui,condition
-assert 'home_warning=upload_stalled?"Upload stalled - retry":"Identification timed out";' in ui
+assert 'home_warning=upload_stalled?"Upload stalled - retry":' in ui
 assert "lf_recog_stop(); /* cooperative cancel" in ui
 assert "home_stalled_attempt==song->attempts" in ui
 assert "lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN)" in ui
@@ -53,6 +53,6 @@ assert tick.index("last_activity_ms = current;") < tick.index("sleep_display();"
 assert '"AWAITING SONG ID %us"' in ui
 assert "upload_stalled" in ui
 assert "current-song->upload_progress_ms>18000U" in ui
-assert 'home_warning=upload_stalled?"Upload stalled - retry":"Identification timed out";' in ui
+assert 'home_warning=upload_stalled?"Upload stalled - retry":' in ui
 assert "LF_RECOG_UPLOAD_BUDGET_MS 60000ULL" in worker
 print("PASS: grouped circular-safe Home branding and independent bounded UI/reboot fail-safes")

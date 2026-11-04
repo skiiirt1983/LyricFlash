@@ -68,17 +68,27 @@ static void status(lf_recog_state_t state,const char *message)
 static void set_count(uint32_t frames,const int16_t *tdm)
 {
     uint32_t total=0;
+    uint32_t positive_peak=0,negative_peak=0;
     for(size_t i=0;i<LF_SCAN_TDM_SAMPLES;i+=4){
         int32_t a=tdm[i],b=tdm[i+2];
+        if(a>0 && (uint32_t)a>positive_peak)positive_peak=(uint32_t)a;
+        if(b>0 && (uint32_t)b>positive_peak)positive_peak=(uint32_t)b;
+        if(a<0 && (uint32_t)-a>negative_peak)negative_peak=(uint32_t)-a;
+        if(b<0 && (uint32_t)-b>negative_peak)negative_peak=(uint32_t)-b;
         total+=(uint32_t)(a<0?-a:a);
         total+=(uint32_t)(b<0?-b:b);
     }
     const uint32_t average=total/(2*LF_SCAN_TDM_FRAMES);
     const uint8_t level=(uint8_t)(average/14U>100U?100U:average/14U);
+    uint32_t excursion=(positive_peak>negative_peak?positive_peak:negative_peak)/128U;
+    if(excursion>100U)excursion=100U;
+    const int8_t signed_peak=(int8_t)(positive_peak>=negative_peak?
+                                (int32_t)excursion:-(int32_t)excursion);
     portENTER_CRITICAL(&result_mux);
     result.captured_frames=frames;
     result.capture_seconds=frames/LF_SCAN_RATE;
     result.capture_visual_level=level;
+    result.capture_visual_signed=signed_peak;
     portEXIT_CRITICAL(&result_mux);
 }
 bool lf_recog_busy(void)
@@ -416,6 +426,7 @@ static void worker(void *arg)
     (void)esp_codec_dev_close(codec);opened=false;
     portENTER_CRITICAL(&result_mux);
     result.capture_visual_level=0; /* no level after manual capture ends */
+    result.capture_visual_signed=0;
     portEXIT_CRITICAL(&result_mux);
     publish_capture_metrics(&metrics);metrics_published=true;
     if(atomic_load(&stop_flag))goto done;

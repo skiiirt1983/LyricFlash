@@ -6,12 +6,14 @@ ui=(p/"main/ui.c").read_text()
 header=(p/"main/recognition.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.55-alpha"' in version
+assert 'LF_VERSION "0.8.56-alpha"' in version
 # Feed the renderer a scalar only: the existing capture is still manual.
 assert "uint8_t capture_visual_level;" in header
+assert "int8_t capture_visual_signed;" in header
 assert "static void set_count(uint32_t frames,const int16_t *tdm)" in worker
 assert "set_count(frames,tdm);" in worker
 assert "result.capture_visual_level=level;" in worker
+assert "result.capture_visual_signed=signed_peak;" in worker
 assert "result.capture_visual_level=0;" in worker
 assert "lf_recog_start()" in ui and "lf_recog_stop()" in ui
 assert "LF_RECORD_WAVE_MAX_POINTS 170U" in ui
@@ -20,13 +22,14 @@ assert "static void home_recording_update(" in ui
 assert "home_recording_update(&song,current);" in ui
 assert "home_recording_update(&scan,current);" in ui
 assert "song->captured_frames*360U" in ui
-assert "song->capture_visual_level" in ui
-assert "int swing=amplitude>0?30+amplitude*4:0;" in ui
-assert "int y=130+swing*wave/8;" in ui
+assert "song->capture_visual_signed" in ui
+assert "int y=130-(signed_peak*115)/100;" in ui
+assert "const static int8_t phases[8]" not in ui
+assert "positive_peak" in worker and "negative_peak" in worker
 assert "if(y<12)y=12;" in ui and "if(y>248)y=248;" in ui
 assert "lv_obj_set_style_line_width(home_record_wave,7,0);" in ui
 assert "lv_obj_set_style_border_width(record_ring,6,0);" in ui
-assert 'lv_label_set_text(home_record_loading,"LOADING...")' in ui
+assert 'lv_label_set_text(home_record_loading,"IDENTIFYING...")' in ui
 assert "const bool opening=song->state==LF_RECOG_MATCH" in ui
 assert ('lv_label_set_text(lyric_mark,"LYRIC");' in ui and
         'lv_label_set_text(flash_mark,"FLASH");' in ui)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.55: no silent forever-IDENTIFYING overlay, with independent diagnostics.
+"""0.8.56: no silent forever-IDENTIFYING overlay, with independent diagnostics.
 Physical AMOLED and real AudD outcomes must still be validated on hardware.
 """
 from pathlib import Path
@@ -10,7 +10,7 @@ ui=(root/"main/ui.c").read_text()
 header=(root/"main/ui.h").read_text()
 network=(root/"main/network.c").read_text()
 version=(root/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.55-alpha"' in version
+assert 'LF_VERSION "0.8.56-alpha"' in version
 assert "LF_RECOG_UPLOAD_BUDGET_MS 60000ULL" in worker
 assert "if(lf_recog_now_ms()>=deadline_ms)" in worker
 assert "set_transport_error(ESP_ERR_TIMEOUT);" in worker
@@ -39,5 +39,7 @@ assert "if(page==1 && timed_lyrics_mode && timed_line_count>0)" in ui
 assert "auto_open_recovery_count" in header or "lyrics_auto_open_recoveries" in header
 assert '"UPLOADING %u%%"' in ui
 assert '"AWAITING SONG ID %us"' in ui
+assert "current-song->upload_progress_ms>30000U" in ui
+assert "response_stalled" in ui
 assert '"Recognition upload timed out. Tap Play to retry."' in worker
 print("PASS: bounded AudD HTTP upload, progress and lock-free UI heartbeat, one-time lyrics rescue")
