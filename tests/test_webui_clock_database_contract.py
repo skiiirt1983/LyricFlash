@@ -56,7 +56,7 @@ clock=text("main/clock_face.c")
 basic_clock=text("main/basic_clock.c")
 history=text("main/song_history.c")
 worker=text("main/recognition.c")
-assert 'LF_CONFIG_SCHEMA 14U' in hdr
+assert 'LF_CONFIG_SCHEMA 15U' in hdr
 for prop in ("face_battery_size[6]","face_show_percent[6]",
              "face_date_x[6]","face_date_y[6]","face_date_size[6]"):
     assert prop in hdr
@@ -74,6 +74,16 @@ assert 'LF_RECOG_MATCH' in worker
 assert 'face_show_percent[current_style]' in clock
 assert 'face_date_size[current_style]' in clock
 assert 'face_battery_size[current_style]' in clock
+for prop in ("face_show_icon[6]","face_date_format[6]","face_show_weather[6]","face_weather_size[6]"):
+    assert prop in hdr,prop
+for field in ("selected-battery-icon","selected-battery-percent","selected-date-format","selected-weather-visible","selected-font-style"):
+    assert f'id="{field}"' in basic,field
+assert 'id="face_show_weather"' in basic
+assert 'class="face-controls" hidden' in basic
+assert '"f%uic"' in settings and '"f%udf"' in settings and '"f%uwv"' in settings
+assert 'face_show_icon[current_style]' in clock
+assert 'face_date_format[current_style]' in clock
+assert 'face_show_weather[current_style]' in clock
 assert "case 20:return 3;" in basic_clock
 assert "case 23:return 6;" in basic_clock
 print("PASS: responsive clock controls, 7 families, private manual-ID setup and read-only song database")
