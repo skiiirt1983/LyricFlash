@@ -12,6 +12,7 @@ python3 tests/test_touch_release_blackout_contract.py
 python3 tests/test_safe_id_baseline_contract.py
 python3 tests/test_home_song_contract.py
 python3 tests/test_recording_visual_contract.py
+python3 tests/test_waveform_amplitude_contract.py
 python3 tests/test_recognition_stall_recovery_contract.py
 python3 tests/test_ui_freeze_failsafe_contract.py
 python3 tests/test_lyrics_layout_contract.py

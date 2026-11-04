@@ -1196,7 +1196,8 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
     home_record_wave_bias_q8+=((signed_peak*256)-home_record_wave_bias_q8)/8;
     const int centered=signed_peak-home_record_wave_bias_q8/256;
     const int magnitude=centered<0?-centered:centered;
-    int swing=(magnitude*7)/2;
+    /* UI-only visual gain: real MIC peak samples and timing are unchanged. */
+    int swing=magnitude*8;
     if(swing>108)swing=108;
     int y=130+(centered<0?swing:-swing);
     if(y<12)y=12;

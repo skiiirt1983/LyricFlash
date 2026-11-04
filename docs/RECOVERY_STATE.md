@@ -67,3 +67,9 @@ No automated build or source-test result substitutes for these device-specific c
 - Prior behavior: `app_main` accepted the OTA slot immediately after display and local Web server startup, even if the LVGL worker then stopped updating.
 - Candidate: on a pending OTA slot only, an independent verification task requires 3 consecutive samples (2.5s apart) of responsive LVGL heartbeat, completed frames and at least 16KiB free heap. It will roll back on failure after about 40s. No Wi-Fi/cloud connection check (fallback setup AP is valid). Ordinary boots create no verifier task.
 - Test the pure gate logic on host with boundary cases. Do not ship changes to battery management until this update is verified on hardware.
+
+## Working 0.8.68 checkpoint and isolated 0.8.69 waveform gain
+- 0.8.68 published as `alpha-build-fc303f347d32` with full CI/OTA/recovery validation. User reported all features working. Pin as `safe/0.8.68-working-checkpoint` at source SHA `fc303f347d32f5b7620cb468b572a38b945a5b07`. Do not rewrite the working 0.8.67 fallback either.
+- Next isolated branch `feature/private-0.8.69-waveform-amplitude`: user's hand-drawn line was only a HEIGHT reference, not a request to change the real microphone waveform shape, color, line thickness or motion.
+- Increase only the visual vertical amplitude: `swing=magnitude*8` instead of `(magnitude*7)/2`, or ≈2.29x for nonclipped excursions. Existing polarity, signed MIC1/MIC2 input, visual bias correction, clamp at 108, 75ms update interval, horizontal positions, ring, waveform color, Listening caption, WAV/AudD pipeline and UI layout stay identical. Actual hardware height is pending approval.
+- Battery optimization will follow in a distinct future version.
