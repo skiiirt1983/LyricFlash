@@ -392,18 +392,18 @@ static lv_obj_t *label(lv_obj_t *parent, const char *text, int y,
    animation. Big hit areas and labels clamped to usable circle geometry. */
 static void style_button(lv_obj_t *b, uint32_t color)
 {
-    /* Settings use a restrained illuminated glass treatment. Keep the Home
-       playback control unchanged and avoid expensive animated shadows. */
-    const bool settings=(page==2 || page==7 || page==9 ||
-                         page==10 || page==12);
-    lv_obj_set_style_radius(b, settings?17:19, 0);
-    lv_obj_set_style_bg_color(b, lv_color_hex(settings?0x143553:color), 0);
+    /* A single visual treatment is applied from first boot through every
+       page, not only after entering Device Settings. The custom Home Play
+       control is styled separately and remains untouched. */
+    (void)color;
+    lv_obj_set_style_radius(b, 17, 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(0x143553), 0);
     lv_obj_set_style_bg_grad_color(b, lv_color_hex(0x32658A), 0);
-    lv_obj_set_style_bg_grad_dir(b, settings?LV_GRAD_DIR_VER:LV_GRAD_DIR_NONE, 0);
+    lv_obj_set_style_bg_grad_dir(b, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(b, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(b, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_border_width(b, settings?2:1, 0);
-    lv_obj_set_style_border_color(b, lv_color_hex(settings?0x72C9FF:0xAACBE6), 0);
+    lv_obj_set_style_border_width(b, 2, 0);
+    lv_obj_set_style_border_color(b, lv_color_hex(0x72C9FF), 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(0x418ABE), LV_STATE_PRESSED);
     lv_obj_set_style_border_color(b, lv_color_hex(0xD6F3FF), LV_STATE_PRESSED);
@@ -445,7 +445,7 @@ static lv_obj_t *button(lv_obj_t *parent, const char *text, int width, int heigh
     if (strlen(text) > 19 && prefs->system_font_size == 2) f = &lv_font_montserrat_20;
     lv_obj_set_style_text_font(l, f, 0);
     lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(l, lv_color_hex((page==2 || page==7 || page==9 || page==10 || page==12)?0xEAF6FF:0x0B1C2A), 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(0xEAF6FF), 0);
     lv_obj_center(l);
     return b;
 }
@@ -2508,18 +2508,23 @@ static void build_device_settings_now(void)
     brightness_text=device_line(content,text,94,&lv_font_montserrat_20,0xD6F0FF);
     lv_obj_t *slider=lv_slider_create(content);
     /* Large touch target for a finger on the 1.75-inch AMOLED. */
-    lv_obj_set_size(slider,242,14);
+    lv_obj_set_size(slider,242,32);
     lv_obj_align(slider,LV_ALIGN_TOP_MID,0,142);
     lv_slider_set_range(slider,5,100);
     lv_slider_set_value(slider,prefs->brightness,LV_ANIM_OFF);
     lv_obj_set_style_bg_color(slider,lv_color_hex(0x294D69),LV_PART_MAIN);
     lv_obj_set_style_bg_color(slider,lv_color_hex(0x5DC4FF),LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(slider,lv_color_hex(0xF0FAFF),LV_PART_KNOB);
-    lv_obj_set_style_pad_all(slider,12,LV_PART_KNOB);
+    lv_obj_set_style_pad_all(slider,10,LV_PART_KNOB);
+    lv_obj_set_style_radius(slider,LV_RADIUS_CIRCLE,LV_PART_MAIN);
+    lv_obj_set_style_radius(slider,LV_RADIUS_CIRCLE,LV_PART_INDICATOR);
     /* Keep vertical drags on brightness instead of chaining them to the
        scrollable Device page. The full-width track remains finger-sized. */
     lv_obj_remove_flag(slider,LV_OBJ_FLAG_SCROLL_CHAIN_VER);
     lv_obj_remove_flag(slider,LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
+    /* Consume drag gestures here rather than forwarding them to the pager. */
+    lv_obj_remove_flag(slider,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_remove_flag(slider,LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(slider,on_brightness,LV_EVENT_VALUE_CHANGED,NULL);
     lv_obj_add_event_cb(slider,on_brightness,LV_EVENT_RELEASED,NULL);
 

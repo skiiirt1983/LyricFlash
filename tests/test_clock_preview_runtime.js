@@ -24,7 +24,7 @@ for(const m of html.matchAll(/<([a-z0-9-]+)\b([^>]*\bid="([^"]+)"[^>]*)>/gi)){
  assert(!elements[id],"Duplicate HTML id "+id);
  elements[id]={type,tagName:tag.toUpperCase(),
   value:type==="color"?"#ffffff":type==="number"?"50":tag==="select"?"0":"",
-  checked:false,hidden:false,innerHTML:"",textContent:"",listeners:{},
+  checked:false,hidden:false,innerHTML:"",textContent:"",style:{},dataSpectrum:/data-spectrum="1"/.test(attr),listeners:{},
   addEventListener(type,fn){this.listeners[type]=fn},
   dispatch(type){this.listeners[type]?.({})},onclick:null};
 }
@@ -52,7 +52,7 @@ const fakeFetch=async(url,opts)=>opts?.method==="POST"
  : {ok:true,text:async()=>JSON.stringify(String(url).includes('/api/clock-fonts')?deviceFonts:settings)};
 const runtime=new Function("document","fetch","setInterval",
  js+"\nreturn {load,save,render,selectPart};")(
- {getElementById:el},fakeFetch,()=>0
+ {getElementById:el,querySelectorAll:selector=>selector==="input[data-spectrum]"?Object.values(elements).filter(e=>e.dataSpectrum):[]},fakeFetch,()=>0
 );
 (async()=>{
  await runtime.load();
@@ -140,6 +140,10 @@ const runtime=new Function("document","fetch","setInterval",
  el("face_background").value="#112233";el("face_background").dispatch("input");
  assert(el("clock-preview").innerHTML.includes('fill="#112233"'),
    "Palette editing does not change SVG preview");
+ assert.equal(el("face_background").style.backgroundColor,"#112233",
+   "Colour input must render the actual selected swatch");
+ assert.equal(el("basic-options").hidden,true,
+   "Legacy Basic Custom controls must never appear as a second editor");
  /* Clock element colours are independent per face, with Time including
     the analog hands and Battery including both icon and percentage. */
  runtime.selectPart("time");
@@ -179,5 +183,12 @@ const runtime=new Function("document","fetch","setInterval",
  el("reset-face").onclick();
  assert.equal(el("face_background").value,"#080c13",
    "Reset selected face failed");
+ el("clock_face").value="5";el("clock_face").dispatch("change");
+ el("basic_time_x").value="84";
+ el("font_size").value="120";
+ el("reset-face").onclick();
+ assert.equal(el("basic_time_x").value,"0","Basic geometry not reset");
+ assert.equal(el("font_size").value,"60","Basic time size not reset");
+ assert.equal(el("basic-options").hidden,true,"Second Basic control panel became visible");
  console.log("PASS: 24 distinct numeral previews, draggable battery on Classic, saved per-face positions, six clock faces");
 })().catch(err=>{console.error(err);process.exitCode=1});
