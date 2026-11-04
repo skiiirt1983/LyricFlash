@@ -7,5 +7,5 @@
  * The hardware-tested 0.8.67 image remains available as rollback. */
 #define LF_VERSION "0.8.68-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.68"
-/* Release candidate is gated by the full source/native preflight; physical
- * validation remains pending after successful firmware packaging. */
+/* Source/native preflight passed. The OTA health gate is isolated;
+ * on-device validation remains required after verified firmware packaging. */
