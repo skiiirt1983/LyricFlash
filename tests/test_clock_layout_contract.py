@@ -24,7 +24,7 @@ assert "basic_digit_height(" in basic and "basic_digit_cell(" in basic
 assert "0..200" in config
 assert r'max=\"200\"' in html
 
-assert "LF_CONFIG_SCHEMA 13U" in config
+assert "LF_CONFIG_SCHEMA 14U" in config
 for source in (settings,config,clock,api,ui):
     assert "face_battery_x" in source and "face_battery_y" in source
 assert "styled_digit(" in basic and "p->basic_font_style>=5" in basic
