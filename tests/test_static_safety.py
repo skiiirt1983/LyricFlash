@@ -10,7 +10,7 @@ manifest=(p/'main/idf_component.yml').read_text()
 assert 'nvs_flash_erase' not in main and 'nvs_flash_erase' not in settings
 assert 'lf_ota_guard_start_health_check()' in main
 assert 'lf_ota_guard_confirm_startup();' not in main
-assert main.index('lf_network_start()') < main.index('lf_ota_guard_start_health_check();')
+assert main.index('lf_network_start()') < main.index('lf_ota_guard_start_health_check()')
 assert 'bsp_display_start_with_config(&display_cfg)' in main
 assert 'bsp_display_brightness_set' in ui
 assert 'nvs_commit(h)' in settings
