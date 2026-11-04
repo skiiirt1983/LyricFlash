@@ -678,6 +678,6 @@ require(all(x in ui for x in (
     'device_line(content,"IP ADDRESS"',
     'device_line(content,"WEB ADDRESS"',
     'device_line(content,"VERSION"',
-    'lv_obj_set_size(slider,242,38)',
-    'lv_obj_set_style_pad_all(slider,21,LV_PART_KNOB)')),
+    'lv_obj_set_size(slider,242,14)',
+    'lv_obj_set_style_pad_all(slider,12,LV_PART_KNOB)')),
     "Device scroll, network/version details or brightness touch target regressed")
