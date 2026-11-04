@@ -1071,6 +1071,10 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     lf_ui_display_stats_t display_stats={0};
     lf_ui_display_stats(&display_stats);
     cJSON_AddNumberToObject(root, "ui_touch_presses", display_stats.touch_presses);
+    cJSON_AddNumberToObject(root, "ui_last_screen_off_ms", display_stats.last_screen_off_ms);
+    cJSON_AddNumberToObject(root, "ui_wake_count", display_stats.wake_count);
+    cJSON_AddNumberToObject(root, "ui_last_wake_frame_ready_ms", display_stats.last_wake_frame_ready_ms);
+    cJSON_AddNumberToObject(root, "ui_last_wake_overlay_clear_ms", display_stats.last_wake_overlay_clear_ms);
     cJSON_AddNumberToObject(root, "ui_navigation_commits", display_stats.navigation_commits);
     cJSON_AddNumberToObject(root, "ui_full_redraws", display_stats.full_redraws);
     cJSON_AddNumberToObject(root, "display_render_count", display_stats.render_count);
