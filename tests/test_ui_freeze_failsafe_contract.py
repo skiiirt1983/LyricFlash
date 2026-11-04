@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.58: a failed song lookup must never leave the OLED permanently frozen."""
+"""0.8.59: a failed song lookup must never leave the OLED permanently frozen."""
 from pathlib import Path
 p=Path(__file__).resolve().parents[1]
 ui=(p/"main/ui.c").read_text()
@@ -7,7 +7,7 @@ main=(p/"main/main.c").read_text()
 header=(p/"main/ui.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.58-alpha"' in version
+assert 'LF_VERSION "0.8.59-alpha"' in version
 # One spatially linked Home logo + white/blue wordmark, no off-screen label.
 assert "brand_row=lv_obj_create(parent)" in ui
 assert "lv_obj_set_size(brand_row,218,88)" in ui

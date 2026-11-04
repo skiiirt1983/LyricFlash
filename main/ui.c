@@ -122,6 +122,8 @@ static lv_obj_t *home_record_loading;
 static lv_obj_t *home_record_caption;
 static uint32_t home_record_attempt;
 static uint64_t home_record_cancel_tap_ms; /* two short taps, never single */
+static uint32_t home_record_cancel_pending_attempt; /* timer owns cancellation */
+static int32_t home_record_wave_bias_q8; /* UI-only DC center, 8-bit fixed point */
 static uint32_t home_record_last_frames;
 static uint64_t home_record_last_tick;
 #define LF_RECORD_WAVE_MAX_POINTS 170U
@@ -553,6 +555,9 @@ static bool recognition_touch_locked(void)
     if(page!=0)return false;
     lf_recog_snapshot_t scan={0};
     lf_recog_snapshot(&scan);
+    /* A cancelled attempt must not keep swipe gestures locked while HTTPS
+       is winding down in the unchanged recognition worker. */
+    if(scan.attempts && scan.attempts==home_stalled_attempt)return false;
     return scan.state==LF_RECOG_CAPTURE ||
            scan.state==LF_RECOG_UPLOAD || scan.state==LF_RECOG_LYRICS;
 }
@@ -1019,8 +1024,9 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
     /* The physical pager must not scroll during recording/upload/lookup.
        Re-enable once the scan has finished and the finger is released. */
     if(primary_pager && page==0){
-        const bool locked=song->state==LF_RECOG_CAPTURE ||
-            song->state==LF_RECOG_UPLOAD || song->state==LF_RECOG_LYRICS;
+        const bool locked=song->attempts!=home_stalled_attempt &&
+            (song->state==LF_RECOG_CAPTURE ||
+             song->state==LF_RECOG_UPLOAD || song->state==LF_RECOG_LYRICS);
         if(locked)lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLLABLE);
         else if(!ui_pointer_is_down())
             lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_SCROLLABLE);
@@ -1064,7 +1070,10 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
                  (unsigned long)song->attempts);
     }
     if(home_stalled_attempt==song->attempts){
-        lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
+        /* Cancellation/timeout is visually complete even if a blocked HTTPS
+           call is still unwinding. Never re-lock pager on the next 75ms tick. */
+        if(!lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN))
+            lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
         return;
     }
     const bool capturing=song->state==LF_RECOG_CAPTURE;
@@ -1122,6 +1131,7 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
     if(song->attempts!=home_record_attempt){
         home_record_attempt=song->attempts;
         home_record_cancel_tap_ms=0;
+        home_record_wave_bias_q8=0;
         home_record_last_frames=UINT32_MAX;
         home_record_wave_count=1;
         home_record_wave_points[0]=(lv_point_precise_t){0,130};
@@ -1141,12 +1151,16 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
     /* Show real MIC1/MIC2 signed peak excursions, not an endlessly repeated
        eight-point sinusoid. No raw PCM leaves the recognition worker. */
     const int signed_peak=(int)song->capture_visual_signed;
-    const int magnitude=signed_peak<0?-signed_peak:signed_peak;
-    /* Display-only gain: silence stays flat; ordinary music spans more of
-       the center of the circle without changing recorded/transmitted PCM. */
-    int swing=magnitude>0?24+(magnitude*7)/2:0;
+    /* The worker publishes which peak polarity dominates each PCM block.
+       That sign can lean one way on this microphone. Remove its slow-moving
+       visual bias (one-pole high-pass) before mapping to the screen center.
+       This never changes capture gain, samples, WAV or recognition. */
+    home_record_wave_bias_q8+=((signed_peak*256)-home_record_wave_bias_q8)/8;
+    const int centered=signed_peak-home_record_wave_bias_q8/256;
+    const int magnitude=centered<0?-centered:centered;
+    int swing=(magnitude*7)/2;
     if(swing>108)swing=108;
-    int y=130+(signed_peak<0?swing:-swing);
+    int y=130+(centered<0?swing:-swing);
     if(y<12)y=12;
     if(y>248)y=248;
     home_record_wave_points[home_record_wave_count++]=(lv_point_precise_t){
@@ -1192,7 +1206,8 @@ static void home_refresh(uint64_t current)
             lv_color_hex(busy?0xFDD64D:0xAADFFF),0);
     }
     home_last_refresh_ms=current;
-    if(!home_scan_armed && song.state==LF_RECOG_MATCH && song.lyric_lines>0 &&
+    if(!home_scan_armed && song.attempts!=home_stalled_attempt &&
+       song.state==LF_RECOG_MATCH && song.lyric_lines>0 &&
        strcmp(song.lyrics_state,"synced")==0 &&
        song.attempts!=auto_open_attempt && !auto_open_pending){
         auto_open_pending=true;
@@ -1240,12 +1255,9 @@ static void on_record_cancel_double_tap(lv_event_t *e)
     if(home_record_cancel_tap_ms && current>=home_record_cancel_tap_ms &&
        current-home_record_cancel_tap_ms<=400U){
         home_record_cancel_tap_ms=0;
-        home_stalled_attempt=scan.attempts;
-        home_warning="Cancelling scan...";
-        home_warning_until_ms=current+4500U;
-        lf_recog_stop(); /* atomic flag only; microphone/HTTP owner cleans up */
-        activity();
-        home_refresh(current);
+        /* NEVER hide/refresh this LVGL touch target during its own callback.
+           The periodic UI timer handles shutdown after the finger releases. */
+        home_record_cancel_pending_attempt=scan.attempts;
     }else home_record_cancel_tap_ms=current;
 }
 static lv_obj_t *home_decor_ring(lv_obj_t *parent,int diameter,uint32_t color)
@@ -3038,6 +3050,32 @@ static void on_tick(lv_timer_t *timer)
     atomic_store(&ui_last_tick_ms,(uint32_t)current);
     atomic_store(&ui_last_page,(uint32_t)page);
     if(primary_pager && !timed_overlay)primary_pager_watchdog(current);
+    /* Process a confirmed double-tap only after input dispatch and the
+       physical release. No overlay mutation or networking in the touch
+       callback; never schedule more than one cancellation per scan. */
+    if(home_record_cancel_pending_attempt && !ui_pointer_is_down() &&
+       !nav_transition_active){
+        const uint32_t cancelled_attempt=home_record_cancel_pending_attempt;
+        home_record_cancel_pending_attempt=0;
+        lf_recog_snapshot_t cancelled={0};
+        lf_recog_snapshot(&cancelled);
+        if(page==0 && cancelled.attempts==cancelled_attempt &&
+           lf_recog_busy()){
+            home_stalled_attempt=cancelled_attempt;
+            home_warning="Cancelling scan...";
+            home_warning_until_ms=current+4500U;
+            lf_recog_stop(); /* cancellation flag; existing worker shuts down */
+            /* Restore pager input immediately; the worker may still have a
+               15s socket timeout to clear. Repeated timers must not relock. */
+            if(primary_pager)lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_SCROLLABLE);
+            if(home_record_layer &&
+               !lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN))
+                lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
+            home_last_refresh_ms=0;
+            home_refresh(current);
+            invalidate_full_screen();
+        }
+    }
     /* Never start a deferred microphone capture during touch, swipe or sleep. */
     if(home_scan_armed){
         if(page!=0 || asleep || nav_transition_active || nav_queued){
@@ -3115,9 +3153,10 @@ static void on_tick(lv_timer_t *timer)
        current-home_record_last_tick>=75){
         lf_recog_snapshot_t scan={0};
         lf_recog_snapshot(&scan);
-        if(scan.state==LF_RECOG_CAPTURE || scan.state==LF_RECOG_UPLOAD ||
-           scan.state==LF_RECOG_LYRICS ||
-           !lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN))
+        if(scan.attempts!=home_stalled_attempt &&
+           (scan.state==LF_RECOG_CAPTURE || scan.state==LF_RECOG_UPLOAD ||
+            scan.state==LF_RECOG_LYRICS ||
+            !lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN)))
             home_recording_update(&scan,current);
     }
     /* UI-timer retry is independent of Home's 750ms text refresh and
@@ -3129,6 +3168,7 @@ static void on_tick(lv_timer_t *timer)
         lf_recog_snapshot_t latest={0};
         lf_recog_snapshot(&latest);
         if(latest.state==LF_RECOG_MATCH &&
+           latest.attempts!=home_stalled_attempt &&
            latest.attempts!=auto_open_attempt &&
            latest.lyric_lines>0 &&
            strcmp(latest.lyrics_state,"synced")==0 &&

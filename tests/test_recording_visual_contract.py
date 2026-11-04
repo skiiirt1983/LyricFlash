@@ -6,7 +6,7 @@ ui=(p/"main/ui.c").read_text()
 header=(p/"main/recognition.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.58-alpha"' in version
+assert 'LF_VERSION "0.8.59-alpha"' in version
 # Feed the renderer a scalar only: the existing capture is still manual.
 assert "uint8_t capture_visual_level;" in header
 assert "int8_t capture_visual_signed;" in header
@@ -23,9 +23,11 @@ assert "home_recording_update(&song,current);" in ui
 assert "home_recording_update(&scan,current);" in ui
 assert "song->captured_frames*360U" in ui
 assert "song->capture_visual_signed" in ui
-assert "int swing=magnitude>0?24+(magnitude*7)/2:0;" in ui
+assert "home_record_wave_bias_q8+=((signed_peak*256)-home_record_wave_bias_q8)/8;" in ui
+assert "const int centered=signed_peak-home_record_wave_bias_q8/256;" in ui
+assert "int swing=(magnitude*7)/2;" in ui
 assert "if(swing>108)swing=108;" in ui
-assert "int y=130+(signed_peak<0?swing:-swing);" in ui
+assert "int y=130+(centered<0?swing:-swing);" in ui
 assert "const static int8_t phases[8]" not in ui
 assert "positive_peak" in worker and "negative_peak" in worker
 assert "if(y<12)y=12;" in ui and "if(y>248)y=248;" in ui

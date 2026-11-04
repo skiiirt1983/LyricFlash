@@ -11,7 +11,10 @@ assert "lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_GESTURE_BUBBLE);" in ho
 assert "lv_obj_add_event_cb(home_record_layer,on_record_cancel_double_tap," in home
 assert "LV_EVENT_SHORT_CLICKED" in home
 assert "home_record_cancel_tap_ms<=400U" in src
-assert "lf_recog_stop(); /* atomic flag only; microphone/HTTP owner cleans up */" in src
+assert "home_record_cancel_pending_attempt=scan.attempts;" in src
+assert "home_refresh(current);" not in section("static void on_record_cancel_double_tap(lv_event_t *e)", "static lv_obj_t *home_decor_ring")
+assert "lf_recog_stop();" not in section("static void on_record_cancel_double_tap(lv_event_t *e)", "static lv_obj_t *home_decor_ring")
+assert "if(home_record_cancel_pending_attempt && !ui_pointer_is_down()" in src
 assert "static bool recognition_touch_locked(void)" in src
 assert "scan.state==LF_RECOG_CAPTURE" in section("static bool recognition_touch_locked(void)","static void swipe_intent")
 assert "if(recognition_touch_locked())return;" in section("static void swipe_intent(lv_dir_t direction)","static void observe_touch_position")
