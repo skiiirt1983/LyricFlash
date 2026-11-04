@@ -40,4 +40,10 @@ for requirement in (
 assert "image_version!=version" in preparer, "The manifest must match the binary"
 assert "lyricflash" in preparer and "LF_VERSION" in preparer
 assert "hashlib.sha256" in publisher and "Direct OTA download verification failed" in publisher
+# Recovery safeguard: a build may add a new SHA-specific OTA binary but must
+# never replace or delete an earlier release's image.
+assert 'TAG="alpha-build-${GITHUB_SHA:0:12}"' in wf
+assert 'BRANCH = "alpha-ota"' in publisher
+assert 'if request("GET",key+"?ref="+BRANCH,token) is None:' in publisher
+assert 'releases/"+tag+"/lyricflash-ota.bin' in publisher
 print("PASS: private-alpha compile-once, complete USB/OTA release and publication gates")

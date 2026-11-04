@@ -31,3 +31,7 @@
 7. Test OTA install and restart while preserving Wi-Fi, clock settings and song cache. Keep previous release available for rollback/reinstallation.
 
 No automated build or source-test result substitutes for these device-specific checks.
+
+## Verified recovery preflight
+- Source/native preflight passed on `c32dfde9852e26e837f7600918e6f954f8ec0fcc` (GitHub Actions run 41857987720); the ESP32-S3 compile job was intentionally skipped at that stage.
+- The subsequent explicit compile gate will publish only if preflight, ESP-IDF compilation, image inspection, complete recovery package and OTA download verification all succeed.
