@@ -14,6 +14,8 @@ assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in ui
 assert "lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_ELASTIC);" in create
 assert "lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_CHAIN_HOR);" in create
 assert "lv_obj_set_scroll_dir(primary_pager,LV_DIR_HOR);" in create
+assert "lv_obj_set_style_bg_color(primary_pager," in create, "Pager background must not expose white beyond Settings"
+assert "lv_color_hex(prefs->background_color),0);" in create
 assert "lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_MOMENTUM);" in create
 assert scroll.count("activity();")>=3, "Physical and animated pager movement must reset inactivity"
 assert "pager_scrolling ||" in sleep and "primary_pager_snapping || nav_transition_active)return;" in sleep

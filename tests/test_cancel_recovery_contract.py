@@ -16,12 +16,16 @@ record=portion("static void home_recording_update(",
 gesture=portion("static bool recognition_touch_locked(void)\n{",
                 "static void swipe_intent")
 assert "home_record_cancel_pending_attempt=scan.attempts;" in callback
-for unsafe in ("home_refresh(", "lv_obj_add_flag(", "lv_obj_delete(", "lf_recog_stop(", "invalidate_full_screen("):
+assert "home_stalled_attempt=scan.attempts;" in callback
+assert "lf_recog_stop(); /* atomic cooperative stop; no UI mutation */" in callback
+assert callback.index("home_stalled_attempt=scan.attempts;") < callback.index("lf_recog_stop();")
+for unsafe in ("home_refresh(", "lv_obj_add_flag(", "lv_obj_delete(", "invalidate_full_screen("):
     assert unsafe not in callback, f"Input callback must only enqueue cancellation: {unsafe}"
 assert "if(home_record_cancel_pending_attempt && !ui_pointer_is_down()" in tick
 assert "const uint32_t cancelled_attempt=home_record_cancel_pending_attempt;" in tick
 assert "home_record_cancel_pending_attempt=0;" in tick
 assert "cancelled.attempts==cancelled_attempt" in tick
+assert "if(page==0 && cancelled.attempts==cancelled_attempt){" in tick
 assert "home_stalled_attempt=cancelled_attempt;" in tick
 assert "lf_recog_stop(); /* cancellation flag; existing worker shuts down */" in tick
 assert "lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_SCROLLABLE);" in tick
@@ -41,4 +45,4 @@ assert "home_record_wave_bias_q8+=((signed_peak*256)-home_record_wave_bias_q8)/8
 assert "const int centered=signed_peak-home_record_wave_bias_q8/256;" in record
 assert "int y=130+(centered<0?swing:-swing);" in record
 assert "const static int8_t phases[8]" not in src
-print("PASS: touch-safe deferred cancel and centered live-microphone waveform")
+print("PASS: immediate atomic scan stop, release-safe overlay and live microphone waveform")

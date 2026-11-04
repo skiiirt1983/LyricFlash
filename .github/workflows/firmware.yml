@@ -1,10 +1,10 @@
-name: LyricFlash Private Alpha 0.8.76 - ESP32-S3 Build
+name: LyricFlash Private Alpha 0.8.77 - ESP32-S3 Build
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - feature/private-0.8.76-restore-settings-home-swipe
+      - feature/private-0.8.77-record-cancel-edge-background
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'

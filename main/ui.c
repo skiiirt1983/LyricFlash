@@ -1282,8 +1282,8 @@ static void on_home_scan(lv_event_t *e)
     activity();
     home_refresh(now_ms());
 }
-/* Double short tap cancels recording/identification. No LVGL tree delete
- * here: the unchanged worker handles the cooperative stop and cleanup. */
+/* Double short tap cancels recording/identification. An atomic stop request
+ * is safe in the touch callback; LVGL mutations remain timer-deferred. */
 static void on_record_cancel_double_tap(lv_event_t *e)
 {
     (void)e;
@@ -1300,7 +1300,13 @@ static void on_record_cancel_double_tap(lv_event_t *e)
         home_record_cancel_tap_ms=0;
         /* NEVER hide/refresh this LVGL touch target during its own callback.
            The periodic UI timer handles shutdown after the finger releases. */
+        /* Block any late match from reopening lyrics after Stop. */
+        home_stalled_attempt=scan.attempts;
         home_record_cancel_pending_attempt=scan.attempts;
+        /* This is only an atomic flag store; signal the worker immediately,
+           without waiting for the UI timer or a later finger release.
+           Never mutate or delete an LVGL touch target inside this callback. */
+        lf_recog_stop(); /* atomic cooperative stop; no UI mutation */
     }else home_record_cancel_tap_ms=current;
 }
 static lv_obj_t *home_decor_ring(lv_obj_t *parent,int diameter,uint32_t color)
@@ -2789,6 +2795,12 @@ static void primary_pager_create(int target_index)
     lv_obj_set_style_pad_column(primary_pager,0,0);
     lv_obj_set_style_border_width(primary_pager,0,0);
     lv_obj_set_style_radius(primary_pager,0,0);
+    /* At the rightmost Settings edge, a momentary drag may expose the
+       scroll container between clipped panels. LVGL's default is white:
+       fill every such exposed pixel with the same dark page background.
+       Keep bidirectional scrolling and non-elastic bounds unchanged. */
+    lv_obj_set_style_bg_color(primary_pager,
+                              lv_color_hex(prefs->background_color),0);
     lv_obj_set_style_bg_opa(primary_pager,LV_OPA_COVER,0);
     lv_obj_set_scroll_dir(primary_pager,LV_DIR_HOR);
     lv_obj_set_scroll_snap_x(primary_pager,LV_SCROLL_SNAP_NONE);
@@ -3280,8 +3292,9 @@ static void on_tick(lv_timer_t *timer)
         home_record_cancel_pending_attempt=0;
         lf_recog_snapshot_t cancelled={0};
         lf_recog_snapshot(&cancelled);
-        if(page==0 && cancelled.attempts==cancelled_attempt &&
-           lf_recog_busy()){
+        /* The worker may finish after Stop but before the timer fires.
+           Always retire this attempt's overlay once the finger is up. */
+        if(page==0 && cancelled.attempts==cancelled_attempt){
             home_stalled_attempt=cancelled_attempt;
             /* Cancellation is already visible as the return to Home.
                Never leave a delayed "Cancelling scan..." label behind. */
