@@ -2595,12 +2595,12 @@ static void primary_pager_commit(int index)
     primary_pager_snap_to=index;
     primary_pager_snapping=false;
     pager_scrolling=false;
-    /* LVGL scroll-direction bits correspond to scrolling the *content*,
-       not the finger. At Clock (left edge), a finger drag LEFT moves to Home
-       and uses LV_DIR_RIGHT. At Settings (right edge), a finger drag RIGHT
-       moves back toward Home and uses LV_DIR_LEFT. No fourth page. */
-    if(primary_pager)lv_obj_set_scroll_dir(primary_pager,
-        index==0 ? LV_DIR_RIGHT : index==2 ? LV_DIR_LEFT : LV_DIR_HOR);
+    /* Keep both physical swipe directions enabled for every pager page.
+       Dynamic per-edge scroll flags in 0.8.74/0.8.75 trapped Settings:
+       firmware must never change LVGL's input direction at page commit.
+       The pager has no elastic overscroll or horizontal chain; guard
+       out-of-range motion with normal LVGL scroll bounds instead. */
+    /* No lv_obj_set_scroll_dir call here. */
     page=(index==0)?6:(index==1)?0:2;
     last_power_refresh_ms=0;
     clock_last_refresh=0;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.75: LVGL-derived edge direction; swipe never triggers screen timeout."""
+"""0.8.76: never restrict physical return swipe; preserve timeout guards."""
 from pathlib import Path
 ui=(Path(__file__).resolve().parents[1]/"main/ui.c").read_text()
 commit=ui.split("static void primary_pager_commit(int index)\n{",1)[1].split("/* Start EXACTLY one ease-out snap",1)[0]
@@ -7,9 +7,10 @@ create=ui.split("static void primary_pager_create(int target_index)\n{",1)[1].sp
 scroll=ui.split("static void primary_pager_scroll_event(lv_event_t *e)\n{",1)[1].split("static lv_obj_t *primary_page_create",1)[0]
 sleep=ui.split("static void sleep_display(void)\n{",1)[1].split("static void on_tick",1)[0]
 tick=ui.split("static void on_tick(lv_timer_t *timer)\n{",1)[1].split("/* Only the active Rolex-style",1)[0]
-assert "index==0 ? LV_DIR_RIGHT : index==2 ? LV_DIR_LEFT : LV_DIR_HOR" in commit
-assert "index==0 ? LV_DIR_LEFT : index==2 ? LV_DIR_RIGHT : LV_DIR_HOR" not in commit
-assert "lv_obj_set_scroll_dir(primary_pager," in commit
+assert "lv_obj_set_scroll_dir(primary_pager," not in commit, "Committing a page must not restrict return swipes"
+assert "LV_DIR_HOR" not in commit, "No per-page direction change allowed"
+assert "static void primary_pager_start_snap(int target)" in ui
+assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in ui
 assert "lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_ELASTIC);" in create
 assert "lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_CHAIN_HOR);" in create
 assert "lv_obj_set_scroll_dir(primary_pager,LV_DIR_HOR);" in create
@@ -21,4 +22,4 @@ assert "!asleep && ui_pointer_is_down()" in tick
 assert "lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_TRANSP,LV_STATE_PRESSED);" in ui
 assert "wake_cleanup_queued" in ui
 assert "lv_timer_resume(clock_sweep_timer);" in ui
-print("PASS: pager edge limiting and scroll activity preserve touch wake and avoid mid-swipe timeout")
+print("PASS: bidirectional Settings→Home and Clock→Home pager retained with no elastic/chaining and no mid-swipe timeout")
