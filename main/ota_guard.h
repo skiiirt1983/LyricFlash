@@ -1,4 +1,5 @@
 #pragma once
+#include <stdbool.h>
 
 /* Confirm a newly installed image only after the running LVGL task proves
    responsive across multiple post-boot samples. Never gate on Internet

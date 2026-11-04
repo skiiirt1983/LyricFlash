@@ -20,6 +20,7 @@ idf_component_register(
         "weather.c"
         "weather_visual.c"
         "ota_guard.c"
+        "ota_health_logic.c"
         "settings.c"
         "lyrics.c"
         "lyric_clock.c"

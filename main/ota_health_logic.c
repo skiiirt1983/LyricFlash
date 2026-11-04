@@ -1,4 +1,5 @@
 #include "ota_health_logic.h"
+#include <stddef.h>
 
 bool lf_ota_health_sample_ok(const lf_ota_health_sample_t *sample)
 {

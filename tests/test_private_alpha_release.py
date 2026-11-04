@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Protect the explicit private 0.8.67 OTA release gate from regression."""
+"""Protect the explicit private 0.8.68 OTA release gate from regression."""
 from pathlib import Path
 p=Path(__file__).resolve().parents[1]
 wf=(p/'.github/workflows/firmware.yml').read_text()
 preparer=(p/'tools/prepare_site.py').read_text()
 publisher=(p/'tools/publish_alpha_ota.py').read_text()
-assert "feature/private-0.8.67-touch-release-repaint" in wf
+assert "feature/private-0.8.68-ota-health-gate" in wf
 assert "Run all host and native source tests before compiling" in wf
 assert "contains(github.event.head_commit.message, '[compile-once]')" in wf
 assert "needs: preflight" in wf
@@ -30,11 +30,11 @@ for requirement in (
     "tools/create_preserve_usb.py _site",
     "tools/package_release.py --verify _site",
     "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin",
-    "LyricFlash-0.8.67-alpha-USB-and-OTA.zip",
+    "LyricFlash-0.8.68-alpha-USB-and-OTA.zip",
     "gh release create",
     "--prerelease --latest=false",
     "gh release view",
-    "0.8.67-alpha",
+    "0.8.68-alpha",
 ):
     assert requirement in wf, requirement
 assert "image_version!=version" in preparer, "The manifest must match the binary"
