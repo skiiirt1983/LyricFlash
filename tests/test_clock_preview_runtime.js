@@ -51,7 +51,7 @@ const fakeFetch=async(url,opts)=>opts?.method==="POST"
  ? (posts.push(JSON.parse(opts.body)),{ok:true,text:async()=>"{\"saved\":true}"})
  : {ok:true,text:async()=>JSON.stringify(String(url).includes('/api/clock-fonts')?deviceFonts:settings)};
 const runtime=new Function("document","fetch","setInterval",
- js+"\nreturn {load,save,render};")(
+ js+"\nreturn {load,save,render,selectPart};")(
  {getElementById:el},fakeFetch,()=>0
 );
 (async()=>{
@@ -129,6 +129,22 @@ const runtime=new Function("document","fetch","setInterval",
  el("face_background").value="#112233";el("face_background").dispatch("input");
  assert(el("clock-preview").innerHTML.includes('fill="#112233"'),
    "Palette editing does not change SVG preview");
+ /* Clock element colours are independent per face, with Time including
+    the analog hands and Battery including both icon and percentage. */
+ runtime.selectPart("time");
+ assert.equal(el("selected-color-label").textContent,"Time font colour");
+ el("selected-color").value="#ff33cc";el("selected-color").dispatch("input");
+ assert(el("clock-preview").innerHTML.includes("#ff33cc"),
+   "Time colour did not affect analog hands");
+ runtime.selectPart("battery");
+ el("selected-color").value="#22ddaa";el("selected-color").dispatch("input");
+ assert.equal(el("selected-color-label").textContent,"Battery icon and % colour");
+ assert(el("clock-preview").innerHTML.includes("#22ddaa"),
+   "Battery colour did not change");
+ assert.equal(el("selected-color").value,"#22ddaa");
+ runtime.selectPart("time");
+ assert.equal(el("selected-color").value,"#ff33cc",
+   "Battery colour incorrectly overwrote Time colour");
  el("clock_face").value="3";el("clock_face").dispatch("change");
  assert(el("clock-preview").innerHTML.includes("#a7c7a0"),
    "Changing one face overwrote another");
@@ -141,6 +157,9 @@ const runtime=new Function("document","fetch","setInterval",
  assert.equal(posts[0].basic_battery_x,37,"Battery X not saved as number");
  assert.equal(posts[0].basic_date_size,93,"Date size not saved as number");
  assert.equal(posts[0].face_profiles[2].background,0x112233);
+ assert.equal(posts[0].face_profiles[2].time_color,0xff33cc);
+ assert.equal(posts[0].face_profiles[2].battery_color,0x22ddaa);
+ assert.notEqual(posts[0].face_profiles[3].time_color,0xff33cc);
  assert.equal(posts[0].face_profiles[2].battery_x,39,
     "Non-Basic battery drag was not included in saved face profile");
  assert.equal(posts[0].face_profiles[2].battery_y,-109,
