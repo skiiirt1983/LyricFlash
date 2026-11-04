@@ -14,6 +14,7 @@ python3 tests/test_lyric_timeline_contract.py
 python3 tests/test_song_cache_contract.py
 python3 tests/test_touch_safe_lyrics_panel.py
 python3 tests/test_cancel_recovery_contract.py
+python3 tests/test_timing_touch_feedback_contract.py
 python3 tests/test_lyrics_overlay_contract.py
 python3 tests/test_upload_brand_navigation_contract.py
 python3 tests/test_weather_studio_contract.py

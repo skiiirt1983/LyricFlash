@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.59: cancellation must never hide its own touch target or re-lock the pager.
+"""0.8.60: cancellation must never hide its own touch target or re-lock the pager.
 
 The hardware-verified AudD/PCM worker is pinned separately by the safe-ID gate.
 """

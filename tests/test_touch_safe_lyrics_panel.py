@@ -29,7 +29,7 @@ assert scene.count("lv_slider_create(timed_controls)")==1
 assert scene.count("button(timed_controls,")==1
 for name in ('"SLOW DOWN"','"SPEED UP"','"RESET"'):
     assert name in scene,name
-assert "lv_obj_set_style_bg_opa(timed_controls,LV_OPA_40,0);" in scene
+assert "lv_obj_set_style_bg_opa(timed_controls,(lv_opa_t)38,0);" in scene
 assert "timed_add_nudge(timed_controls,\"-\",-128,-1);" in scene
 assert "timed_add_nudge(timed_controls,\"+\",128,1);" in scene
 assert "if(timed_scan_attempt!=song->attempts)" in scene

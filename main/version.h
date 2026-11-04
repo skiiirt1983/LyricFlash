@@ -1,14 +1,12 @@
 #pragma once
-/* LyricFlash 0.8.59 private alpha: UI cancellation recovery, based on
- * hardware-verified 0.8.57 f991153d8da6 (2/2 identified songs).
- * AudD, microphone, LRCLIB, recognition and local cache sources are pinned.
- * Original 0.8.57 remains available at safe/0.8.57-hardware-verified. */
-#define LF_VERSION "0.8.59-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.59"
+/* LyricFlash 0.8.60 private alpha: touch feedback and lighter lyrics overlay.
+ * Based on user-tested 0.8.59 cancel recovery (f9f21a4e1d2a).
+ * Song ID, AudD, audio capture, LRCLIB, network and song cache unchanged.
+ * Rollback: safe/0.8.59-hardware-tested and safe/0.8.57-hardware-verified. */
+#define LF_VERSION "0.8.60-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.60"
 
-/* 0.8.58 visuals retained: transparent speed overlay, auto-save, RESET,
- * actual microphone waveform, user logo and compact Home.
- * 0.8.59: cancellation handled after touch release on LVGL timer; explicitly
- * unlock pager, stop redundant hidden-overlay redraws; center waveform via
- * display-only slow-bias removal. Hardware testing required before safe tag. */
-/* Source preflight passed; release-gated ESP32-S3 firmware validation. */
+/* UI: remove trailing cancel status; 72x64 + / - touch areas, obvious
+ * on-contact highlight and 280ms confirmation glow; lyrics timing overlay
+ * is 15% opaque. Existing reliable deferred scan cancellation preserved.
+ * Build verification does not establish hardware reliability. */

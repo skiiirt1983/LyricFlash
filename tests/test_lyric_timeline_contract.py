@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""0.8.59: fixed 24px font, premeasured wraps, time gaps, independent timing offset."""
+"""0.8.60: fixed 24px font, premeasured wraps, time gaps, independent timing offset."""
 from pathlib import Path
 p=Path(__file__).resolve().parents[1]
 ui=(p/"main/ui.c").read_text()
 sync_h=(p/"main/lyric_sync.h").read_text()
 sync=(p/"main/lyric_sync.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.59-alpha"' in version
+assert 'LF_VERSION "0.8.60-alpha"' in version
 assert "LF_SYNC_DISPLAY_DELAY_MS 1000U" in sync_h
 assert "lf_sync_visible_position_ms" in ui and "lf_sync_visible_position_ms" in sync
 assert "lf_lyric_clock_position(&timed_clock,current)" in ui

@@ -2,7 +2,7 @@
 """Protect the user-verified 0.8.57 recognition baseline (2/2 songs identified).
 
 Any unintentional modification to audio, ID, HTTP, LRCLIB, cache or sync
-invalidates this gate. This 0.8.59 update is intentionally UI-only.
+invalidates this gate. This 0.8.60 update is intentionally UI-only.
 """
 from pathlib import Path
 import hashlib

@@ -80,6 +80,8 @@ static uint32_t timed_rate_song_anchor_ms;
 static bool timed_song_custom;
 /* Write only changed per-track timing when a user exits its controls. */
 static bool timed_profile_dirty;
+static lv_timer_t *timed_nudge_feedback_timer;
+static lv_obj_t *timed_nudge_feedback_button;
 static void timed_profile_save_if_dirty(void);
 static lv_obj_t *timed_sync_slider;
 static lv_obj_t *timed_rate_slider;
@@ -785,6 +787,12 @@ static void lyrics_overlay_close(void)
 {
     if(!timed_overlay)return;
     timed_profile_save_if_dirty(); /* preserve song settings before scene cleanup */
+    /* Feedback timer cannot retain a pointer to the discarded lyric buttons. */
+    if(timed_nudge_feedback_timer){
+        lv_timer_delete(timed_nudge_feedback_timer);
+        timed_nudge_feedback_timer=NULL;
+    }
+    timed_nudge_feedback_button=NULL;
     auto_open_pending=false;
     auto_open_transition=false;
     if(home_record_layer)lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
@@ -815,6 +823,11 @@ static void lyrics_overlay_close(void)
 static void make_base(void)
 {
     if(timed_overlay)lyrics_overlay_close();
+    if(timed_nudge_feedback_timer){
+        lv_timer_delete(timed_nudge_feedback_timer);
+        timed_nudge_feedback_timer=NULL;
+    }
+    timed_nudge_feedback_button=NULL;
     /* A timer that renders the retired lyric scene must NEVER outlive it. */
     if(timed_scroll_timer){
         lv_timer_delete(timed_scroll_timer);
@@ -1795,6 +1808,29 @@ static void timed_profile_save_if_dirty(void)
         ESP_LOGW(TAG,"Per-track lyrics speed could not be saved; keeping it dirty");
     }
 }
+/* Persist the nudge glow briefly after finger release so a short tap visibly
+   registers. One paused LVGL timer owns the flash; never hold touch callbacks. */
+static void timed_nudge_feedback_end(lv_timer_t *timer)
+{
+    if(timed_nudge_feedback_button){
+        lv_obj_remove_state(timed_nudge_feedback_button,LV_STATE_USER_1);
+        timed_nudge_feedback_button=NULL;
+    }
+    lv_timer_pause(timer);
+}
+static void timed_nudge_feedback(lv_obj_t *control)
+{
+    if(timed_nudge_feedback_button && timed_nudge_feedback_button!=control)
+        lv_obj_remove_state(timed_nudge_feedback_button,LV_STATE_USER_1);
+    timed_nudge_feedback_button=control;
+    lv_obj_add_state(control,LV_STATE_USER_1);
+    if(!timed_nudge_feedback_timer)
+        timed_nudge_feedback_timer=lv_timer_create(timed_nudge_feedback_end,280,NULL);
+    else {
+        lv_timer_reset(timed_nudge_feedback_timer);
+        lv_timer_resume(timed_nudge_feedback_timer);
+    }
+}
 static void timed_rate_nudge(lv_event_t *e)
 {
     if(!timed_lyrics_mode || !timed_clock.started)return;
@@ -1804,18 +1840,33 @@ static void timed_rate_nudge(lv_event_t *e)
     if(value>125)value=125;
     timed_change_rate((uint16_t)value);
     if(timed_rate_slider)lv_slider_set_value(timed_rate_slider,value,LV_ANIM_OFF);
+    timed_nudge_feedback(lv_event_get_current_target(e));
 }
-/* Minimal +/- actions are separate from the one continuous rate slider. */
+/* Large touch surfaces, compact glyphs, and visible pressed/confirmed glow. */
 static void timed_add_nudge(lv_obj_t *parent,const char *glyph,int x,int step)
 {
     lv_obj_t *control=lv_button_create(parent);
-    lv_obj_set_size(control,40,40);
+    lv_obj_set_size(control,72,64); /* was 40x40: 2.9x touch area */
     lv_obj_align(control,LV_ALIGN_CENTER,x,-112);
     lv_obj_set_style_radius(control,LV_RADIUS_CIRCLE,0);
-    lv_obj_set_style_bg_color(control,lv_color_hex(0x304455),0);
-    lv_obj_set_style_bg_opa(control,LV_OPA_50,0);
-    lv_obj_set_style_border_width(control,1,0);
-    lv_obj_set_style_border_color(control,lv_color_hex(0x9DBFD5),0);
+    lv_obj_set_style_bg_color(control,lv_color_hex(0x274C65),0);
+    lv_obj_set_style_bg_opa(control,LV_OPA_COVER,0);
+    lv_obj_set_style_border_width(control,2,0);
+    lv_obj_set_style_border_color(control,lv_color_hex(0x8DC9F3),0);
+    lv_obj_set_style_shadow_width(control,0,0);
+    /* Bright yellow during contact; blue glow lasts 280ms after a click. */
+    lv_obj_set_style_bg_color(control,lv_color_hex(0xF4C746),LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(control,lv_color_white(),LV_STATE_PRESSED);
+    lv_obj_set_style_shadow_width(control,14,LV_STATE_PRESSED);
+    lv_obj_set_style_shadow_color(control,lv_color_hex(0xF4C746),LV_STATE_PRESSED);
+    lv_obj_set_style_shadow_opa(control,LV_OPA_70,LV_STATE_PRESSED);
+    lv_obj_set_style_transform_width(control,8,LV_STATE_PRESSED);
+    lv_obj_set_style_transform_height(control,8,LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(control,lv_color_hex(0x178DCD),LV_STATE_USER_1);
+    lv_obj_set_style_border_color(control,lv_color_white(),LV_STATE_USER_1);
+    lv_obj_set_style_shadow_width(control,12,LV_STATE_USER_1);
+    lv_obj_set_style_shadow_color(control,lv_color_hex(0x43C6FF),LV_STATE_USER_1);
+    lv_obj_set_style_shadow_opa(control,LV_OPA_70,LV_STATE_USER_1);
     lv_obj_remove_flag(control,LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_event_cb(control,timed_rate_nudge,LV_EVENT_CLICKED,
                         (void *)(intptr_t)step);
@@ -2071,7 +2122,7 @@ static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)
     lv_obj_align(timed_controls,LV_ALIGN_CENTER,0,0);
     lv_obj_set_style_radius(timed_controls,0,0);
     lv_obj_set_style_bg_color(timed_controls,lv_color_black(),0);
-    lv_obj_set_style_bg_opa(timed_controls,LV_OPA_40,0);
+    lv_obj_set_style_bg_opa(timed_controls,(lv_opa_t)38,0); /* ~15% black */
     lv_obj_set_style_border_width(timed_controls,0,0);
     lv_obj_set_style_pad_all(timed_controls,0,0);
     lv_obj_remove_flag(timed_controls,LV_OBJ_FLAG_SCROLLABLE);
@@ -3062,8 +3113,10 @@ static void on_tick(lv_timer_t *timer)
         if(page==0 && cancelled.attempts==cancelled_attempt &&
            lf_recog_busy()){
             home_stalled_attempt=cancelled_attempt;
-            home_warning="Cancelling scan...";
-            home_warning_until_ms=current+4500U;
+            /* Cancellation is already visible as the return to Home.
+               Never leave a delayed "Cancelling scan..." label behind. */
+            home_warning=NULL;
+            home_warning_until_ms=0;
             lf_recog_stop(); /* cancellation flag; existing worker shuts down */
             /* Restore pager input immediately; the worker may still have a
                15s socket timeout to clear. Repeated timers must not relock. */
