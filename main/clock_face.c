@@ -443,16 +443,16 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
             meridiem_label=face_text(parent,"",settings->basic_time_x+139,
                                     settings->basic_time_y+22,
                                     &lv_font_montserrat_16,
-                                    settings->basic_foreground);
+                                    settings->face_time_color[5]);
         battery_label = face_text(parent, LV_SYMBOL_BATTERY_FULL " --%",
                                   settings->face_battery_x[5], settings->face_battery_y[5],
                                   basic_element_font(settings->face_battery_size[5]),
-                                  settings->basic_foreground);
+                                  settings->face_battery_color[5]);
         if (settings->face_show_date[5])
             date_label = face_text(parent, "--",
                                    settings->face_date_x[5], settings->face_date_y[5],
                                    basic_element_font(settings->face_date_size[5]),
-                                   settings->basic_foreground);
+                                   settings->face_date_color[5]);
         info_label = face_text(parent, "", 0, 109, &lv_font_montserrat_16,
                                settings->basic_foreground);
     }
@@ -468,7 +468,7 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
     lf_weather_get_config(&weather_cfg);
     /* Weather is an opt-in, movable part of each independent face. */
     if (weather_cfg.enabled && settings->face_show_weather[current_style]) {
-        uint32_t colour = settings->face_foreground[current_style];
+        uint32_t colour = settings->face_weather_color[current_style];
         const uint8_t wz=settings->face_weather_size[current_style];
         weather_icon = lv_obj_create(parent);
         int icon_size=46+wz/4;
@@ -491,6 +491,8 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
        The diver date window remains a single movable unit, preserving the
        existing white magnifier instead of separating its label from its frame. */
     if(battery_label){
+        lv_obj_set_style_text_color(battery_label,
+            lv_color_hex(settings->face_battery_color[current_style]),0);
         const uint8_t z=settings->face_battery_size[current_style];
         lv_obj_align(battery_label,LV_ALIGN_CENTER,
                      settings->face_battery_x[current_style],
@@ -515,6 +517,15 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
         lv_obj_set_style_text_font(date_label,basic_element_font(z),0);
         basic_scale_element(date_label,z);
     }
+    /* Time and AM/PM share a colour; Battery, Date and Weather do not. */
+    if(time_label)lv_obj_set_style_text_color(time_label,
+        lv_color_hex(settings->face_time_color[current_style]),0);
+    if(sundial_time_label)lv_obj_set_style_text_color(sundial_time_label,
+        lv_color_hex(settings->face_time_color[current_style]),0);
+    if(meridiem_label)lv_obj_set_style_text_color(meridiem_label,
+        lv_color_hex(settings->face_time_color[current_style]),0);
+    if(date_label)lv_obj_set_style_text_color(date_label,
+        lv_color_hex(settings->face_date_color[current_style]),0);
     if(!settings->face_show_date[current_style] && date_label)
         lv_obj_add_flag(date_label,LV_OBJ_FLAG_HIDDEN);
     if(!settings->face_show_date[current_style] && date_window)
@@ -555,7 +566,8 @@ void lf_clock_update(void)
             snprintf(text,sizeof text,"--%%");
         }
         update_label_if_changed(battery_label, text);
-        uint32_t color = state.usb_connected ? clock_settings->charging_color : lf_power_color(&state);
+        uint32_t color = state.usb_connected ? clock_settings->charging_color :
+                          clock_settings->face_battery_color[current_style];
         if (color != displayed_battery_color) {
             lv_obj_set_style_text_color(battery_label, lv_color_hex(color), 0);
             displayed_battery_color = color;
