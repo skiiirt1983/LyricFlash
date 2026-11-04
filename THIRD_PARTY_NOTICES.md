@@ -38,7 +38,11 @@ precise source paths and SHA-256 checksums.
 
 Honk and Nabla are multicolour variable typefaces; the embedded display
 currently uses single-colour antialiased glyph conversion, not their full
-COLRv1 layered effects. Only clock glyphs, not complete font files, are
+COLRv1 layered effects. The additional open-source Carlito, Tinos and Asap families are included
+as substitutes for Calibri, Times New Roman and Trebuchet MS respectively.
+These are not the proprietary Microsoft originals.
+
+Only clock glyphs, not complete font files, are
 included in the application firmware to fit both OTA partitions.
 
 Proprietary Calibri, Times New Roman, and Trebuchet MS font files have NOT
