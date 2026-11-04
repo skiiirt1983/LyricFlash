@@ -16,6 +16,12 @@ permissions:
   contents: read
 jobs:
   validate-and-compile:
+    # Explicitly gate expensive ESP-IDF builds. A normal source edit cannot
+    # start another full compile or publish any OTA firmware.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       contains(github.event.head_commit.message, '[font-compile-once]'))
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     steps:
