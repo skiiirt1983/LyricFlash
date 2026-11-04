@@ -36,8 +36,8 @@ assert 'atomic_compare_exchange_strong(&worker_active' in main
 assert 'MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT' in main
 assert 'if(ok && !atomic_load(&stop_flag))lookup_lyrics_after_match();' in main
 assert 'LF_RECOG_LYRICS' in h and 'finding_lyrics' in main
-assert 'song-result' in ui and 'Synchronized lyrics found:' in ui
-assert 'Preview (not live synchronized)' in ui
+assert 'id=\\"song-token\\"' in ui and 'id=\\"maintenance-view\\"' in ui
+assert 'lrclib' in client.lower() and 'lf_recog_lyric_line' in main
 assert "Checked again. No newer validated version" not in ui
 assert 'Some sources unavailable:' not in ui
 assert 'checkedAtLeastOneSource' in ui
