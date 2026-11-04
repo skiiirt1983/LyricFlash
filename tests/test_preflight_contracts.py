@@ -681,3 +681,17 @@ require(all(x in ui for x in (
     'lv_obj_set_size(slider,242,32)',
     'lv_obj_set_style_pad_all(slider,10,LV_PART_KNOB)')),
     "Device scroll, network/version details or brightness touch target regressed")
+require(all(x in ui for x in (
+    'lv_obj_set_style_bg_color(b, lv_color_hex(0x143553), 0)',
+    'lv_obj_set_style_border_color(b, lv_color_hex(0x72C9FF), 0)',
+    'lv_obj_set_style_text_color(l, lv_color_hex(0xEAF6FF), 0)')) and
+    'const bool settings=(page==' not in ui,
+    "Device buttons must use the same polished styling from startup")
+require(all(x in pages["studio"] for x in (
+    'function paintSpectrumSwatches()',
+    'paintSpectrumSwatches();',
+    'id="reset-face"',
+    'id="basic-options" hidden')) and
+    'id="reset-basic"' not in pages["studio"],
+    "Clock Studio needs live colour swatches and only one face reset")
+
