@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-#define LF_CONFIG_SCHEMA 14U
+#define LF_CONFIG_SCHEMA 15U
 #define LF_CONFIG_NS "lyric_ui"
 
 typedef struct {
@@ -46,9 +46,14 @@ typedef struct {
     int32_t face_battery_x[6];
     int32_t face_battery_y[6];
     uint8_t face_battery_size[6]; /* 0..200; independent for all faces */
-    uint8_t face_show_percent[6]; /* omit numeric battery percentage */
+    uint8_t face_show_percent[6]; /* independent percentage visibility */
+    uint8_t face_show_icon[6]; /* independent battery symbol visibility */
+    uint8_t face_date_format[6]; /* 0 face default, 1 weekday, 2 short, 3 D/M/Y, 4 ISO, 5 long */
     int32_t face_date_x[6], face_date_y[6]; /* per-face date location */
     uint8_t face_date_size[6]; /* 0..200 */
+    uint8_t face_show_weather[6];
+    int32_t face_weather_x[6], face_weather_y[6];
+    uint8_t face_weather_size[6];
     uint8_t face_24h[6];
     uint32_t charging_color;  // customizable when USB connected
     uint8_t show_progress;    // 0 .. 1
