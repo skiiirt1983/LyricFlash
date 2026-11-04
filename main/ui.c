@@ -400,6 +400,8 @@ static void style_button(lv_obj_t *b, uint32_t color)
     lv_obj_set_style_bg_color(b, lv_color_hex(settings?0x143553:color), 0);
     lv_obj_set_style_bg_grad_color(b, lv_color_hex(0x32658A), 0);
     lv_obj_set_style_bg_grad_dir(b, settings?LV_GRAD_DIR_VER:LV_GRAD_DIR_NONE, 0);
+    lv_obj_set_style_bg_opa(b, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(b, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_border_width(b, settings?2:1, 0);
     lv_obj_set_style_border_color(b, lv_color_hex(settings?0x72C9FF:0xAACBE6), 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
@@ -2491,14 +2493,14 @@ static void build_device_settings_now(void)
     brightness_text=device_line(content,text,94,&lv_font_montserrat_20,0xD6F0FF);
     lv_obj_t *slider=lv_slider_create(content);
     /* Large touch target for a finger on the 1.75-inch AMOLED. */
-    lv_obj_set_size(slider,242,38);
+    lv_obj_set_size(slider,242,14);
     lv_obj_align(slider,LV_ALIGN_TOP_MID,0,142);
     lv_slider_set_range(slider,5,100);
     lv_slider_set_value(slider,prefs->brightness,LV_ANIM_OFF);
     lv_obj_set_style_bg_color(slider,lv_color_hex(0x294D69),LV_PART_MAIN);
     lv_obj_set_style_bg_color(slider,lv_color_hex(0x5DC4FF),LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(slider,lv_color_hex(0xF0FAFF),LV_PART_KNOB);
-    lv_obj_set_style_pad_all(slider,21,LV_PART_KNOB);
+    lv_obj_set_style_pad_all(slider,12,LV_PART_KNOB);
     /* Keep vertical drags on brightness instead of chaining them to the
        scrollable Device page. The full-width track remains finger-sized. */
     lv_obj_remove_flag(slider,LV_OBJ_FLAG_SCROLL_CHAIN_VER);
