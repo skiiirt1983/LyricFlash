@@ -21,3 +21,26 @@ LyricFlash integration modifications:
 - Preserve the original Wi-Fi configuration, NVS, and OTA update code.
 
 This attribution does not imply endorsement by the original project.
+
+## Clock typeface assets (draft 0.8.62)
+
+LyricFlash uses glyph-subset conversion at build time for the following genuine
+Google Fonts families: Kablammo, Mystery Quest, Moirai One, Rampart One,
+Hanalei, Bitcount Grid Double, Iceberg, Montserrat, Sancreek, Modak,
+Alumni Sans Collegiate One, Honk, and Nabla.
+
+Original upstream source files and licensing notices are hosted by Google at
+https://github.com/google/fonts/tree/main/ofl . Each font's upstream OFL.txt
+is available in its corresponding family directory; all generated glyphs are
+redistributed under the applicable SIL Open Font License 1.1 terms. See
+`tools/generate_clock_fonts.py` and the generated per-family manifest for
+precise source paths and SHA-256 checksums.
+
+Honk and Nabla are multicolour variable typefaces; the embedded display
+currently uses single-colour antialiased glyph conversion, not their full
+COLRv1 layered effects. Only clock glyphs, not complete font files, are
+included in the application firmware to fit both OTA partitions.
+
+Proprietary Calibri, Times New Roman, and Trebuchet MS font files have NOT
+been embedded or redistributed. The web preview may use browser-installed
+system fonts and fallback fonts, but firmware only uses licensed font assets.
