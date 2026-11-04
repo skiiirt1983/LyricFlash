@@ -7,6 +7,6 @@
  * Working 0.8.69, 0.8.68 and 0.8.67 remain published unchanged. */
 #define LF_VERSION "0.8.70-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.70"
-/* Waveform-only source/native regression preflight passed.
- * The previous 0.8.68 firmware remains unchanged for safe fallback;
- * physical waveform-height validation remains pending after compilation. */
+/* Screen-off timer efficiency source/native preflight passed.
+ * 0.8.69 remains the previous known-good recovery release;
+ * real battery runtime and touch recovery require hardware validation. */
