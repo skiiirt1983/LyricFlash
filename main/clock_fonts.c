@@ -12,6 +12,9 @@ LV_FONT_DECLARE(lf_clock_font_modak);
 LV_FONT_DECLARE(lf_clock_font_alumni_sans_collegiate_one);
 LV_FONT_DECLARE(lf_clock_font_honk);
 LV_FONT_DECLARE(lf_clock_font_nabla);
+LV_FONT_DECLARE(lf_clock_font_carlito);
+LV_FONT_DECLARE(lf_clock_font_tinos);
+LV_FONT_DECLARE(lf_clock_font_asap);
 
 const lv_font_t *lf_clock_custom_font(uint8_t style)
 {
@@ -29,6 +32,9 @@ const lv_font_t *lf_clock_custom_font(uint8_t style)
     case 34: return &lf_clock_font_alumni_sans_collegiate_one;
     case 35: return &lf_clock_font_honk;
     case 36: return &lf_clock_font_nabla;
+    case 37: return &lf_clock_font_carlito;
+    case 38: return &lf_clock_font_tinos;
+    case 39: return &lf_clock_font_asap;
     default: return NULL;
     }
 }
