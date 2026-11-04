@@ -471,6 +471,12 @@ static esp_err_t handle_basic_get(httpd_req_t *req)
         cJSON_AddNumberToObject(p,"battery_y",s.face_battery_y[i]);
         cJSON_AddNumberToObject(p,"battery_size",s.face_battery_size[i]);
         cJSON_AddBoolToObject(p,"show_percent",s.face_show_percent[i]!=0);
+        cJSON_AddBoolToObject(p,"show_icon",s.face_show_icon[i]!=0);
+        cJSON_AddNumberToObject(p,"date_format",s.face_date_format[i]);
+        cJSON_AddBoolToObject(p,"show_weather",s.face_show_weather[i]!=0);
+        cJSON_AddNumberToObject(p,"weather_x",s.face_weather_x[i]);
+        cJSON_AddNumberToObject(p,"weather_y",s.face_weather_y[i]);
+        cJSON_AddNumberToObject(p,"weather_size",s.face_weather_size[i]);
         cJSON_AddNumberToObject(p,"date_x",s.face_date_x[i]);
         cJSON_AddNumberToObject(p,"date_y",s.face_date_y[i]);
         cJSON_AddNumberToObject(p,"date_size",s.face_date_size[i]);
@@ -571,6 +577,8 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     int32_t battery_x_face[6],battery_y_face[6];
     int32_t date_x_face[6],date_y_face[6];
     uint8_t battery_size_face[6],date_size_face[6],percent_face[6];
+    uint8_t icon_face[6],date_format_face[6],weather_face[6],weather_size_face[6];
+    int32_t weather_x_face[6],weather_y_face[6];
     if(!cJSON_IsArray(profiles)||cJSON_GetArraySize(profiles)!=6) valid=false;
     if(valid) for(int i=0;i<6;i++){
         const cJSON *p=cJSON_GetArrayItem(profiles,i);
@@ -596,19 +604,37 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         int bsize=current.face_battery_size[i],dsize=current.face_date_size[i];
         int dx=current.face_date_x[i],dy=current.face_date_y[i];
         uint8_t pct=current.face_show_percent[i];
+        uint8_t ico=current.face_show_icon[i],wvis=current.face_show_weather[i];
+        int datefmt=current.face_date_format[i],wsz=current.face_weather_size[i];
+        int wx=current.face_weather_x[i],wy=current.face_weather_y[i];
         const cJSON *bs=cJSON_GetObjectItemCaseSensitive(p,"battery_size");
         const cJSON *ds=cJSON_GetObjectItemCaseSensitive(p,"date_size");
         const cJSON *x=cJSON_GetObjectItemCaseSensitive(p,"date_x");
         const cJSON *y=cJSON_GetObjectItemCaseSensitive(p,"date_y");
         const cJSON *show=cJSON_GetObjectItemCaseSensitive(p,"show_percent");
+        const cJSON *ico_field=cJSON_GetObjectItemCaseSensitive(p,"show_icon");
+        const cJSON *df_field=cJSON_GetObjectItemCaseSensitive(p,"date_format");
+        const cJSON *wv_field=cJSON_GetObjectItemCaseSensitive(p,"show_weather");
+        const cJSON *wx_field=cJSON_GetObjectItemCaseSensitive(p,"weather_x");
+        const cJSON *wy_field=cJSON_GetObjectItemCaseSensitive(p,"weather_y");
+        const cJSON *wsz_field=cJSON_GetObjectItemCaseSensitive(p,"weather_size");
         if((bs&&!number_in_range(p,"battery_size",0,200,&bsize))||
            (ds&&!number_in_range(p,"date_size",0,200,&dsize))||
            (x&&!number_in_range(p,"date_x",-150,150,&dx))||
            (y&&!number_in_range(p,"date_y",-180,180,&dy))||
-           (show&&!boolean_value(p,"show_percent",&pct))){valid=false;break;}
+           (show&&!boolean_value(p,"show_percent",&pct))||
+           (ico_field&&!boolean_value(p,"show_icon",&ico))||
+           (df_field&&!number_in_range(p,"date_format",0,5,&datefmt))||
+           (wv_field&&!boolean_value(p,"show_weather",&wvis))||
+           (wx_field&&!number_in_range(p,"weather_x",-150,150,&wx))||
+           (wy_field&&!number_in_range(p,"weather_y",-180,180,&wy))||
+           (wsz_field&&!number_in_range(p,"weather_size",0,200,&wsz))){valid=false;break;}
         battery_size_face[i]=(uint8_t)bsize;
         date_size_face[i]=(uint8_t)dsize;
         date_x_face[i]=dx;date_y_face[i]=dy;percent_face[i]=pct;
+        icon_face[i]=ico;date_format_face[i]=(uint8_t)datefmt;
+        weather_face[i]=wvis;weather_size_face[i]=(uint8_t)wsz;
+        weather_x_face[i]=wx;weather_y_face[i]=wy;
         bg_face[i]=(uint32_t)bgv;fg_face[i]=(uint32_t)fgv;ac_face[i]=(uint32_t)acv;
         dt_face[i]=dv;sc_face[i]=sv;bt_face[i]=bv;hr_face[i]=hv;
     }
@@ -652,6 +678,12 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         current.face_battery_y[i]=battery_y_face[i];
         current.face_battery_size[i]=battery_size_face[i];
         current.face_show_percent[i]=percent_face[i];
+        current.face_show_icon[i]=icon_face[i];
+        current.face_date_format[i]=date_format_face[i];
+        current.face_show_weather[i]=weather_face[i];
+        current.face_weather_x[i]=weather_x_face[i];
+        current.face_weather_y[i]=weather_y_face[i];
+        current.face_weather_size[i]=weather_size_face[i];
         current.face_date_x[i]=date_x_face[i];
         current.face_date_y[i]=date_y_face[i];
         current.face_date_size[i]=date_size_face[i];
@@ -664,6 +696,10 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     current.basic_date_x=current.face_date_x[5];
     current.basic_date_y=current.face_date_y[5];
     current.basic_date_size=current.face_date_size[5];
+    current.basic_weather=current.face_show_weather[5];
+    current.basic_weather_x=current.face_weather_x[5];
+    current.basic_weather_y=current.face_weather_y[5];
+    current.basic_weather_size=current.face_weather_size[5];
     /* Basic face keeps existing ring/font controls as well. */
     current.basic_background=current.face_background[5];
     current.basic_foreground=current.face_foreground[5];
