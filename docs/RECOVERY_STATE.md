@@ -51,3 +51,11 @@ No automated build or source-test result substitutes for these device-specific c
 - Dedicated 0.8.67 branch (preflight only initially): `feature/private-0.8.67-touch-release-repaint`.
 - Scoped candidate: ignore bubbled child scroll events, move pager snap initiation out of LV_EVENT_SCROLL_END and into the existing timer/watchdog, repaint the settled active pager page once.
 - Keep 0.8.66 immutable as fallback. User hardware verification still required; this is a plausible UI race, not a confirmed root cause.
+
+## Published 0.8.67 release
+- Build SHA: `498b0400e3965b4e7b6a75d7ff1151e2cc0f210c`.
+- CI: [GitHub Actions run 41861389591](https://github.com/skiiirt1983/LyricFlash/actions/runs/41861389591); preflight, ESP32-S3 compile, full USB package, firmware verification, SHA-specific direct HTTPS OTA and prerelease creation succeeded.
+- Immutable alpha prerelease: [alpha-build-498b0400e396](https://github.com/skiiirt1983/LyricFlash/releases/tag/alpha-build-498b0400e396). Includes application-only `lyricflash-ota.bin` and complete recovery ZIP.
+- The previous `0.8.66-alpha` release and direct OTA remain available and unchanged.
+- **Hardware validation outstanding:** repeat Clock ↔ Home ↔ Settings finger releases and Device Settings entry/exit; check for any black flash. If present, capture gesture/page and diagnostics so the next patch targets the actual blanking source.
+- This checkpoint-only documentation update must not trigger compilation.
