@@ -2582,6 +2582,9 @@ static void primary_pager_commit(int index)
         uint32_t maximum=atomic_load(&pager_snap_max_ms);
         if(elapsed>maximum)atomic_store(&pager_snap_max_ms,elapsed);
     }
+    /* Keep the settled panel fully painted; never wait for another touch. */
+    const bool settled_move=primary_pager_snapping || pager_scrolling ||
+                            primary_pager_current!=index;
     primary_pager_current=index;
     primary_pager_origin=index;
     primary_pager_snap_to=index;
@@ -2592,6 +2595,8 @@ static void primary_pager_commit(int index)
     clock_last_refresh=0;
     activity();
     if(index==1)home_refresh(now_ms());
+    if(settled_move && primary_pager_pages[index])
+        lv_obj_invalidate(primary_pager_pages[index]);
     if(index==0) {
         /* A touch used to reveal a black Clock after a return swipe. Do not
            depend on another touch to trigger the panel's dirty rectangle:
@@ -2663,7 +2668,9 @@ static void primary_pager_watchdog(uint64_t current)
 }
 static void primary_pager_scroll_event(lv_event_t *e)
 {
-    if(!primary_pager || primary_pager_initializing) return;
+    /* A bubbled child scroll may not start a new whole-page animation. */
+    if(!primary_pager || primary_pager_initializing ||
+       lv_event_get_target(e)!=primary_pager) return;
     const lv_event_code_t code=lv_event_get_code(e);
     if(code==LV_EVENT_SCROLL_BEGIN){
         /* LVGL permits editing the scroll animation here. A short,
@@ -2701,9 +2708,9 @@ static void primary_pager_scroll_event(lv_event_t *e)
             primary_pager_commit(primary_pager_snap_to);
         return;
     }
-    int target=primary_pager_target(x);
-    if(abs(x-target*466)<=2)primary_pager_commit(target);
-    else primary_pager_start_snap(target);
+    /* Do not start a second LVGL scroll animation inside SCROLL_END.
+       The existing 50 ms watchdog performs one snap after finger-up. */
+    primary_pager_last_move_ms=now_ms();
 }
 static lv_obj_t *primary_page_create(lv_obj_t *pager,int index)
 {

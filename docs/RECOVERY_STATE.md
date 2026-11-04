@@ -45,3 +45,9 @@ No automated build or source-test result substitutes for these device-specific c
 - Recommended path from an existing LyricFlash installation: open **Firmware → Refresh from GitHub**, select **New 0.8.66-alpha**, install via the device's Wi-Fi OTA. It should preserve NVS settings; verify on hardware.
 - The separately hosted GitHub Pages beta USB installer still advertises historic Alpha 0.8.41 because `main` has not been promoted. Do **not** use that old beta page to obtain 0.8.66. Use the GitHub prerelease package for recovery, not as an OTA upload.
 - A future **documentation-only** commit to this file does not change the compiled source or release SHA.
+
+## Touch-release blackout: investigation and source patch
+- Report: the panel intermittently goes black for roughly a second when a finger lifts.
+- Dedicated 0.8.67 branch (preflight only initially): `feature/private-0.8.67-touch-release-repaint`.
+- Scoped candidate: ignore bubbled child scroll events, move pager snap initiation out of LV_EVENT_SCROLL_END and into the existing timer/watchdog, repaint the settled active pager page once.
+- Keep 0.8.66 immutable as fallback. User hardware verification still required; this is a plausible UI race, not a confirmed root cause.

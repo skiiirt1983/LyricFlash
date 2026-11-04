@@ -391,7 +391,10 @@ require('static lv_obj_t *primary_pager;' in ui and
         'primary_pager_origin' in pager_impl and
         'LV_EVENT_SCROLL_BEGIN' in pager_impl and
         'LV_EVENT_SCROLL_END' in pager_impl and
-        'primary_pager_start_snap(target);' in pager_impl and
+        'primary_pager_start_snap(target);' not in pager_impl and
+        'lv_event_get_target(e)!=primary_pager' in pager_impl and
+        'primary_pager_last_move_ms=now_ms();' in pager_impl and
+        'primary_pager_start_snap(target);' in watchdog and
         'abs(displacement)>=55' in ui and
         'current-primary_pager_last_move_ms>75' in ui and
         'lv_obj_set_scroll_dir(primary_pager,LV_DIR_HOR);' in pager_scene and
@@ -438,6 +441,14 @@ require('lv_snapshot_take(' not in ui and
         '"clock_repaint_recoveries"' in network and
         'pager_forced_snaps' in network,
         "Clock must remain live and receive repaint when pager settles")
+
+# Finger-release repaint protects the active pager page from black frames.
+require('const bool settled_move=primary_pager_snapping || pager_scrolling ||' in commit and
+        'lv_obj_invalidate(primary_pager_pages[index]);' in commit and
+        'lv_event_get_target(e)!=primary_pager' in pager_impl and
+        'primary_pager_start_snap(target);' not in pager_impl and
+        'primary_pager_start_snap(target);' in watchdog,
+        "Finger-up must not reenter LVGL scroll dispatch or leave blank page")
 
 # 0.8.26: controlled short snaps must not remove hardware regression safety.
 require('lv_event_get_scroll_anim(e)' in ui and
