@@ -228,12 +228,10 @@ require("strlcpy(ap_pass, \"lyricflash\", sizeof ap_pass);" in network,
 require("lv_draw_line_dsc_init" in read("main/clock_face.c"),
         "Analog ticks still create 60 separate LVGL objects")
 basic_clock=read("main/basic_clock.c")
-require("segment_count" in basic_clock and
-        "static void basic_ring_draw(lv_event_t *e)" in basic_clock and
-        "lv_draw_arc_dsc_init(&dsc);" in basic_clock and
-        "lv_draw_arc(layer,&dsc);" in basic_clock and
+require("basic_ring_draw" not in basic_clock and
+        "lv_draw_arc(layer,&dsc);" not in basic_clock and
         "lv_arc_create(" not in basic_clock,
-        "Basic Clock must draw the ring as one custom LVGL object")
+        "Disabled Basic Clock ring must not allocate or draw arcs")
 require("charging_color" in read("main/settings.h") and
         "charging_color" in pages["settings"],
         "Configurable charging indicator absent")
