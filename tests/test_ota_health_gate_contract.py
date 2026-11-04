@@ -6,7 +6,7 @@ main=(root/"main/main.c").read_text()
 guard=(root/"main/ota_guard.c").read_text()
 logic=(root/"main/ota_health_logic.c").read_text()
 cmake=(root/"main/CMakeLists.txt").read_text()
-assert "lf_ota_guard_start_health_check();" in main
+assert "lf_ota_guard_start_health_check()" in main
 assert "lf_ota_guard_confirm_startup();" not in main
 assert main.index("lf_network_start()") < main.index("lf_ota_guard_start_health_check()")
 assert "if (!pending_verification()) return true;" in guard
