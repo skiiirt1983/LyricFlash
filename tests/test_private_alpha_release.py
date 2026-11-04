@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Protect the explicit private 0.8.61 OTA release gate from regression."""
+"""Protect the explicit private 0.8.62 OTA release gate from regression."""
 from pathlib import Path
 p=Path(__file__).resolve().parents[1]
 wf=(p/'.github/workflows/firmware.yml').read_text()
 preparer=(p/'tools/prepare_site.py').read_text()
 publisher=(p/'tools/publish_alpha_ota.py').read_text()
-assert "feature/private-0.8.61-webui-clock-studio-database" in wf
+assert "feature/private-0.8.62-webui-clock-studio-database" in wf
 assert "Run all host and native source tests before compiling" in wf
 assert "contains(github.event.head_commit.message, '[compile-once]')" in wf
 assert "needs: preflight" in wf
 assert "contents: write" in wf
 ordered=[
+    "Generate all 16 open-source embedded fonts before ESP-IDF compilation",
+    "Verify complete generated font manifest",
     "Compile LyricFlash for ESP32-S3",
     "Merge complete USB recovery image",
     "Validate OTA app and merged USB image",
@@ -22,16 +24,17 @@ ordered=[
 positions=[wf.index(token) for token in ordered]
 assert positions==sorted(positions), "Firmware validation/release order regressed"
 for requirement in (
+    "python3 tools/generate_clock_fonts.py",
     "tools/check_build.py build/lyricflash.bin",
     "tools/validate_full_image.py build/lyricflash-full.bin build/lyricflash.bin",
     "tools/create_preserve_usb.py _site",
     "tools/package_release.py --verify _site",
     "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin",
-    "LyricFlash-0.8.61-alpha-USB-and-OTA.zip",
+    "LyricFlash-0.8.62-alpha-USB-and-OTA.zip",
     "gh release create",
     "--prerelease --latest=false",
     "gh release view",
-    "0.8.61-alpha",
+    "0.8.62-alpha",
 ):
     assert requirement in wf, requirement
 assert "image_version!=version" in preparer, "The manifest must match the binary"
