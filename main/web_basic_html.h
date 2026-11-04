@@ -665,7 +665,7 @@ static const char lf_basic_settings_html[] =
 "$('ring_mode').addEventListener('change',()=>{updateRingOptions();render();});\n"
 "$('save').onclick=save;$('refresh').onclick=diagnostics;\n"
 "$('selected-font-style').innerHTML=$('font_style').innerHTML;\n"
-"for(const button of document.querySelectorAll('[data-select-part]'))button.addEventListener('click',()=>selectPart(button.getAttribute('data-select-part')));\n"
+"for(const button of (typeof document.querySelectorAll==='function'?document.querySelectorAll('[data-select-part]'):[]))button.addEventListener('click',()=>selectPart(button.getAttribute('data-select-part')));\n"
 "$('selected-font-style').addEventListener('change',()=>{$('font_style').value=$('selected-font-style').value;render();});\n"
 "$('selected-date-format').addEventListener('change',()=>{faceProfiles[activeFace].date_format=Number($('selected-date-format').value);render();});\n"
 "$('selected-battery-icon').addEventListener('change',()=>{faceProfiles[activeFace].show_icon=$('selected-battery-icon').checked;render();});\n"
