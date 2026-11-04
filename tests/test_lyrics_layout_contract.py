@@ -6,7 +6,7 @@ ui=(root/"main/ui.c").read_text()
 settings=(root/"main/settings.c").read_text()
 schema=(root/"main/settings.h").read_text()
 scene=ui.split("static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)\n{",1)[1].split("static void build_preview_now",1)[0]
-assert "LF_CONFIG_SCHEMA 14U" in schema
+assert "LF_CONFIG_SCHEMA 15U" in schema
 assert ".timing_offset_ms = 0" in settings
 assert "schema<13 && s->timing_offset_ms==-2000" in settings
 assert 'nvs_set_i32(h, "offset_ms", s->timing_offset_ms)' in settings
