@@ -6,6 +6,7 @@ on:
       - feature/private-0.8.62-context-clock-studio
     paths:
       - '.github/workflows/verify-clock-fonts.yml'
+      - 'THIRD_PARTY_NOTICES.md'
       - 'tools/generate_clock_fonts.py'
       - 'main/CMakeLists.txt'
       - 'main/clock_fonts.c'
