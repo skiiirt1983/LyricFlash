@@ -9,4 +9,4 @@
 #define LF_VERSION_LABEL "ALPHA 0.8.76"
 /* 0.8.75 blocked return swipe on-device despite passing source tests.
  * Restore LV_DIR_HOR unconditionally while retaining no-elastic/no-chain,
- * touch activity, wake cover and 0.8.72 clock pause. Hardware test needed. */
+ * touch activity, wake cover and 0.8.72 clock pause. Host preflight passed; hardware test pending. */
