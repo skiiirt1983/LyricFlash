@@ -1324,7 +1324,7 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_set_style_text_color(home_play_symbol,lv_color_hex(0xFFFFFF),0);
     lv_obj_align(home_play_symbol,LV_ALIGN_CENTER,3,0);
     lv_obj_remove_flag(home_play_symbol,LV_OBJ_FLAG_CLICKABLE);
-    home_song_title=home_caption(parent,"",355,326,
+    home_song_title=home_caption(parent,"",365,326,
                                  &lv_font_montserrat_18,0xB4DAFC);
     lv_obj_add_flag(home_song_title,LV_OBJ_FLAG_HIDDEN);
     /* Recording occupies the round AMOLED screen only after an explicit

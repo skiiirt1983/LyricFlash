@@ -37,6 +37,7 @@ typedef struct {
     char title[128];
     char artist[128];
     char message[128];
+    char transport_phase[24]; /* only phase name, no audio/secret */
     char lyrics_state[24]; /* synced, plain_only, not_found, etc. */
     uint32_t lyric_lines;
 } lf_recog_snapshot_t;

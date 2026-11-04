@@ -6,7 +6,7 @@ ui=(p/"main/ui.c").read_text()
 header=(p/"main/recognition.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.56-alpha"' in version
+assert 'LF_VERSION "0.8.57-alpha"' in version
 # Feed the renderer a scalar only: the existing capture is still manual.
 assert "uint8_t capture_visual_level;" in header
 assert "int8_t capture_visual_signed;" in header
@@ -40,7 +40,7 @@ assert 'lv_color_hex(0x258854)' in ui
 assert "song->state==LF_RECOG_CAPTURE" in ui
 assert "song->state==LF_RECOG_UPLOAD" in ui
 assert "song->state==LF_RECOG_LYRICS" in ui
-assert "lv_style_set_transform_width(&press_style,24)" in ui
+assert "lv_style_set_transform_width(&press_style,12)" in ui
 assert "No Song Lyrics Available" in ui
 assert "auto_open_lyrics_deferred" in ui
 assert "const bool recognition_open=auto_open_transition;" in ui

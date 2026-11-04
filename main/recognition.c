@@ -154,6 +154,12 @@ static void publish_capture_metrics(const lf_scan_audio_metrics_t *m)
     result.both_near_rail_frames=m->both_near_rail;
     portEXIT_CRITICAL(&result_mux);
 }
+static void set_transport_phase(const char *phase)
+{
+    portENTER_CRITICAL(&result_mux);
+    snprintf(result.transport_phase,sizeof result.transport_phase,"%s",phase);
+    portEXIT_CRITICAL(&result_mux);
+}
 static void set_transport_error(int code)
 {
     portENTER_CRITICAL(&result_mux);
@@ -342,6 +348,7 @@ static bool send_audio(const uint8_t *wav,size_t wav_bytes,const char *token)
         .buffer_size=4096,
         .keep_alive_enable=false
     };
+    set_transport_phase("connecting");
     esp_http_client_handle_t client=esp_http_client_init(&config);
     if(!client){set_transport_error(ESP_ERR_NO_MEM);return false;}
     esp_http_client_set_method(client,HTTP_METHOD_POST);
@@ -351,11 +358,13 @@ static bool send_audio(const uint8_t *wav,size_t wav_bytes,const char *token)
     const esp_err_t open_rc=esp_http_client_open(client,(int)body_len);
     if(open_rc!=ESP_OK)set_transport_error((int)open_rc);
     if(open_rc==ESP_OK){
+        set_transport_phase("uploading");
         if(post_write(client,(const uint8_t*)prefix,(size_t)n,deadline_ms)&&
            post_write(client,wav,wav_bytes,deadline_ms)&&
            post_write(client,(const uint8_t*)suffix,sizeof suffix-1U,deadline_ms)&&
            lf_recog_now_ms()<deadline_ms &&
            !atomic_load(&stop_flag)){
+            set_transport_phase("awaiting_headers");
             const int64_t header_len=esp_http_client_fetch_headers(client);
             portENTER_CRITICAL(&result_mux);
             result.http_status=esp_http_client_get_status_code(client);
@@ -363,11 +372,13 @@ static bool send_audio(const uint8_t *wav,size_t wav_bytes,const char *token)
             if(header_len>=0 && header_len<LF_RECOG_RESPONSE_CAP){
                 char *reply=calloc(1,LF_RECOG_RESPONSE_CAP);
                 if(reply){
+                    set_transport_phase("reading_body");
                     const int read=esp_http_client_read_response(client,reply,LF_RECOG_RESPONSE_CAP-1);
                     if(read>0 && read<LF_RECOG_RESPONSE_CAP && !atomic_load(&stop_flag)){
                         reply[read]=0;
                         parse_recognition(esp_http_client_get_status_code(client),reply);
                         ok=true;
+                        set_transport_phase("parsed");
                     }
                     clear_secret(reply,LF_RECOG_RESPONSE_CAP);
                     free(reply);
@@ -375,6 +386,7 @@ static bool send_audio(const uint8_t *wav,size_t wav_bytes,const char *token)
             }
         }
     }
+    set_transport_phase(ok?"complete":"transport_failed");
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
     clear_secret(prefix,sizeof prefix);

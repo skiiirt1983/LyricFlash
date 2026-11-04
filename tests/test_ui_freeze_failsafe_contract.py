@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.8.56: a failed song lookup must never leave the OLED permanently frozen."""
+"""0.8.57: a failed song lookup must never leave the OLED permanently frozen."""
 from pathlib import Path
 p=Path(__file__).resolve().parents[1]
 ui=(p/"main/ui.c").read_text()
@@ -7,13 +7,12 @@ main=(p/"main/main.c").read_text()
 header=(p/"main/ui.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.56-alpha"' in version
+assert 'LF_VERSION "0.8.57-alpha"' in version
 # One spatially linked Home logo + white/blue wordmark, no off-screen label.
 assert "brand_row=lv_obj_create(parent)" in ui
-assert "lv_obj_set_size(brand_row,258,88)" in ui
-assert "lv_obj_set_flex_flow(brand_row,LV_FLEX_FLOW_ROW)" in ui
-assert "lv_obj_set_flex_align(brand_row,LV_FLEX_ALIGN_CENTER" in ui
-assert "lv_obj_set_style_pad_column(brand_row,3,0)" in ui
+assert "lv_obj_set_size(brand_row,232,88)" in ui
+assert "lv_obj_set_pos(mark,4,2)" in ui
+assert "lv_obj_set_pos(wordmark_col,88,2)" in ui
 assert 'lv_label_set_text(lyric_mark,"LYRIC")' in ui
 assert 'lv_label_set_text(flash_mark,"FLASH")' in ui
 assert "lv_obj_align(mark,LV_ALIGN_TOP_MID,-111,68)" not in ui

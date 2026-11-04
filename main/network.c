@@ -698,6 +698,8 @@ static esp_err_t handle_song_status(httpd_req_t *req)
     cJSON_AddStringToObject(reply,"state",lf_recog_state_name(s.state));
     cJSON_AddBoolToObject(reply,"token_configured",lf_recog_has_token());
     cJSON_AddStringToObject(reply,"message",s.message);
+    cJSON_AddStringToObject(reply,"firmware_version",LF_VERSION);
+    cJSON_AddStringToObject(reply,"transport_phase",s.transport_phase);
     cJSON_AddStringToObject(reply,"title",s.title);
     cJSON_AddStringToObject(reply,"artist",s.artist);
     cJSON_AddNumberToObject(reply,"captured_frames",s.captured_frames);
