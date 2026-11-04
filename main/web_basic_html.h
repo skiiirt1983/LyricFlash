@@ -166,7 +166,7 @@ static const char lf_basic_settings_html[] =
 "<label>Battery size <strong id=\"battery-size-value\">60%</strong><input id=\"face_battery_size\" type=\"range\" min=\"0\" max=\"200\" step=\"1\"></label>\n"
 "<label>Horizontal position <strong id=\"battery-x-value\">0</strong><input id=\"face_battery_x\" type=\"range\" min=\"-150\" max=\"150\" step=\"1\"></label>\n"
 "<label>Vertical position <strong id=\"battery-y-value\">0</strong><input id=\"face_battery_y\" type=\"range\" min=\"-180\" max=\"180\" step=\"1\"></label>\n"
-"<div hidden><input id=\"face_weather_x\" type=\"number\"><input id=\"face_weather_y\" type=\"number\"><input id=\"face_weather_size\" type=\"number\"></div>\n"
+"<div hidden><input id=\"face_weather_x\" type=\"number\"><input id=\"face_weather_y\" type=\"number\"><input id=\"face_weather_size\" type=\"number\"><strong id=\"weather-x-value\"></strong><strong id=\"weather-y-value\"></strong><strong id=\"weather-size-value\"></strong></div>\n"
 "<h3>Date on this face</h3>\n"
 "<label>Date size <strong id=\"date-size-value\">60%</strong><input id=\"face_date_size\" type=\"range\" min=\"0\" max=\"200\" step=\"1\"></label>\n"
 "<label>Horizontal position <strong id=\"date-x-value\">0</strong><input id=\"face_date_x\" type=\"range\" min=\"-150\" max=\"150\" step=\"1\"></label>\n"
