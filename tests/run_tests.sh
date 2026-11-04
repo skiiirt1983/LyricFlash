@@ -3,6 +3,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 tests/test_partitions.py
 python3 tests/test_static_safety.py
+cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/ota_health_logic.c tests/test_ota_health_logic.c -o /tmp/lyricflash_test_ota_health
+/tmp/lyricflash_test_ota_health
+rm -f /tmp/lyricflash_test_ota_health
 python3 tests/test_preflight_contracts.py
 python3 tests/test_touch_release_blackout_contract.py
 python3 tests/test_safe_id_baseline_contract.py

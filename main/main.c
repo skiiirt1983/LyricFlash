@@ -102,9 +102,11 @@ void app_main(void)
         lf_diag_error("weather", "Background weather service unavailable");
         ESP_LOGW(TAG, "Background weather service unavailable");
     }
-    // Confirm only after display, settings, and local update server initialize.
-    // This guards early boot failures, NOT future Wi-Fi/touch failures.
-    lf_ota_guard_confirm_startup();
+    /* OTA image remains PENDING_VERIFY until an independent task confirms
+       live LVGL rendering and a healthy heap across several samples. The
+       existing known-good image stays recoverable until that point. */
+    if (!lf_ota_guard_start_health_check())
+        ESP_LOGE(TAG, "Post-OTA health verifier could not start");
     /* Do not impede boot or OTA if this optional recovery task cannot start. */
     if(xTaskCreate(lyricflash_display_recovery_watchdog,
                    "lf_ui_heartbeat",3072,NULL,tskIDLE_PRIORITY+1,NULL)!=pdPASS)

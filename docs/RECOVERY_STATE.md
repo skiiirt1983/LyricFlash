@@ -59,3 +59,11 @@ No automated build or source-test result substitutes for these device-specific c
 - The previous `0.8.66-alpha` release and direct OTA remain available and unchanged.
 - **Hardware validation outstanding:** repeat Clock ↔ Home ↔ Settings finger releases and Device Settings entry/exit; check for any black flash. If present, capture gesture/page and diagnostics so the next patch targets the actual blanking source.
 - This checkpoint-only documentation update must not trigger compilation.
+
+## Hardware-tested baseline and first isolated backend change
+- User confirmed 0.8.67 all features functional, and finger-release black flash fixed.
+- **Pinned safe branch:** `safe/0.8.67-hardware-tested` points to exactly `498b0400e3965b4e7b6a75d7ff1151e2cc0f210c`, the built, immutable OTA image. This is the known-good rollback target; do not rewrite.
+- Next branch: `feature/private-0.8.68-ota-health-gate`. **Only OTA startup confirmation** is changed; no audio recognition, synced lyrics, clock, touch, settings schema or battery modifications.
+- Prior behavior: `app_main` accepted the OTA slot immediately after display and local Web server startup, even if the LVGL worker then stopped updating.
+- Candidate: on a pending OTA slot only, an independent verification task requires 3 consecutive samples (2.5s apart) of responsive LVGL heartbeat, completed frames and at least 16KiB free heap. It will roll back on failure after about 40s. No Wi-Fi/cloud connection check (fallback setup AP is valid). Ordinary boots create no verifier task.
+- Test the pure gate logic on host with boundary cases. Do not ship changes to battery management until this update is verified on hardware.
