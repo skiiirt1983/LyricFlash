@@ -1,6 +1,10 @@
 
+# The font builder runs before ESP-IDF config in the draft build workflow.
+file(GLOB CLOCK_FONT_SOURCES "${CMAKE_CURRENT_LIST_DIR}/generated_clock_fonts/*.c")
 idf_component_register(
     SRCS
+        ${CLOCK_FONT_SOURCES}
+        "clock_fonts.c"
         "main.c"
         "diagnostics.c"
         "mic_probe.c"
