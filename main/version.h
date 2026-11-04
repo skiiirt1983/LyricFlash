@@ -1,12 +1,12 @@
 #pragma once
-/* LyricFlash 0.8.74 private alpha: constrain Settings/Clock pager edges and guard swipe timeout.
+/* LyricFlash 0.8.75 private alpha: correct physical edge swipe mapping after upstream LVGL audit.
  * retaining colour swatches, one Clock reset and separate
  * Time/AMPM, Battery, Weather and Date colours on six faces.
  * Additive schema 16 preserves NVS and prior users' clock customizations.
  * New open-licensed clock fonts remain monochrome on embedded LVGL.
- * 0.8.73 remains published unchanged; 0.8.71 / 0.8.69 recovery retained. */
-#define LF_VERSION "0.8.74-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.74"
-/* Keep 0.8.73 touch wake, audio and screen-off timer unchanged.
- * Limit horizontal pager at physical ends; scroll animation cannot time out.
- * Host regression preflight passed. Physical screen wake/scroll test still required. */
+ * Do not install unvalidated 0.8.74 (swipe direction reversed); 0.8.73 and older preserved. */
+#define LF_VERSION "0.8.75-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.75"
+/* LVGL low-level scroll checks confirm end flags use opposite sign from
+ * finger motion. Preserve 0.8.73 wake guards and all audio/OTA behavior.
+ * On-device edge swipes and wake must still be physically validated. */

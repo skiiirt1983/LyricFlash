@@ -2595,11 +2595,12 @@ static void primary_pager_commit(int index)
     primary_pager_snap_to=index;
     primary_pager_snapping=false;
     pager_scrolling=false;
-    /* The rightmost Settings and leftmost Clock have no additional page.
-       Disable outward finger drags at the edges; Home permits both ways.
-       This avoids exposing stale/unpainted panel pixels beyond Settings. */
+    /* LVGL scroll-direction bits correspond to scrolling the *content*,
+       not the finger. At Clock (left edge), a finger drag LEFT moves to Home
+       and uses LV_DIR_RIGHT. At Settings (right edge), a finger drag RIGHT
+       moves back toward Home and uses LV_DIR_LEFT. No fourth page. */
     if(primary_pager)lv_obj_set_scroll_dir(primary_pager,
-        index==0 ? LV_DIR_LEFT : index==2 ? LV_DIR_RIGHT : LV_DIR_HOR);
+        index==0 ? LV_DIR_RIGHT : index==2 ? LV_DIR_LEFT : LV_DIR_HOR);
     page=(index==0)?6:(index==1)?0:2;
     last_power_refresh_ms=0;
     clock_last_refresh=0;
