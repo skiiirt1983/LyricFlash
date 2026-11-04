@@ -607,7 +607,10 @@ void lf_clock_update(void)
     }
     if (time_label) {
         char t[20];
-        strftime(t, sizeof(t), clock_settings->face_24h[current_style] ? "%H:%M" : "%I:%M %p", &local);
+        const bool custom_time_font=(current_style==5 && clock_settings->basic_font_style>=24);
+        strftime(t, sizeof(t),
+                 clock_settings->face_24h[current_style] ? "%H:%M" :
+                 custom_time_font ? "%I:%M" : "%I:%M %p", &local);
         update_label_if_changed(time_label, t);
         if(current_style==5)lf_basic_clock_update_time(t);
     }
