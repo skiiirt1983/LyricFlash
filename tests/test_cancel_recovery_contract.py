@@ -9,7 +9,7 @@ def portion(a,b):
     return src.split(a,1)[1].split(b,1)[0]
 callback=portion("static void on_record_cancel_double_tap(lv_event_t *e)\n{",
                  "static lv_obj_t *home_decor_ring")
-tick=portion("static void on_tick(lv_timer_t *timer)\n{",
+tick=portion("static void on_tick_body(lv_timer_t *timer)\n{",
              "static void on_clock_sweep")
 record=portion("static void home_recording_update(",
                "static void home_refresh(")

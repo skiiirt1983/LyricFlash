@@ -23,7 +23,7 @@ assert "static bool recognition_touch_locked(void)" in src
 assert "scan.state==LF_RECOG_CAPTURE" in section("static bool recognition_touch_locked(void)","static void swipe_intent")
 assert "if(recognition_touch_locked())return;" in section("static void swipe_intent(lv_dir_t direction)","static void observe_touch_position")
 assert "if(recognition_touch_locked())return;" in section("static void observe_touch_position(void)","static void finish_touch")
-assert "!recognition_touch_locked()" in section("static void on_tick(lv_timer_t *timer)","static void on_clock_sweep")
+assert "!recognition_touch_locked()" in section("static void on_tick_body(lv_timer_t *timer)","static void on_clock_sweep")
 assert "lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLLABLE);" in section("static void home_recording_update(","static void home_refresh(")
 swipe=section("static void swipe_intent(lv_dir_t direction)","static void observe_touch_position")
 assert "swipe_candidate_page = 1; /* Lyrics panel sits above Home." in swipe
