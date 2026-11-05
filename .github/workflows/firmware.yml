@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/private-0.8.82-frame-latched-page-motion
+      - feature/private-0.8.82-screen-off-cpu-power
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
