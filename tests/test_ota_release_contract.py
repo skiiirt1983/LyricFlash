@@ -56,9 +56,10 @@ active_version=(root / "main/version.h").read_text()
 # The experimental private builds have separate ESP32-S3 release gates.
 # A successful compile does not prove hardware operation or catalog publication.
 assert any(f'"{ver}"' in active_version for ver in
-           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha","0.8.67-alpha","0.8.68-alpha","0.8.69-alpha","0.8.71-alpha","0.8.72-alpha","0.8.73-alpha","0.8.74-alpha","0.8.75-alpha","0.8.76-alpha","0.8.77-alpha","0.8.78-alpha","0.8.79-alpha","0.8.80-alpha")), "Unexpected alpha firmware version"
-if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.8.52","0.8.53","0.8.61","0.8.63","0.8.64","0.8.65","0.8.66","0.8.67","0.8.68","0.8.69","0.8.71","0.8.72","0.8.73","0.8.74","0.8.75","0.8.76","0.8.77","0.8.78","0.8.79","0.8.80")):
+           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha","0.8.67-alpha","0.8.68-alpha","0.8.69-alpha","0.8.71-alpha","0.8.72-alpha","0.8.73-alpha","0.8.74-alpha","0.8.75-alpha","0.8.76-alpha","0.8.77-alpha","0.8.78-alpha","0.8.79-alpha","0.8.80-alpha","0.8.81-alpha")), "Unexpected alpha firmware version"
+if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.8.52","0.8.53","0.8.61","0.8.63","0.8.64","0.8.65","0.8.66","0.8.67","0.8.68","0.8.69","0.8.71","0.8.72","0.8.73","0.8.74","0.8.75","0.8.76","0.8.77","0.8.78","0.8.79","0.8.80","0.8.81")):
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
+    is_81='"0.8.81-alpha"' in active_version
     is_80='"0.8.80-alpha"' in active_version
     is_79='"0.8.79-alpha"' in active_version
     is_78='"0.8.78-alpha"' in active_version
@@ -81,8 +82,9 @@ if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.
     is_52='"0.8.52-alpha"' in active_version
     is_51='"0.8.51-alpha"' in active_version
     is_50='"0.8.50-alpha"' in active_version
-    version="0.8.80" if is_80 else "0.8.79" if is_79 else "0.8.78" if is_78 else "0.8.77" if is_77 else "0.8.76" if is_76 else "0.8.75" if is_75 else "0.8.74" if is_74 else "0.8.73" if is_73 else "0.8.72" if is_72 else "0.8.71" if is_71 else "0.8.69" if is_69 else "0.8.68" if is_68 else "0.8.67" if is_67 else "0.8.66" if is_66 else "0.8.65" if is_65 else "0.8.64" if is_64 else "0.8.63" if is_63 else "0.8.61" if is_61 else "0.8.53" if is_53 else "0.8.52" if is_52 else "0.8.51" if is_51 else "0.8.50" if is_50 else "0.8.49"
-    expected_branch=("feature/private-0.8.80-pager-waveform-performance" if is_80
+    version="0.8.81" if is_81 else "0.8.80" if is_80 else "0.8.79" if is_79 else "0.8.78" if is_78 else "0.8.77" if is_77 else "0.8.76" if is_76 else "0.8.75" if is_75 else "0.8.74" if is_74 else "0.8.73" if is_73 else "0.8.72" if is_72 else "0.8.71" if is_71 else "0.8.69" if is_69 else "0.8.68" if is_68 else "0.8.67" if is_67 else "0.8.66" if is_66 else "0.8.65" if is_65 else "0.8.64" if is_64 else "0.8.63" if is_63 else "0.8.61" if is_61 else "0.8.53" if is_53 else "0.8.52" if is_52 else "0.8.51" if is_51 else "0.8.50" if is_50 else "0.8.49"
+    expected_branch=("feature/private-0.8.81-frame-latched-page-motion" if is_81
+                      else "feature/private-0.8.80-pager-waveform-performance" if is_80
                       else "feature/private-0.8.79-cancel-redraw-isolation" if is_79
                       else "feature/private-0.8.78-record-cancel-touch-guard" if is_78
                       else "feature/private-0.8.77-record-cancel-edge-background" if is_77
