@@ -7,7 +7,7 @@ network=(root/"main/network.c").read_text()
 power=(root/"main/power.c").read_text()
 wake=ui.split("static void wake_finish_async(void *arg)\n{",1)[1].split("static void on_wake",1)[0]
 sleep=ui.split("static void sleep_display(void)\n{",1)[1].split("static void on_tick",1)[0]
-tick=ui.split("static void on_tick(lv_timer_t *timer)\n{",1)[1].split("/* Append title/artist",1)[0]
+tick=ui.split("static void on_tick_body(lv_timer_t *timer)\n{",1)[1].split("/* Append title/artist",1)[0]
 assert "static lv_timer_t *clock_sweep_timer;" in ui
 assert "clock_sweep_timer=lv_timer_create(on_clock_sweep, 16, NULL);" in ui
 assert "if(clock_sweep_timer)lv_timer_pause(clock_sweep_timer);" in sleep
