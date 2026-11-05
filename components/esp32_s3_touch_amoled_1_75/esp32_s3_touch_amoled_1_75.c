@@ -33,8 +33,8 @@
 
 static const char *TAG = "ESP32-S3-Touch-AMOLED-1.75";
 
-#define BSP_LCD_DMA_STAGING_ROWS (8)
-#define BSP_LCD_DMA_FALLBACK_ROWS (4)
+#define BSP_LCD_DMA_STAGING_ROWS (4)
+/* Baseline restored after eight-row batching failed to improve frame cadence. */
 static i2c_master_bus_handle_t i2c_handle = NULL; // I2C Handle
 static bool i2c_initialized = false;
 static esp_io_expander_handle_t io_expander = NULL; // IO expander tca9554 handle
@@ -111,6 +111,8 @@ static atomic_uint stage_chunk_rows;
 static atomic_uint stage_chunk_submissions;
 static atomic_uint stage_call_last_us;
 static atomic_uint stage_call_max_us;
+/* Monotonic elapsed CPU time for staging, sampled at LVGL render boundaries. */
+static atomic_uint stage_cumulative_us;
 
 void bsp_display_transfer_stats(bsp_display_transfer_stats_t *out)
 {
@@ -119,6 +121,7 @@ void bsp_display_transfer_stats(bsp_display_transfer_stats_t *out)
     out->chunk_submissions=atomic_load(&stage_chunk_submissions);
     out->stage_call_last_us=atomic_load(&stage_call_last_us);
     out->stage_call_max_us=atomic_load(&stage_call_max_us);
+    out->stage_cumulative_us=atomic_load(&stage_cumulative_us);
 }
 
 
@@ -252,19 +255,12 @@ static esp_err_t bsp_rotation_panel_draw_staged(bsp_rotation_panel_t *ctx, int x
     if (use_chunked)
     {
         const int64_t stage_started_us=esp_timer_get_time();
-        int max_rows=BSP_LCD_DMA_STAGING_ROWS;
-        size_t max_pixels=(size_t)width*max_rows;
-        if (!bsp_rotation_panel_ensure_buffer(ctx, max_pixels * 2))
+        const int max_rows=BSP_LCD_DMA_STAGING_ROWS;
+        const size_t max_pixels=(size_t)width*max_rows;
+        if(!bsp_rotation_panel_ensure_buffer(ctx,max_pixels*2))
         {
-            /* Memory-preserving fallback: keep the previously validated
-               chunk size rather than fail the screen or drop a frame. */
-            max_rows=BSP_LCD_DMA_FALLBACK_ROWS;
-            max_pixels=(size_t)width*max_rows;
-            if(!bsp_rotation_panel_ensure_buffer(ctx, max_pixels*2))
-            {
-                ESP_LOGE(TAG,"Unable to allocate DMA staging for %d rows",max_rows);
-                return ESP_ERR_NO_MEM;
-            }
+            ESP_LOGE(TAG,"Unable to allocate DMA staging for %d rows",max_rows);
+            return ESP_ERR_NO_MEM;
         }
         atomic_store(&stage_chunk_rows,(unsigned)max_rows);
 
@@ -292,6 +288,7 @@ static esp_err_t bsp_rotation_panel_draw_staged(bsp_rotation_panel_t *ctx, int x
         const int64_t elapsed_us=esp_timer_get_time()-stage_started_us;
         const uint32_t duration=(uint32_t)(elapsed_us>0?elapsed_us:0);
         atomic_store(&stage_call_last_us,duration);
+        atomic_fetch_add(&stage_cumulative_us,duration);
         if(duration>atomic_load(&stage_call_max_us))
             atomic_store(&stage_call_max_us,duration);
         return ESP_OK;

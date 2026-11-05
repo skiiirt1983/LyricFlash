@@ -1187,6 +1187,8 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "flush_wait_refresh_max_us", display_stats.flush_wait_refresh_max_us);
     cJSON_AddNumberToObject(root, "flush_calls_refresh_last", display_stats.flush_calls_refresh_last);
     cJSON_AddNumberToObject(root, "flush_calls_refresh_max", display_stats.flush_calls_refresh_max);
+    cJSON_AddNumberToObject(root, "render_dma_stage_last_us", display_stats.render_dma_stage_last_us);
+    cJSON_AddNumberToObject(root, "render_dma_stage_max_us", display_stats.render_dma_stage_max_us);
     bsp_display_transfer_stats_t transfer_stats={0};
     bsp_display_transfer_stats(&transfer_stats);
     cJSON_AddNumberToObject(root,"display_dma_stage_rows",transfer_stats.stage_rows);

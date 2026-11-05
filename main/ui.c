@@ -245,6 +245,9 @@ static atomic_uint flush_wait_refresh_last_us;
 static atomic_uint flush_wait_refresh_max_us;
 static atomic_uint flush_calls_refresh_last;
 static atomic_uint flush_calls_refresh_max;
+static uint32_t render_dma_stage_at_start_us;
+static atomic_uint render_dma_stage_last_us;
+static atomic_uint render_dma_stage_max_us;
 
 void lf_ui_display_stats(lf_ui_display_stats_t *out)
 {
@@ -291,6 +294,8 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->flush_wait_refresh_max_us=atomic_load(&flush_wait_refresh_max_us);
     out->flush_calls_refresh_last=atomic_load(&flush_calls_refresh_last);
     out->flush_calls_refresh_max=atomic_load(&flush_calls_refresh_max);
+    out->render_dma_stage_last_us=atomic_load(&render_dma_stage_last_us);
+    out->render_dma_stage_max_us=atomic_load(&render_dma_stage_max_us);
     out->ui_navigation_phase=atomic_load(&ui_nav_phase);
     out->lyrics_auto_open_queued=atomic_load(&auto_open_queued_count);
     out->lyrics_auto_open_completed=atomic_load(&auto_open_completed_count);
@@ -303,6 +308,9 @@ static void display_render_event(lv_event_t *e)
     atomic_fetch_add(&ui_render_count,1);
     render_cycle_start_us=esp_timer_get_time();
     draw_started_us=render_cycle_start_us;
+    bsp_display_transfer_stats_t staged={0};
+    bsp_display_transfer_stats(&staged);
+    render_dma_stage_at_start_us=staged.stage_cumulative_us;
 }
 /* LVGL 9.5 RENDER_READY precedes the flush callback. */
 static void display_render_ready_event(lv_event_t *e)
@@ -312,6 +320,13 @@ static void display_render_ready_event(lv_event_t *e)
     const int64_t us=esp_timer_get_time()-draw_started_us;
     draw_started_us=0;
     const uint32_t duration=(uint32_t)(us>0?us:0);
+    bsp_display_transfer_stats_t staged={0};
+    bsp_display_transfer_stats(&staged);
+    /* Unsigned subtraction handles 32-bit monotonic wraparound. */
+    const uint32_t stage_us=staged.stage_cumulative_us-render_dma_stage_at_start_us;
+    atomic_store(&render_dma_stage_last_us,stage_us);
+    if(stage_us>atomic_load(&render_dma_stage_max_us))
+        atomic_store(&render_dma_stage_max_us,stage_us);
     atomic_store(&render_draw_last_us,duration);
     if(duration>atomic_load(&render_draw_max_us))
         atomic_store(&render_draw_max_us,duration);

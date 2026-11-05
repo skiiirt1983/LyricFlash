@@ -35,10 +35,11 @@ typedef struct {
 
 /* Lock-free, read-only transfer measurements for on-device diagnostics. */
 typedef struct {
-    uint32_t stage_rows;             /* 8-row fast path, 4-row fallback, 0 before first flush */
+    uint32_t stage_rows;             /* 4-row baseline, 0 before first flush */
     uint32_t chunk_submissions;      /* physical QSPI bitmap submissions since boot */
     uint32_t stage_call_last_us;     /* time to submit one LVGL logical flush */
     uint32_t stage_call_max_us;
+    uint32_t stage_cumulative_us; /* per-render snapshots subtract modulo uint32 */
 } bsp_display_transfer_stats_t;
 void bsp_display_transfer_stats(bsp_display_transfer_stats_t *out);
 

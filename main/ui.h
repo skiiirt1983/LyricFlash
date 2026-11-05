@@ -54,6 +54,8 @@ uint32_t pager_frame_gap_max_ms;
     uint32_t flush_wait_refresh_max_us;
     uint32_t flush_calls_refresh_last;
     uint32_t flush_calls_refresh_max;
+    uint32_t render_dma_stage_last_us;
+    uint32_t render_dma_stage_max_us;
     uint32_t ui_page;
     uint32_t ui_navigation_phase;
     uint32_t lyrics_auto_open_queued;
