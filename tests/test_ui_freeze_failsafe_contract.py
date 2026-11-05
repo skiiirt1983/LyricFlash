@@ -49,7 +49,7 @@ assert "lf_ota_guard_confirm_startup();" not in main
 assert "xTaskCreate(lyricflash_display_recovery_watchdog" in main
 assert "ui_tick_age_ms" in header
 # A real song scan must stay visible past normal 15/30/60s screen timeout.
-tick=ui.split("static void on_tick(lv_timer_t *timer)",1)[1]
+tick=ui.split("static void on_tick_body(lv_timer_t *timer)",1)[1]
 assert "if (page == 0 && lf_recog_busy())" in tick
 assert "active_scan.attempts != home_stalled_attempt" in tick
 assert "last_activity_ms = current;" in tick
