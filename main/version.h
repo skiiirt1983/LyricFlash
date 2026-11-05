@@ -7,7 +7,7 @@
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
 #define LF_VERSION "0.8.79-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.79"
-/* Release gate: host source checks passed; touch-cancel hardware validation pending. */
+/* Release gate: 0.8.79 redraw-isolation source checked; hardware validation pending. */
 /* Host source contracts passed; physical double-tap cancellation and pager-edge QA pending. */
 /* 0.8.75 blocked return swipe on-device despite passing source tests.
  * Restore LV_DIR_HOR unconditionally while retaining no-elastic/no-chain,
