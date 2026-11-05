@@ -21,6 +21,6 @@ for key in fields:
 home=ui.split("static void home_refresh(uint64_t current)\n{",1)[1].split("static void primary_render_home_content(",1)[0]
 assert "lv_obj_has_flag(home_song_title,LV_OBJ_FLAG_HIDDEN)!=hide_title" in home
 assert "if(hide_title)lv_obj_add_flag(home_song_title,LV_OBJ_FLAG_HIDDEN);" in home
-assert "primary_pager_frame_pending=true;" in ui
+assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in ui
 assert "LF_PAGER_STALL_GUARD_MS 1600U" in ui
 print("PASS: LVGL draw/wait metrics and guarded Home invalidation preserve baseline")
