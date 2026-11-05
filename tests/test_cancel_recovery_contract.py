@@ -50,7 +50,8 @@ assert "if(home_stalled_attempt==song->attempts)" in record
 assert "if(!ui_pointer_is_down() &&" in record, "Do not hide cancelled overlay before release"
 assert "if(!capturing&&!working&&!opening){" in record
 assert "if(!ui_pointer_is_down())" in record, "Worker completion must not hide pressed overlay"
-assert "current-home_last_refresh_ms >= 750)home_refresh(current);" in tick
+assert "current-home_last_refresh_ms >= 750){" in tick
+assert "home_refresh(current);" in tick
 assert "!ui_pointer_is_down() &&\n        current-home_last_refresh_ms" in tick, "Refresh may not change recording touch target mid-press"
 assert "scan.attempts!=home_stalled_attempt" in tick
 assert "latest.attempts!=home_stalled_attempt" in tick
