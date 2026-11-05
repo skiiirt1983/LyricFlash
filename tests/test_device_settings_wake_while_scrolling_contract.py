@@ -2,7 +2,7 @@
 """0.8.73: nested Device Settings touch cannot trigger timeout or wake black."""
 from pathlib import Path
 ui=(Path(__file__).resolve().parents[1]/"main/ui.c").read_text()
-tick=ui.split("static void on_tick(lv_timer_t *timer)\n{",1)[1].split("/* Only the active Rolex-style",1)[0]
+tick=ui.split("static void on_tick_body(lv_timer_t *timer)\n{",1)[1].split("/* Only the active Rolex-style",1)[0]
 wake=ui.split("static void on_wake(lv_event_t *e)\n{",1)[1].split("/* Optional hardware-level",1)[0]
 sleep=ui.split("static void sleep_display(void)\n{",1)[1].split("static void on_tick",1)[0]
 cleanup=ui.split("static void wake_finish_async(void *arg)\n{",1)[1].split("static void on_wake",1)[0]
