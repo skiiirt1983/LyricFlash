@@ -2,6 +2,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_pm.h"
+#include <stdatomic.h>
 #include "bsp/esp-bsp.h"
 #include "driver/i2c_master.h"
 #include <string.h>
@@ -15,11 +16,11 @@ extern lf_power_state_t lf_power_decode(uint8_t status1, uint8_t status2, uint8_
  * Never enable automatic light sleep: CST9217 touch, QSPI, Wi-Fi and OTA
  * remain alive. Wi-Fi default min modem sleep is left unchanged. */
 static esp_pm_lock_handle_t screen_cpu_lock;
-static bool screen_cpu_lock_held;
+static atomic_bool screen_cpu_lock_held;
 
 bool lf_power_cpu_profile_start(void)
 {
-    if(screen_cpu_lock)return screen_cpu_lock_held;
+    if(screen_cpu_lock)return atomic_load(&screen_cpu_lock_held);
     esp_pm_config_t profile={
         .max_freq_mhz=240,
         .min_freq_mhz=80,
@@ -43,25 +44,25 @@ bool lf_power_cpu_profile_start(void)
         (void)esp_pm_configure(&profile);
         return false;
     }
-    screen_cpu_lock_held=true;
+    atomic_store(&screen_cpu_lock_held,true);
     ESP_LOGI("LFPower","CPU 240 MHz awake; 80 MHz minimum screen-off; no auto light sleep");
     return true;
 }
 void lf_power_set_screen_awake(bool awake)
 {
-    if(!screen_cpu_lock||awake==screen_cpu_lock_held)return;
+    if(!screen_cpu_lock||awake==atomic_load(&screen_cpu_lock_held))return;
     esp_err_t err=awake?esp_pm_lock_acquire(screen_cpu_lock):
                          esp_pm_lock_release(screen_cpu_lock);
     if(err!=ESP_OK){
         ESP_LOGW("LFPower","CPU profile transition failed: %s",esp_err_to_name(err));
         return;
     }
-    screen_cpu_lock_held=awake;
+    atomic_store(&screen_cpu_lock_held,awake);
 }
 const char *lf_power_cpu_profile_state(void)
 {
     if(!screen_cpu_lock)return "fixed_240";
-    return screen_cpu_lock_held?"awake_240":"screen_off_dfs_80";
+    return atomic_load(&screen_cpu_lock_held)?"awake_240":"screen_off_dfs_80";
 }
 
 
