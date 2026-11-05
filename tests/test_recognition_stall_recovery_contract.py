@@ -10,7 +10,7 @@ ui=(root/"main/ui.c").read_text()
 header=(root/"main/ui.h").read_text()
 network=(root/"main/network.c").read_text()
 version=(root/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.77-alpha"' in version
+assert 'LF_VERSION "0.8.78-alpha"' in version
 assert "LF_RECOG_UPLOAD_BUDGET_MS 60000ULL" in worker
 assert "if(lf_recog_now_ms()>=deadline_ms)" in worker
 assert "set_transport_error(ESP_ERR_TIMEOUT);" in worker
