@@ -306,8 +306,7 @@ app_main=read('main/main.c')
 sdk=read('sdkconfig.defaults')
 require('esp_ptr_external_ram(color_data)' in bsp and
         'bsp_rotation_panel_draw_staged(' in bsp and
-        'BSP_LCD_DMA_STAGING_ROWS (8)' in bsp and
-        'BSP_LCD_DMA_FALLBACK_ROWS (4)' in bsp and
+        'BSP_LCD_DMA_STAGING_ROWS (4)' in bsp and
         'ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE' in app_main and
         'ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC' not in app_main and
         'BSP_LCD_TE_GPIO' in display_header and
@@ -464,17 +463,16 @@ require('lv_event_get_scroll_anim(e)' in ui and
         "Paced pager snap and retained Clock recovery contract")
 
 # 0.8.30: physical-device regression with a 96-row rendering buffer.
-# Preserve the proven 24-row LVGL buffer and 1-slot queue; 0.8.86 experiments
-# only with 8-row DMA staging, allocating 4-row fallback if internal RAM is tight.
+# Preserve the proven 24-row LVGL buffer and 1-slot queue; 0.8.87 restores
+# only with 4-row DMA staging to isolate LVGL style caching.
 require('LVGL_BUFFER_HEIGHT_PSRAM (24)' in bsp and
         'LVGL_BUFFER_HEIGHT_PSRAM (96)' not in bsp and
         'BSP_LCD_SPI_TRANSFER_ROWS' not in bsp and
         'BSP_LCD_H_RES * buffer_height * BSP_LCD_BITS_PER_PIXEL / 8' in bsp and
-        'BSP_LCD_DMA_STAGING_ROWS (8)' in bsp and
-        'BSP_LCD_DMA_FALLBACK_ROWS (4)' in bsp and
+        'BSP_LCD_DMA_STAGING_ROWS (4)' in bsp and
         'CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1' in sdk and
         'lv_obj_invalidate(clock_scene);' in ui,
-        "0.8.86 preserve tested LVGL geometry, DMA fallback and SPI queue depth")
+        "0.8.87 preserve tested LVGL geometry, baseline DMA staging and SPI queue depth")
 
 # 0.8.29: one bounded microphone-controller probe must never start I2S
 # or do audio capture. Probe POST only, initiated by explicit Web UI click.
