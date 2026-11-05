@@ -102,16 +102,14 @@ static void wifi_idle_worker(void *arg)
         }
     }
     atomic_store(&wifi_worker_running, false);
-    /* If wake arrived while the worker was exiting, service it now. */
-    if (atomic_load(&wifi_idle_requested) != atomic_load(&wifi_radio_suspended)) {
-        lf_network_set_idle(atomic_load(&wifi_idle_requested));
-    }
+    /* The UI tick retries a pending idle request; wake also retries on tick. */
     vTaskDelete(NULL);
 }
 void lf_network_set_idle(bool idle)
 {
     if (idle && (in_ap || atomic_load(&ota_busy))) return;
     atomic_store(&wifi_idle_requested, idle);
+    if (idle == atomic_load(&wifi_radio_suspended)) return;
     if (!atomic_exchange(&wifi_worker_running, true)) {
         if (xTaskCreate(wifi_idle_worker, "lf_wifi_idle", 3072, NULL, 4, NULL) != pdPASS)
             atomic_store(&wifi_worker_running, false);
