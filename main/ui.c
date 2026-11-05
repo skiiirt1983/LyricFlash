@@ -234,6 +234,17 @@ static atomic_uint ui_tick_work_max_us;
 static atomic_uint pager_frame_gap_last_ms;
 static atomic_uint pager_frame_gap_max_ms;
 static atomic_uint pager_refresh_prev_ms;
+/* 0.8.85: measure LVGL draw and driver wait without frame logging. */
+static int64_t draw_started_us;
+static int64_t flush_wait_started_us;
+static uint32_t flush_wait_accum_us;
+static uint32_t flush_calls_in_refresh;
+static atomic_uint render_draw_last_us;
+static atomic_uint render_draw_max_us;
+static atomic_uint flush_wait_refresh_last_us;
+static atomic_uint flush_wait_refresh_max_us;
+static atomic_uint flush_calls_refresh_last;
+static atomic_uint flush_calls_refresh_max;
 
 void lf_ui_display_stats(lf_ui_display_stats_t *out)
 {
@@ -274,6 +285,12 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->ui_tick_work_max_us=atomic_load(&ui_tick_work_max_us);
     out->pager_frame_gap_last_ms=atomic_load(&pager_frame_gap_last_ms);
     out->pager_frame_gap_max_ms=atomic_load(&pager_frame_gap_max_ms);
+    out->render_draw_last_us=atomic_load(&render_draw_last_us);
+    out->render_draw_max_us=atomic_load(&render_draw_max_us);
+    out->flush_wait_refresh_last_us=atomic_load(&flush_wait_refresh_last_us);
+    out->flush_wait_refresh_max_us=atomic_load(&flush_wait_refresh_max_us);
+    out->flush_calls_refresh_last=atomic_load(&flush_calls_refresh_last);
+    out->flush_calls_refresh_max=atomic_load(&flush_calls_refresh_max);
     out->ui_navigation_phase=atomic_load(&ui_nav_phase);
     out->lyrics_auto_open_queued=atomic_load(&auto_open_queued_count);
     out->lyrics_auto_open_completed=atomic_load(&auto_open_completed_count);
@@ -285,11 +302,39 @@ static void display_render_event(lv_event_t *e)
     (void)e;
     atomic_fetch_add(&ui_render_count,1);
     render_cycle_start_us=esp_timer_get_time();
+    draw_started_us=render_cycle_start_us;
 }
+/* LVGL 9.5 RENDER_READY precedes the flush callback. */
+static void display_render_ready_event(lv_event_t *e)
+{
+    (void)e;
+    if(!draw_started_us)return;
+    const int64_t us=esp_timer_get_time()-draw_started_us;
+    draw_started_us=0;
+    const uint32_t duration=(uint32_t)(us>0?us:0);
+    atomic_store(&render_draw_last_us,duration);
+    if(duration>atomic_load(&render_draw_max_us))
+        atomic_store(&render_draw_max_us,duration);
+}
+static void display_flush_wait_start_event(lv_event_t *e)
+{
+    (void)e;
+    flush_wait_started_us=esp_timer_get_time();
+}
+static void display_flush_wait_finish_event(lv_event_t *e)
+{
+    (void)e;
+    if(!flush_wait_started_us)return;
+    const int64_t us=esp_timer_get_time()-flush_wait_started_us;
+    flush_wait_started_us=0;
+    if(us>0)flush_wait_accum_us+=(uint32_t)us;
+}
+
 static void display_flush_start_event(lv_event_t *e)
 {
     (void)e;
     atomic_fetch_add(&ui_flush_start_count,1);
+    flush_calls_in_refresh++;
 }
 static void display_flush_finish_event(lv_event_t *e)
 {
@@ -300,6 +345,15 @@ static void display_refresh_ready_event(lv_event_t *e)
 {
     (void)e;
     atomic_fetch_add(&ui_refresh_ready_count,1);
+    const uint32_t wait_us=flush_wait_accum_us;
+    flush_wait_accum_us=0;
+    atomic_store(&flush_wait_refresh_last_us,wait_us);
+    if(wait_us>atomic_load(&flush_wait_refresh_max_us))
+        atomic_store(&flush_wait_refresh_max_us,wait_us);
+    atomic_store(&flush_calls_refresh_last,flush_calls_in_refresh);
+    if(flush_calls_in_refresh>atomic_load(&flush_calls_refresh_max))
+        atomic_store(&flush_calls_refresh_max,flush_calls_in_refresh);
+    flush_calls_in_refresh=0;
     /* Measured completed-refresh cadence while the pager is snapping. */
     const uint32_t ready_now=(uint32_t)(esp_timer_get_time()/1000LL);
     if(primary_pager_snapping){
@@ -1335,8 +1389,12 @@ static void home_refresh(uint64_t current)
             message="Identification Error";
     }
     home_set_text(home_song_title,message);
-    if(message[0])lv_obj_remove_flag(home_song_title,LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(home_song_title,LV_OBJ_FLAG_HIDDEN);
+    /* Do not dirty Home when the empty caption was already hidden. */
+    const bool hide_title=!message[0];
+    if(lv_obj_has_flag(home_song_title,LV_OBJ_FLAG_HIDDEN)!=hide_title){
+        if(hide_title)lv_obj_add_flag(home_song_title,LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_remove_flag(home_song_title,LV_OBJ_FLAG_HIDDEN);
+    }
     home_set_text(home_play_symbol,(busy||home_scan_armed)?LV_SYMBOL_STOP:LV_SYMBOL_PLAY);
     if(home_visual_busy!=(int)busy){
         home_visual_busy=(int)busy;
@@ -4057,6 +4115,9 @@ bool lf_ui_start(lf_settings_t *s)
     lv_display_t *disp=lv_display_get_default();
     if(disp) {
         lv_display_add_event_cb(disp,display_render_event,LV_EVENT_RENDER_START,NULL);
+        lv_display_add_event_cb(disp,display_render_ready_event,LV_EVENT_RENDER_READY,NULL);
+        lv_display_add_event_cb(disp,display_flush_wait_start_event,LV_EVENT_FLUSH_WAIT_START,NULL);
+        lv_display_add_event_cb(disp,display_flush_wait_finish_event,LV_EVENT_FLUSH_WAIT_FINISH,NULL);
         lv_display_add_event_cb(disp,display_flush_start_event,LV_EVENT_FLUSH_START,NULL);
         lv_display_add_event_cb(disp,display_flush_finish_event,LV_EVENT_FLUSH_FINISH,NULL);
         lv_display_add_event_cb(disp,display_refresh_ready_event,LV_EVENT_REFR_READY,NULL);
