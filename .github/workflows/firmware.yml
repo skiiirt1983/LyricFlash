@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/private-0.8.81-pager-waveform-performance
+      - feature/private-0.8.81-frame-latched-page-motion
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
