@@ -360,7 +360,7 @@ require('static void nav_transition_begin(' in ui and
         'lv_display_enable_invalidation(disp,false);' in ui and
         'lv_display_enable_invalidation(disp,true);' in ui and
         'lv_obj_invalidate_area(screen,&region);' in ui and
-        'LF_NAV_REVEAL_STEPS 16' in ui and
+        'LF_NAV_REVEAL_STEPS 12' in ui and
         'nav_transition_catcher=lv_obj_create(screen);' in ui and
         'if (nav_transition_active) return;' in ui and
         'nav_transition_hint = pending_swipe_direction;' in ui and
