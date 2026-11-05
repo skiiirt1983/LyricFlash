@@ -463,16 +463,18 @@ require('lv_event_get_scroll_anim(e)' in ui and
         'current-primary_pager_snap_started_ms>LF_PAGER_STALL_GUARD_MS' in watchdog,
         "Paced pager snap and retained Clock recovery contract")
 
-# 0.8.30: physical-device regression with 96-row rendering buffer.
-# Protect the exact 0.8.26 display configuration, where screen and touch worked.
+# 0.8.30: physical-device regression with a 96-row rendering buffer.
+# Preserve the proven 24-row LVGL buffer and 1-slot queue; 0.8.86 experiments
+# only with 8-row DMA staging, allocating 4-row fallback if internal RAM is tight.
 require('LVGL_BUFFER_HEIGHT_PSRAM (24)' in bsp and
         'LVGL_BUFFER_HEIGHT_PSRAM (96)' not in bsp and
         'BSP_LCD_SPI_TRANSFER_ROWS' not in bsp and
         'BSP_LCD_H_RES * buffer_height * BSP_LCD_BITS_PER_PIXEL / 8' in bsp and
-        'BSP_LCD_DMA_STAGING_ROWS (4)' in bsp and
+        'BSP_LCD_DMA_STAGING_ROWS (8)' in bsp and
+        'BSP_LCD_DMA_FALLBACK_ROWS (4)' in bsp and
         'CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1' in sdk and
         'lv_obj_invalidate(clock_scene);' in ui,
-        "0.8.30 restore 0.8.26 hardware-proven display driver")
+        "0.8.86 preserve tested LVGL geometry, DMA fallback and SPI queue depth")
 
 # 0.8.29: one bounded microphone-controller probe must never start I2S
 # or do audio capture. Probe POST only, initiated by explicit Web UI click.

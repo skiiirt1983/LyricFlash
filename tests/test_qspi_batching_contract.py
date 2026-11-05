@@ -10,7 +10,7 @@ cfg=(root/"sdkconfig.defaults").read_text()
 ui=(root/"main/ui.c").read_text()
 assert "#define BSP_LCD_DMA_STAGING_ROWS (8)" in bsp
 assert "#define BSP_LCD_DMA_FALLBACK_ROWS (4)" in bsp
-assert "#define LVGL_BUFFER_HEIGHT_PSRAM (48)" in bsp
+assert "#define LVGL_BUFFER_HEIGHT_PSRAM (24)" in bsp
 assert "uint16_t *new_buffer = heap_caps_malloc" in bsp
 assert bsp.index("if(!new_buffer)return false;") < bsp.index("free(ctx->rotation_buffer);",bsp.index("static bool bsp_rotation_panel_ensure_buffer"))
 assert "max_rows=BSP_LCD_DMA_FALLBACK_ROWS;" in bsp
@@ -24,4 +24,4 @@ assert "CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1" in cfg
 assert ".tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE" in (root/"main/main.c").read_text()
 assert "LF_PAGER_STALL_GUARD_MS 1600U" in ui
 assert "lf_network_set_idle(true);" in ui and "lf_network_set_idle(false);" in ui
-print("PASS: 0.8.86 48-row LVGL / 8-row DMA batching, 4-row fallback, unchanged safety/power")
+print("PASS: 0.8.86 24-row LVGL / 8-row DMA batching, 4-row fallback, unchanged safety/power")
