@@ -1,5 +1,5 @@
 #pragma once
-/* LyricFlash 0.8.81 private alpha: screen-off CPU DFS with full-speed wake and retained touch.
+/* LyricFlash 0.8.82 private alpha: screen-off CPU DFS with full-speed wake and retained touch.
  * retaining colour swatches, one Clock reset and separate
  * Time/AMPM, Battery, Weather and Date colours on six faces.
  * Additive schema 16 preserves NVS and prior users' clock customizations.
@@ -7,7 +7,7 @@
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
 #define LF_VERSION "0.8.82-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.82"
-/* 0.8.82 battery power source tests pending; runtime gain requires physical measurement. */
+/* 0.8.82 host power-profile tests passed; battery-runtime gain needs hardware measurement. */
 /* Host source contracts passed; physical double-tap cancellation and pager-edge QA pending. */
 /* 0.8.75 blocked return swipe on-device despite passing source tests.
  * Restore LV_DIR_HOR unconditionally while retaining no-elastic/no-chain,
