@@ -7,7 +7,7 @@
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
 #define LF_VERSION "0.8.81-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.81"
-/* 0.8.80 preflight green; performance gain and appearance require device QA. */
+/* 0.8.81 preflight green; frame-paced smoothness needs hardware validation. */
 /* Host source contracts passed; physical double-tap cancellation and pager-edge QA pending. */
 /* 0.8.75 blocked return swipe on-device despite passing source tests.
  * Restore LV_DIR_HOR unconditionally while retaining no-elastic/no-chain,
