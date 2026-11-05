@@ -9,6 +9,7 @@
 #include "version.h"
 #include "weather.h"
 #include "recognition.h"
+#include "power.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
@@ -79,6 +80,11 @@ void app_main(void)
         lf_ota_guard_failure("Settings read failed");
         return;
     }
+    /* Pin the original 240 MHz before initializing the display, and
+       release only on screen-off. Any initialization failure preserves
+       the original clock policy. */
+    if(!lf_power_cpu_profile_start())
+        ESP_LOGW(TAG,"CPU screen-off scaling unavailable; original clock policy");
     /* Isolate 0.8.16's second-flush TE deadlock: keep the PrintSphere-derived
        CO5300 PSRAM DMA staging and SPI queue depth 1, but disable TE waiting
        while keeping the same core-1 LVGL worker and application. */

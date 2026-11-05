@@ -1060,6 +1060,7 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "freertos_task_count", d.task_count);
     cJSON_AddNumberToObject(root, "free_psram_bytes", d.psram_free_bytes);
     cJSON_AddBoolToObject(root, "battery_valid", d.battery_valid);
+    cJSON_AddStringToObject(root, "cpu_power_profile", lf_power_cpu_profile_state());
     if (d.battery_valid) {
         cJSON_AddNumberToObject(root, "battery_percent", d.battery.percentage);
         cJSON_AddBoolToObject(root, "usb_connected", d.battery.usb_connected);

@@ -39,6 +39,7 @@ idf_component_register(
         esp32_s3_touch_amoled_1_75
         nvs_flash
         esp_timer
+        esp_pm
         app_update
         esp_https_ota
         esp_wifi

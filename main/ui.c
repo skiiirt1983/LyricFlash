@@ -3364,6 +3364,8 @@ static void on_wake(lv_event_t *e)
     atomic_store(&wake_started_ms,current);
     atomic_store(&wake_frame_pending_ms,current);
     asleep=false;
+    /* Restore full CPU performance before rendering the wake scene. */
+    lf_power_set_screen_awake(true);
     activity();
     apply_brightness();
     /* Reveal the unchanged page immediately, but the transparent clickable
@@ -3432,6 +3434,9 @@ static void sleep_display(void)
     /* Keep 50ms touch-to-wake live; suspend only idle 16ms clock callbacks. */
     if(clock_sweep_timer)lv_timer_pause(clock_sweep_timer);
     apply_brightness();
+    /* Screen is already dark with a live touch target. Lower idle CPU
+       frequency but retain Wi-Fi, OTA and all wake processing. */
+    lf_power_set_screen_awake(false);
 }
 static void on_tick(lv_timer_t *timer)
 {
