@@ -306,7 +306,8 @@ app_main=read('main/main.c')
 sdk=read('sdkconfig.defaults')
 require('esp_ptr_external_ram(color_data)' in bsp and
         'bsp_rotation_panel_draw_staged(' in bsp and
-        'BSP_LCD_DMA_STAGING_ROWS (4)' in bsp and
+        'BSP_LCD_DMA_STAGING_ROWS (8)' in bsp and
+        'BSP_LCD_DMA_FALLBACK_ROWS (4)' in bsp and
         'ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE' in app_main and
         'ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC' not in app_main and
         'BSP_LCD_TE_GPIO' in display_header and
