@@ -8,7 +8,7 @@
 #define LF_VERSION "0.8.86-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.86"
 /* 0.8.86 branding and creator credits preflight passed; 0.8.82 battery test remains in progress. */
-/* 0.8.86 source/native preflight passed; physical UI timing QA remains pending. */
+/* 0.8.86 source/native preflight passed; 8-row DMA staging requires physical QA. */
 /* 0.8.75 blocked return swipe on-device despite passing source tests.
  * Restore LV_DIR_HOR unconditionally while retaining no-elastic/no-chain,
  * touch activity, wake cover and 0.8.72 clock pause. Host preflight passed; hardware test pending. */
