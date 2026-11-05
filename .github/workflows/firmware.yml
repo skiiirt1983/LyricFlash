@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/private-0.8.79-record-cancel-touch-guard
+      - feature/private-0.8.79-cancel-redraw-isolation
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
