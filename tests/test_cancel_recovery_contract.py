@@ -31,8 +31,19 @@ assert "home_stalled_attempt=cancelled_attempt;" in tick
 assert "lf_recog_stop(); /* cancellation flag; existing worker shuts down */" in tick
 assert "lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_SCROLLABLE);" in tick
 assert "lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);" in tick
-assert "home_refresh(current);" in tick
-assert "invalidate_full_screen();" in tick
+assert "home_last_refresh_ms=current;" in tick
+# The previous Cancel path simultaneously launched overlay, button and full
+# screen invalidations, causing a late LVGL/display stall on physical hardware.
+cleanup=portion("const uint32_t cancelled_attempt=home_record_cancel_pending_attempt;",
+                "/* Never start a deferred microphone capture")
+assert "home_refresh(current);" not in cleanup
+assert "invalidate_full_screen();" not in cleanup
+assert "lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);" in cleanup
+assert "current-(uint64_t)atomic_load(&last_record_cancel_ms)>=150U" in tick
+assert "if(home_record_cancel_pending_attempt==song->attempts)return;" in record
+assert "if(home_record_cancel_pending_attempt==song.attempts)return;" in portion(
+    "static void home_refresh(uint64_t current)", "static void on_home_scan")
+assert "atomic_store(&ui_record_cancel_phase,4U);" in cleanup
 assert "scan.attempts && scan.attempts==home_stalled_attempt" in gesture
 assert "song->attempts!=home_stalled_attempt" in record
 assert "if(home_stalled_attempt==song->attempts)" in record

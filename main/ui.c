@@ -130,6 +130,7 @@ static uint32_t home_record_attempt;
 static uint64_t home_record_cancel_tap_ms; /* two short taps, never single */
 static uint32_t home_record_cancel_pending_attempt; /* timer owns cancellation */
 static atomic_uint last_record_cancel_ms; /* survives a wedged LVGL task for watchdog */
+static atomic_uint ui_record_cancel_phase; /* 0 idle, 1 requested, 2 retire, 3 hidden, 4 refresh due, 5 refreshed */
 static int32_t home_record_wave_bias_q8; /* UI-only DC center, 8-bit fixed point */
 static uint32_t home_record_last_frames;
 static uint64_t home_record_last_tick;
@@ -238,6 +239,7 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->ui_tick_age_ms=tick?current-tick:UINT32_MAX;
     const uint32_t cancelled=atomic_load(&last_record_cancel_ms);
     out->last_record_cancel_age_ms=cancelled?current-cancelled:UINT32_MAX;
+    out->record_cancel_phase=atomic_load(&ui_record_cancel_phase);
     out->ui_page=atomic_load(&ui_last_page);
     out->last_screen_off_ms=atomic_load(&last_screen_off_ms);
     out->wake_count=atomic_load(&wake_count);
@@ -1066,6 +1068,10 @@ static void auto_open_lyrics_deferred(void *unused)
 static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t current)
 {
     if(!song || !home_record_layer)return;
+    /* No LVGL display changes from the recording refresh while Stop is
+       queued. In particular the 75ms waveform timer must not race the
+       cancellation timer and invalidate the same full-screen object. */
+    if(home_record_cancel_pending_attempt==song->attempts)return;
     /* The physical pager must not scroll during recording/upload/lookup.
        Re-enable once the scan has finished and the finger is released. */
     if(primary_pager && page==0){
@@ -1230,6 +1236,9 @@ static void home_refresh(uint64_t current)
     if(!home_song_title||!home_scan_button||!home_play_symbol)return;
     lf_recog_snapshot_t song={0};
     lf_recog_snapshot(&song);
+    /* The recording overlay is still the topmost touch surface until the
+       dedicated cancel tick retires it. Defer ALL Home-style mutations. */
+    if(home_record_cancel_pending_attempt==song.attempts)return;
     const bool busy=lf_recog_busy();
     home_recording_update(&song,current);
     const char *message="";
@@ -1313,6 +1322,7 @@ static void on_record_cancel_double_tap(lv_event_t *e)
         home_stalled_attempt=scan.attempts;
         home_record_cancel_pending_attempt=scan.attempts;
         atomic_store(&last_record_cancel_ms,(uint32_t)current);
+        atomic_store(&ui_record_cancel_phase,1U);
         /* This is only an atomic flag store; signal the worker immediately,
            without waiting for the UI timer or a later finger release.
            Never mutate or delete an LVGL touch target inside this callback. */
@@ -3297,11 +3307,16 @@ static void on_tick(lv_timer_t *timer)
        physical release. No overlay mutation or networking in the touch
        callback; never schedule more than one cancellation per scan. */
     if(home_record_cancel_pending_attempt && !ui_pointer_is_down() &&
-       !nav_transition_active){
+       !nav_transition_active &&
+       current-(uint64_t)atomic_load(&last_record_cancel_ms)>=150U){
         const uint32_t cancelled_attempt=home_record_cancel_pending_attempt;
-        home_record_cancel_pending_attempt=0;
+        /* Avoid a second redraw while the input driver settles from the
+           double-click. Snapshot may race a completed microphone worker,
+           but this UI-only cancellation remains attempt scoped. */
         lf_recog_snapshot_t cancelled={0};
         lf_recog_snapshot(&cancelled);
+        atomic_store(&ui_record_cancel_phase,2U);
+        home_record_cancel_pending_attempt=0;
         /* The worker may finish after Stop but before the timer fires.
            Always retire this attempt's overlay once the finger is up. */
         if(page==0 && cancelled.attempts==cancelled_attempt){
@@ -3317,9 +3332,14 @@ static void on_tick(lv_timer_t *timer)
             if(home_record_layer &&
                !lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN))
                 lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
-            home_last_refresh_ms=0;
-            home_refresh(current);
-            invalidate_full_screen();
+            atomic_store(&ui_record_cancel_phase,3U);
+            /* Hiding the overlay ALREADY invalidates its old bounds.
+               A second full-screen invalidation plus immediate Home label
+               and button style updates can launch multiple display flushes
+               from this single touch release. Let LVGL finish the overlay
+               flush before the ordinary 750ms Home refresh runs. */
+            home_last_refresh_ms=current;
+            atomic_store(&ui_record_cancel_phase,4U);
         }
     }
     /* Never start a deferred microphone capture during touch, swipe or sleep. */
@@ -3490,7 +3510,11 @@ static void on_tick(lv_timer_t *timer)
     }
     if (page == 0 && !touch_held && !pager_scrolling &&
         !ui_pointer_is_down() &&
-        current-home_last_refresh_ms >= 750)home_refresh(current);
+        current-home_last_refresh_ms >= 750){
+        home_refresh(current);
+        if(atomic_load(&ui_record_cancel_phase)==4U)
+            atomic_store(&ui_record_cancel_phase,5U);
+    }
     if (page == 14 && current - last_debug_refresh >= 2500) {
         last_debug_refresh = current;
         refresh_debug();

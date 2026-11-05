@@ -39,6 +39,7 @@ typedef struct {
     /* Safe cross-thread evidence if the OLED stops while Device Studio lives. */
     uint32_t ui_tick_age_ms;
     uint32_t last_record_cancel_age_ms; /* UINT32_MAX until a double-tap Stop */
+    uint32_t record_cancel_phase; /* read-only LVGL cancellation progress */
     uint32_t last_screen_off_ms;
     uint32_t wake_count;
     uint32_t last_wake_frame_ready_ms;

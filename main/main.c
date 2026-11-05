@@ -43,11 +43,17 @@ static void lyricflash_display_recovery_watchdog(void *arg)
         if(uptime_ms>60000 && scan_related && song_page &&
            ui.ui_tick_age_ms!=UINT32_MAX &&
            ui.ui_tick_age_ms>25000U){
-            ESP_LOGE(TAG,"LVGL heartbeat lost for %lu ms while recognition "
-                     "state=%s, page=%lu; restarting without wiping settings",
+            ESP_LOGE(TAG,"LVGL heartbeat lost %lu ms; state=%s page=%lu "
+                     "cancel_phase=%lu render=%lu flush=%lu/%lu ready=%lu "
+                     "restarting without wiping settings",
                      (unsigned long)ui.ui_tick_age_ms,
                      lf_recog_state_name(song.state),
-                     (unsigned long)ui.ui_page);
+                     (unsigned long)ui.ui_page,
+                     (unsigned long)ui.record_cancel_phase,
+                     (unsigned long)ui.render_count,
+                     (unsigned long)ui.flush_finishes,
+                     (unsigned long)ui.flush_starts,
+                     (unsigned long)ui.refresh_ready);
             vTaskDelay(pdMS_TO_TICKS(150));
             esp_restart();
         }
