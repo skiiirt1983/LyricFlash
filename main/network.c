@@ -1180,6 +1180,12 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "ui_tick_work_max_us", display_stats.ui_tick_work_max_us);
     cJSON_AddNumberToObject(root, "pager_frame_gap_last_ms", display_stats.pager_frame_gap_last_ms);
     cJSON_AddNumberToObject(root, "pager_frame_gap_max_ms", display_stats.pager_frame_gap_max_ms);
+    cJSON_AddNumberToObject(root, "render_draw_last_us", display_stats.render_draw_last_us);
+    cJSON_AddNumberToObject(root, "render_draw_max_us", display_stats.render_draw_max_us);
+    cJSON_AddNumberToObject(root, "flush_wait_refresh_last_us", display_stats.flush_wait_refresh_last_us);
+    cJSON_AddNumberToObject(root, "flush_wait_refresh_max_us", display_stats.flush_wait_refresh_max_us);
+    cJSON_AddNumberToObject(root, "flush_calls_refresh_last", display_stats.flush_calls_refresh_last);
+    cJSON_AddNumberToObject(root, "flush_calls_refresh_max", display_stats.flush_calls_refresh_max);
     cJSON_AddNumberToObject(root, "ui_navigation_commits", display_stats.navigation_commits);
     cJSON_AddNumberToObject(root, "ui_full_redraws", display_stats.full_redraws);
     cJSON_AddNumberToObject(root, "record_cancel_phase", display_stats.record_cancel_phase);
