@@ -160,6 +160,19 @@ static int primary_pager_origin=1;
 static int primary_pager_snap_to=1;
 static bool primary_pager_snapping;
 static bool primary_pager_initializing;
+/* Only advance post-release movement after the previous display refresh.
+   LVGL's millisecond scroll animation issued many positions while QSPI was
+   still transferring an older frame, visually skipping frames and jerking. */
+static lv_timer_t *primary_pager_frame_timer;
+static int32_t primary_pager_snap_from_x;
+static bool primary_pager_frame_pending;
+static uint32_t primary_pager_frame_render_at_issue;
+static uint32_t primary_pager_frame_ready_at_issue;
+static uint64_t primary_pager_last_frame_ms;
+#define LF_PAGER_FRAME_MIN_MS 28U
+#define LF_PAGER_MAX_FRAME_STEP_PX 58
+#define LF_PAGER_SNAP_DURATION_MS 430U
+#define LF_PAGER_STALL_GUARD_MS 1600U
 /* 0.8.25: retain the 0.8.23 stuck-snap recovery, but always keep the
    actual clock scene visible. The optional off-screen RGB565 snapshot was
    hiding the live clock during page flips and could leave a black page
@@ -518,6 +531,10 @@ static uint8_t nav_transition_step;
 static int32_t nav_transition_cursor;
 static lv_screen_load_anim_t nav_transition_dir;
 static uint64_t nav_transition_started_ms;
+static uint64_t nav_transition_last_frame_ms;
+static bool nav_transition_frame_pending;
+static uint32_t nav_transition_frame_render_at_issue;
+static uint32_t nav_transition_frame_ready_at_issue;
 /* Fewer reveal passes avoid flooding QSPI with redundant pending updates.
    The same complete page is transferred in twelve larger strips. */
 #define LF_NAV_REVEAL_STEPS 12
@@ -891,6 +908,13 @@ static void make_base(void)
     /* Preserve the cached clock across visits to Weather/settings subpages.
        Reparent before deleting the pager that previously owned it. */
     if(primary_pager) {
+        /* Pager has a persistent frame timer. Delete it BEFORE removing
+           the pager objects so no callback can reference freed children. */
+        if(primary_pager_frame_timer){
+            lv_timer_delete(primary_pager_frame_timer);
+            primary_pager_frame_timer=NULL;
+        }
+        primary_pager_frame_pending=false;
         if(clock_scene && lv_obj_get_parent(clock_scene)!=screen) {
             lv_obj_set_parent(clock_scene,screen);
             lv_obj_add_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
@@ -2664,6 +2688,8 @@ static void primary_pager_commit(int index)
     primary_pager_snap_to=index;
     primary_pager_snapping=false;
     pager_scrolling=false;
+    primary_pager_frame_pending=false;
+    if(primary_pager_frame_timer)lv_timer_pause(primary_pager_frame_timer);
     /* Keep both physical swipe directions enabled for every pager page.
        Dynamic per-edge scroll flags in 0.8.74/0.8.75 trapped Settings:
        firmware must never change LVGL's input direction at page commit.
@@ -2692,18 +2718,84 @@ static void primary_pager_commit(int index)
         lf_clock_update();
     }
 }
-/* Start EXACTLY one ease-out snap. A 700ms watchdog handles scroll-end events
-   lost during expensive QSPI redraws, without killing the active finger drag. */
+/* Present one actual position per completed QSPI refresh, not N obsolete
+   animation positions queued while a costly frame is still rendering.
+   The live native finger drag is untouched: this timer only settles after
+   release, and a new press immediately returns control to the finger. */
+static void primary_pager_snap_frame(lv_timer_t *timer)
+{
+    (void)timer;
+    if(!primary_pager || !primary_pager_snapping || asleep || timed_overlay)return;
+    if(ui_pointer_is_down()){
+        primary_pager_snapping=false;
+        primary_pager_frame_pending=false;
+        if(primary_pager_frame_timer)lv_timer_pause(primary_pager_frame_timer);
+        return;
+    }
+    const uint64_t current=now_ms();
+    const int32_t target_x=primary_pager_snap_to*466;
+    const int32_t x=abs(lv_obj_get_scroll_x(primary_pager));
+    if(primary_pager_frame_pending){
+        /* REFR_READY alone is emitted for empty refreshes. Require a real
+           render to start AND its refresh to complete before advancing. */
+        if(atomic_load(&ui_render_count)==primary_pager_frame_render_at_issue ||
+           atomic_load(&ui_refresh_ready_count)==primary_pager_frame_ready_at_issue)
+            return;
+        primary_pager_frame_pending=false;
+    }
+    if(abs(target_x-x)<=2){
+        primary_pager_commit(primary_pager_snap_to);
+        return;
+    }
+    if(current-primary_pager_last_frame_ms<LF_PAGER_FRAME_MIN_MS)return;
+    uint64_t elapsed=current-primary_pager_snap_started_ms;
+    if(elapsed>LF_PAGER_SNAP_DURATION_MS)elapsed=LF_PAGER_SNAP_DURATION_MS;
+    /* Integer smoothstep: consistent ease-out based on monotonic time.
+       Limit travel per presented frame so a slow display does not jump
+       across most of a page after one long QSPI operation. */
+    const int64_t t=(int64_t)(elapsed*1024U/LF_PAGER_SNAP_DURATION_MS);
+    const int64_t eased=t*t*(3072-2*t)/(1024*1024);
+    const int32_t desired=primary_pager_snap_from_x+
+        (int32_t)(((int64_t)(target_x-primary_pager_snap_from_x)*eased)/1024);
+    int32_t advance=desired-x;
+    if(advance>LF_PAGER_MAX_FRAME_STEP_PX)advance=LF_PAGER_MAX_FRAME_STEP_PX;
+    if(advance< -LF_PAGER_MAX_FRAME_STEP_PX)advance= -LF_PAGER_MAX_FRAME_STEP_PX;
+    if(advance==0)advance=target_x>x?1:-1;
+    int32_t next=x+advance;
+    if((target_x>=x && next>target_x)||(target_x<=x && next<target_x))
+        next=target_x;
+    /* Capture both counters before invalidation; release/scroll-end may fire
+       inline, but the callback cannot mark this frame presented prematurely. */
+    primary_pager_frame_render_at_issue=atomic_load(&ui_render_count);
+    primary_pager_frame_ready_at_issue=atomic_load(&ui_refresh_ready_count);
+    primary_pager_frame_pending=true;
+    primary_pager_last_frame_ms=current;
+    lv_obj_scroll_to_x(primary_pager,next,LV_ANIM_OFF);
+}
 static void primary_pager_start_snap(int target)
 {
     if(!primary_pager)return;
     if(target<0)target=0;
     if(target>2)target=2;
+    const int32_t current_x=abs(lv_obj_get_scroll_x(primary_pager));
+    if(abs(current_x-target*466)<=2){
+        primary_pager_commit(target);
+        return;
+    }
+    primary_pager_snap_from_x=current_x;
     primary_pager_snap_to=target;
     primary_pager_snap_started_ms=now_ms();
+    primary_pager_last_frame_ms=0;
+    primary_pager_frame_pending=false;
     primary_pager_snapping=true;
     pager_scrolling=true;
-    lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);
+    if(primary_pager_frame_timer){
+        lv_timer_reset(primary_pager_frame_timer);
+        lv_timer_resume(primary_pager_frame_timer);
+    }else{
+        /* Startup allocation failure must never strand a swipe. */
+        lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);
+    }
 }
 static int primary_pager_target(int32_t x)
 {
@@ -2730,10 +2822,11 @@ static void primary_pager_watchdog(uint64_t current)
     int32_t x=abs(lv_obj_get_scroll_x(primary_pager));
     if(primary_pager_snapping){
         if(abs(x-primary_pager_snap_to*466)<=2){
-            primary_pager_commit(primary_pager_snap_to);
+            if(!primary_pager_frame_pending)
+                primary_pager_commit(primary_pager_snap_to);
             return;
         }
-        if(current-primary_pager_snap_started_ms>700){
+        if(current-primary_pager_snap_started_ms>LF_PAGER_STALL_GUARD_MS){
             /* Force a complete, aligned page if panel transfers outrun the
                LVGL animation. This is preferable to getting stranded midpage. */
             int target=primary_pager_snap_to;
@@ -2755,15 +2848,13 @@ static void primary_pager_scroll_event(lv_event_t *e)
        lv_event_get_target(e)!=primary_pager) return;
     const lv_event_code_t code=lv_event_get_code(e);
     if(code==LV_EVENT_SCROLL_BEGIN){
-        /* LVGL permits editing the scroll animation here. A short,
-           distance-scaled settle avoids redundant full-width redraws on
-           the 466px QSPI AMOLED. Physical finger drag is untouched. */
+        /* Only the allocation-failure LVGL fallback uses an animated
+           snap. The normal settle is render-completion paced above. */
         lv_anim_t *anim=lv_event_get_scroll_anim(e);
         if(primary_pager_snapping && anim) {
             int32_t remaining=abs(primary_pager_snap_to*466-abs(lv_obj_get_scroll_x(primary_pager)));
             if(remaining>466)remaining=466;
-            /* QSPI needs longer than a 95ms settle to show intermediate
-               frames. The gesture itself still follows the finger. */
+            /* Preserve the safe LVGL fallback if the frame timer is absent. */
             lv_anim_set_duration(anim,185U+(uint32_t)(105U*remaining/466U));
             lv_anim_set_path_cb(anim,lv_anim_path_ease_out);
         }
@@ -2773,6 +2864,8 @@ static void primary_pager_scroll_event(lv_event_t *e)
         lv_indev_t *indev=lv_indev_active();
         if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED){
             primary_pager_snapping=false; /* Finger interrupts existing snap. */
+            primary_pager_frame_pending=false;
+            if(primary_pager_frame_timer)lv_timer_pause(primary_pager_frame_timer);
             primary_pager_origin=primary_pager_current;
         }
         return;
@@ -2790,7 +2883,8 @@ static void primary_pager_scroll_event(lv_event_t *e)
     if(primary_pager_snapping){
         /* Some intermediate scroll-end callbacks fire during a new easing
            animation. Commit only if the target is actually reached. */
-        if(abs(x-primary_pager_snap_to*466)<=2)
+        if(abs(x-primary_pager_snap_to*466)<=2 &&
+           !primary_pager_frame_pending)
             primary_pager_commit(primary_pager_snap_to);
         return;
     }
@@ -2888,6 +2982,8 @@ static void primary_pager_create(int target_index)
     primary_render_home_content(primary_pager_pages[1]);
     primary_render_settings_content(primary_pager_pages[2]);
     primary_pager_build_clock();
+    primary_pager_frame_timer=lv_timer_create(primary_pager_snap_frame,16,NULL);
+    if(primary_pager_frame_timer)lv_timer_pause(primary_pager_frame_timer);
     lv_obj_update_layout(primary_pager);
     lv_obj_scroll_to_x(primary_pager,target_index*466,LV_ANIM_OFF);
     primary_pager_initializing=false;
@@ -3709,6 +3805,7 @@ static void nav_transition_end(bool interrupted)
 {
     if (!nav_transition_active) return;
     nav_transition_active=false;
+    nav_transition_frame_pending=false;
     if(nav_transition_timer) {
         lv_timer_delete(nav_transition_timer);
         nav_transition_timer=NULL;
@@ -3730,7 +3827,20 @@ static void nav_transition_tick(lv_timer_t *timer)
 {
     (void)timer;
     if(!nav_transition_active||!screen)return;
+    const uint64_t current=now_ms();
+    if(nav_transition_frame_pending){
+        if(atomic_load(&ui_render_count)==nav_transition_frame_render_at_issue ||
+           atomic_load(&ui_refresh_ready_count)==nav_transition_frame_ready_at_issue){
+            if(current-nav_transition_last_frame_ms>1500U)nav_transition_end(true);
+            return;
+        }
+        nav_transition_frame_pending=false;
+    }
+    /* The strip already invalidated is now actually on the display. Avoid
+       advancing the 12-step wipe against stale panel memory. */
     if(nav_transition_step>=LF_NAV_REVEAL_STEPS){nav_transition_end(false);return;}
+    if(nav_transition_step &&
+       current-nav_transition_last_frame_ms<LF_NAV_REVEAL_PERIOD_MS)return;
     nav_transition_step++;
     /* Integer smoothstep eased 0..1024, 64-bit arithmetic avoids overflow. */
     int64_t t=(int64_t)nav_transition_step*1024/LF_NAV_REVEAL_STEPS;
@@ -3753,8 +3863,12 @@ static void nav_transition_tick(lv_timer_t *timer)
         region.x2=reverse?LF_NAV_PANEL_SIZE-prev-1:next-1;
     }
     nav_transition_cursor=next;
+    nav_transition_frame_render_at_issue=atomic_load(&ui_render_count);
+    nav_transition_frame_ready_at_issue=atomic_load(&ui_refresh_ready_count);
+    nav_transition_frame_pending=true;
+    nav_transition_last_frame_ms=current;
     lv_obj_invalidate_area(screen,&region);
-    if(next==LF_NAV_PANEL_SIZE)nav_transition_end(false);
+    /* The final strip is completed before deleting the touch catcher. */
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
 {
@@ -3769,6 +3883,8 @@ static void nav_transition_begin(lv_screen_load_anim_t direction)
     nav_transition_active=true;
     nav_transition_step=0;
     nav_transition_cursor=0;
+    nav_transition_frame_pending=false;
+    nav_transition_last_frame_ms=0;
     nav_transition_started_ms=now_ms();
     lv_display_t *disp=lv_display_get_default();
     lv_display_enable_invalidation(disp,false);
