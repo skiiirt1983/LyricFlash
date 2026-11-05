@@ -33,8 +33,9 @@
 
 static const char *TAG = "ESP32-S3-Touch-AMOLED-1.75";
 
-#define BSP_LCD_DMA_STAGING_ROWS (4)
-/* Baseline restored after eight-row batching failed to improve frame cadence. */
+#define BSP_LCD_DMA_STAGING_ROWS (8)
+#define BSP_LCD_DMA_FALLBACK_ROWS (4)
+/* Return to 0.8.86 hardware-tested 8-row batching; retain safe 4-row fallback. */
 static i2c_master_bus_handle_t i2c_handle = NULL; // I2C Handle
 static bool i2c_initialized = false;
 static esp_io_expander_handle_t io_expander = NULL; // IO expander tca9554 handle
@@ -255,12 +256,15 @@ static esp_err_t bsp_rotation_panel_draw_staged(bsp_rotation_panel_t *ctx, int x
     if (use_chunked)
     {
         const int64_t stage_started_us=esp_timer_get_time();
-        const int max_rows=BSP_LCD_DMA_STAGING_ROWS;
-        const size_t max_pixels=(size_t)width*max_rows;
-        if(!bsp_rotation_panel_ensure_buffer(ctx,max_pixels*2))
-        {
-            ESP_LOGE(TAG,"Unable to allocate DMA staging for %d rows",max_rows);
-            return ESP_ERR_NO_MEM;
+        int max_rows=BSP_LCD_DMA_STAGING_ROWS;
+        size_t max_pixels=(size_t)width*max_rows;
+        if(!bsp_rotation_panel_ensure_buffer(ctx,max_pixels*2)){
+            max_rows=BSP_LCD_DMA_FALLBACK_ROWS;
+            max_pixels=(size_t)width*max_rows;
+            if(!bsp_rotation_panel_ensure_buffer(ctx,max_pixels*2)){
+                ESP_LOGE(TAG,"Unable to allocate DMA staging for %d rows",max_rows);
+                return ESP_ERR_NO_MEM;
+            }
         }
         atomic_store(&stage_chunk_rows,(unsigned)max_rows);
 

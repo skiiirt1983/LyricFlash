@@ -161,6 +161,32 @@ static void polar(int r, float angle, lv_point_precise_t *point)
 }
 /* One custom LVGL drawing widget replaces 60 separate tick widgets.
    It uses the exact 60 tick positions and anti-aliased lines of the old dial. */
+/* Dial geometry never changes between refreshes. Previous code recalculated
+   60 sin/cos pairs inside each LVGL draw callback, repeated for every dirty
+   24-row strip (up to 20 times per full-frame render). Build it once per
+   static dial type, then issue exactly the same LVGL line descriptors. */
+typedef struct {
+    int16_t x1,y1,x2,y2;
+} lf_dial_tick_t;
+static lf_dial_tick_t dial_tick_cache[2][60];
+static bool dial_ticks_ready[2];
+static void dial_ticks_prepare(bool diver)
+{
+    const int style=diver?1:0;
+    if(dial_ticks_ready[style])return;
+    for(int i=0;i<60;i++){
+        const bool major=(i%5)==0;
+        const float angle=(float)(i*6-90)*(PI_F/180.f);
+        const float c=cosf(angle),t=sinf(angle);
+        const int outer=diver?185:181;
+        const int inner=major?(diver?171:160):(diver?181:175);
+        dial_tick_cache[style][i]=(lf_dial_tick_t){
+            .x1=(int16_t)(CC+c*inner), .y1=(int16_t)(CC+t*inner),
+            .x2=(int16_t)(CC+c*outer), .y2=(int16_t)(CC+t*outer)
+        };
+    }
+    dial_ticks_ready[style]=true;
+}
 static void tick_draw_event(lv_event_t *e)
 {
     lv_obj_t *o=lv_event_get_target(e);
@@ -168,20 +194,17 @@ static void tick_draw_event(lv_event_t *e)
     lv_area_t area;
     lv_obj_get_coords(o,&area);
     const bool diver=(uintptr_t)lv_event_get_user_data(e)!=0;
+    const lf_dial_tick_t *ticks=dial_tick_cache[diver?1:0];
     for(int i=0;i<60;i++){
-        /* Dress watch: just twelve subtle markers rather than diver's
-           dense 60-beat outer bezel. */
+        /* Dress watch has only twelve markers, diver has sixty. */
         if(!diver && i%5)continue;
-        bool major=(i%5)==0;
-        float angle=(float)(i*6-90)*(PI_F/180.f);
-        int outer=diver?185:181;
-        int inner=major?(diver?171:160):(diver?181:175);
+        const bool major=(i%5)==0;
         lv_draw_line_dsc_t line;
         lv_draw_line_dsc_init(&line);
-        line.p1.x=area.x1+CC+cosf(angle)*inner;
-        line.p1.y=area.y1+CC+sinf(angle)*inner;
-        line.p2.x=area.x1+CC+cosf(angle)*outer;
-        line.p2.y=area.y1+CC+sinf(angle)*outer;
+        line.p1.x=area.x1+ticks[i].x1;
+        line.p1.y=area.y1+ticks[i].y1;
+        line.p2.x=area.x1+ticks[i].x2;
+        line.p2.y=area.y1+ticks[i].y2;
         line.color=lv_color_hex(major?colour_fg():colour_ac());
         line.width=diver?(major?5:2):2;
         line.round_start=1;
@@ -191,6 +214,7 @@ static void tick_draw_event(lv_event_t *e)
 }
 static void draw_ticks(lv_obj_t *parent, bool diver)
 {
+    dial_ticks_prepare(diver);
     lv_obj_t *dial=lv_obj_create(parent);
     lv_obj_set_size(dial,CW,CW);
     lv_obj_center(dial);
@@ -234,6 +258,20 @@ static void add_hour_markers(lv_obj_t *parent)
             lv_obj_set_style_radius(mark, (i == 6 || i == 9) ? 4 : LV_RADIUS_CIRCLE, 0);
         }
     }
+}
+static void update_hand_if_moved(int index,float angle,int tip_radius)
+{
+    if(index<0||index>=3||!hands[index])return;
+    lv_point_precise_t ends[2];
+    polar(-13,angle,&ends[0]);
+    polar(tip_radius,angle,&ends[1]);
+    if(hand_points[index][0].x==ends[0].x &&
+       hand_points[index][0].y==ends[0].y &&
+       hand_points[index][1].x==ends[1].x &&
+       hand_points[index][1].y==ends[1].y)return;
+    hand_points[index][0]=ends[0];
+    hand_points[index][1]=ends[1];
+    lv_line_set_points(hands[index],hand_points[index],2);
 }
 static void create_hands(lv_obj_t *parent, bool diver)
 {
@@ -637,9 +675,17 @@ void lf_clock_update(void)
     if (sundial_shadow) {
         /* Noon points upward, night is still a joke. */
         float angle = (float)(((local.tm_hour + local.tm_min / 60.f) - 12.f) * 15.f - 90.f) * PI_F / 180.f;
-        polar(0, angle, &sundial_shadow_points[0]);
-        polar(104, angle, &sundial_shadow_points[1]);
-        lv_line_set_points(sundial_shadow, sundial_shadow_points, 2);
+        lv_point_precise_t new_shadow[2];
+        polar(0,angle,&new_shadow[0]);
+        polar(104,angle,&new_shadow[1]);
+        if(sundial_shadow_points[0].x!=new_shadow[0].x ||
+           sundial_shadow_points[0].y!=new_shadow[0].y ||
+           sundial_shadow_points[1].x!=new_shadow[1].x ||
+           sundial_shadow_points[1].y!=new_shadow[1].y){
+            sundial_shadow_points[0]=new_shadow[0];
+            sundial_shadow_points[1]=new_shadow[1];
+            lv_line_set_points(sundial_shadow,sundial_shadow_points,2);
+        }
     }
     if (current_style == 1 || current_style == 3 || current_style == 4 || current_style == 5) return;
     float sec = (float)local.tm_sec;
@@ -653,10 +699,7 @@ void lf_clock_update(void)
     int lengths[3] = {94, 133, 164};
     for (int i = 0; i < 3; i++) {
         if (current_style == 0 && i == 2) continue;
-        if (!hands[i]) continue;
-        polar(-13, angles[i], &hand_points[i][0]);
-        polar(lengths[i], angles[i], &hand_points[i][1]);
-        lv_line_set_points(hands[i], hand_points[i], 2);
+        update_hand_if_moved(i,angles[i],lengths[i]);
     }
 }
 
@@ -688,7 +731,7 @@ void lf_clock_animate(void)
     int64_t wall = anchor_wall_us + mono - anchor_mono_us;
     float seconds = (float)(wall % 60000000LL) / 1000000.f;
     float angle = (seconds * 6.f - 90.f) * PI_F / 180.f;
-    polar(-13, angle, &hand_points[2][0]);
-    polar(164, angle, &hand_points[2][1]);
-    lv_line_set_points(hands[2], hand_points[2], 2);
+    /* The 16ms sweep timer often lands on the same physical pixels.
+       Suppress no-op invalidations instead of redrawing the entire hand. */
+    update_hand_if_moved(2,angle,164);
 }

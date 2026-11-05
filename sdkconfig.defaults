@@ -44,4 +44,4 @@ CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
 CONFIG_SPI_MASTER_IN_IRAM=y
 CONFIG_LV_DEF_REFR_PERIOD=16
 # LVGL 9.5 style lookups on complex static page trees; add only 8 bytes/object.
-CONFIG_LV_OBJ_STYLE_CACHE=y
+# CONFIG_LV_OBJ_STYLE_CACHE is not set

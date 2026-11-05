@@ -35,7 +35,7 @@ typedef struct {
 
 /* Lock-free, read-only transfer measurements for on-device diagnostics. */
 typedef struct {
-    uint32_t stage_rows;             /* 4-row baseline, 0 before first flush */
+    uint32_t stage_rows;             /* 8-row normal, 4-row fallback, 0 before first flush */
     uint32_t chunk_submissions;      /* physical QSPI bitmap submissions since boot */
     uint32_t stage_call_last_us;     /* time to submit one LVGL logical flush */
     uint32_t stage_call_max_us;
