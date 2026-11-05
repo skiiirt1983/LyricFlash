@@ -420,7 +420,7 @@ require('if(primary_pager && (page==0 || page==2 || page==6)' in ui and
 # against missed LVGL scroll-end events with a one-shot page alignment fallback
 # that NEVER takes ownership while the user is still pressing the display.
 require('primary_pager_snap_started_ms' in ui and
-        'current-primary_pager_snap_started_ms>700' in watchdog and
+        'current-primary_pager_snap_started_ms>LF_PAGER_STALL_GUARD_MS' in watchdog and
         'lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_OFF);' in watchdog and
         'primary_pager_commit(target);' in watchdog and
         'lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)return;' in watchdog and
@@ -459,7 +459,7 @@ require('lv_event_get_scroll_anim(e)' in ui and
         '"pager_snap_last_ms"' in network and
         '"render_cycle_last_ms"' in network and
         'lv_obj_invalidate(clock_scene);' in ui and
-        'current-primary_pager_snap_started_ms>700' in watchdog,
+        'current-primary_pager_snap_started_ms>LF_PAGER_STALL_GUARD_MS' in watchdog,
         "Paced pager snap and retained Clock recovery contract")
 
 # 0.8.30: physical-device regression with 96-row rendering buffer.
