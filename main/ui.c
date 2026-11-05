@@ -129,6 +129,7 @@ static lv_obj_t *home_record_caption;
 static uint32_t home_record_attempt;
 static uint64_t home_record_cancel_tap_ms; /* two short taps, never single */
 static uint32_t home_record_cancel_pending_attempt; /* timer owns cancellation */
+static atomic_uint last_record_cancel_ms; /* survives a wedged LVGL task for watchdog */
 static int32_t home_record_wave_bias_q8; /* UI-only DC center, 8-bit fixed point */
 static uint32_t home_record_last_frames;
 static uint64_t home_record_last_tick;
@@ -235,6 +236,8 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     const uint32_t current=(uint32_t)(esp_timer_get_time()/1000LL);
     const uint32_t tick=atomic_load(&ui_last_tick_ms);
     out->ui_tick_age_ms=tick?current-tick:UINT32_MAX;
+    const uint32_t cancelled=atomic_load(&last_record_cancel_ms);
+    out->last_record_cancel_age_ms=cancelled?current-cancelled:UINT32_MAX;
     out->ui_page=atomic_load(&ui_last_page);
     out->last_screen_off_ms=atomic_load(&last_screen_off_ms);
     out->wake_count=atomic_load(&wake_count);
@@ -1112,9 +1115,12 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
                  (unsigned long)song->attempts);
     }
     if(home_stalled_attempt==song->attempts){
-        /* Cancellation/timeout is visually complete even if a blocked HTTPS
-           call is still unwinding. Never re-lock pager on the next 75ms tick. */
-        if(!lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN))
+        /* A double-tap makes this attempt stale *during* a short-click
+           callback. Never hide its touch target while the physical pointer
+           is pressed, even from the independent 750ms Home refresh timer.
+           On release the next UI tick safely retires the overlay. */
+        if(!ui_pointer_is_down() &&
+           !lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN))
             lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
         return;
     }
@@ -1127,7 +1133,10 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
                        song->attempts!=auto_open_attempt;
     /* Hold LOADING on screen until deferred lyrics really open. */
     if(!capturing&&!working&&!opening){
-        lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
+        /* The recording worker can exit while the second finger is still
+           down. Its completion must not invalidate the touched overlay. */
+        if(!ui_pointer_is_down())
+            lv_obj_add_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
         return;
     }
     if(lv_obj_has_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN)){
@@ -1303,6 +1312,7 @@ static void on_record_cancel_double_tap(lv_event_t *e)
         /* Block any late match from reopening lyrics after Stop. */
         home_stalled_attempt=scan.attempts;
         home_record_cancel_pending_attempt=scan.attempts;
+        atomic_store(&last_record_cancel_ms,(uint32_t)current);
         /* This is only an atomic flag store; signal the worker immediately,
            without waiting for the UI timer or a later finger release.
            Never mutate or delete an LVGL touch target inside this callback. */
@@ -3479,6 +3489,7 @@ static void on_tick(lv_timer_t *timer)
             auto_open_pending=false;
     }
     if (page == 0 && !touch_held && !pager_scrolling &&
+        !ui_pointer_is_down() &&
         current-home_last_refresh_ms >= 750)home_refresh(current);
     if (page == 14 && current - last_debug_refresh >= 2500) {
         last_debug_refresh = current;

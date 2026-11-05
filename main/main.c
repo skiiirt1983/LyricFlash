@@ -18,10 +18,11 @@ static const char *TAG = "LyricFlash";
 
 /* A physically frozen AMOLED with a responsive Web UI is an LVGL worker
  * stall, not proof that AudD failed. An independent, low-priority task
- * monitors the existing lock-free UI heartbeat. During a song scan only,
- * a >25 second heartbeat loss causes a clean firmware restart, preserving
- * NVS, Wi-Fi, API credentials and OTA partitions. No new microphone access.
- * Never reset merely because the external AudD/LRCLIB service is slow. */
+ * monitors the lock-free heartbeat. Keep the cancelled recording in scope
+ * for 90 seconds: its worker may move to STOPPED before the LVGL task hangs.
+ * Only a >25s heartbeat loss on a song page causes a clean restart with
+ * preserved NVS, credentials and OTA partitions. No new microphone access.
+ * Never reset merely because AudD/LRCLIB is slow. */
 static void lyricflash_display_recovery_watchdog(void *arg)
 {
     (void)arg;
@@ -32,10 +33,12 @@ static void lyricflash_display_recovery_watchdog(void *arg)
         lf_recog_snapshot_t song={0};
         lf_recog_snapshot(&song);
         const int64_t uptime_ms=esp_timer_get_time()/1000LL;
+        const bool recent_cancel=ui.last_record_cancel_age_ms!=UINT32_MAX &&
+                                 ui.last_record_cancel_age_ms<90000U;
         const bool scan_related=song.attempts>0 &&
             (song.state==LF_RECOG_UPLOAD ||
              song.state==LF_RECOG_LYRICS ||
-             song.state==LF_RECOG_MATCH);
+             song.state==LF_RECOG_MATCH || recent_cancel);
         const bool song_page=ui.ui_page==0 || ui.ui_page==1 || ui.ui_page==9;
         if(uptime_ms>60000 && scan_related && song_page &&
            ui.ui_tick_age_ms!=UINT32_MAX &&

@@ -17,6 +17,7 @@ gesture=portion("static bool recognition_touch_locked(void)\n{",
                 "static void swipe_intent")
 assert "home_record_cancel_pending_attempt=scan.attempts;" in callback
 assert "home_stalled_attempt=scan.attempts;" in callback
+assert "atomic_store(&last_record_cancel_ms,(uint32_t)current);" in callback
 assert "lf_recog_stop(); /* atomic cooperative stop; no UI mutation */" in callback
 assert callback.index("home_stalled_attempt=scan.attempts;") < callback.index("lf_recog_stop();")
 for unsafe in ("home_refresh(", "lv_obj_add_flag(", "lv_obj_delete(", "invalidate_full_screen("):
@@ -35,6 +36,11 @@ assert "invalidate_full_screen();" in tick
 assert "scan.attempts && scan.attempts==home_stalled_attempt" in gesture
 assert "song->attempts!=home_stalled_attempt" in record
 assert "if(home_stalled_attempt==song->attempts)" in record
+assert "if(!ui_pointer_is_down() &&" in record, "Do not hide cancelled overlay before release"
+assert "if(!capturing&&!working&&!opening){" in record
+assert "if(!ui_pointer_is_down())" in record, "Worker completion must not hide pressed overlay"
+assert "current-home_last_refresh_ms >= 750)home_refresh(current);" in tick
+assert "!ui_pointer_is_down() &&\n        current-home_last_refresh_ms" in tick, "Refresh may not change recording touch target mid-press"
 assert "scan.attempts!=home_stalled_attempt" in tick
 assert "latest.attempts!=home_stalled_attempt" in tick
 assert "song.attempts!=home_stalled_attempt" in portion(

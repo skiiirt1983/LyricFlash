@@ -7,7 +7,7 @@ main=(p/"main/main.c").read_text()
 header=(p/"main/ui.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.77-alpha"' in version
+assert 'LF_VERSION "0.8.78-alpha"' in version
 # One spatially linked Home logo + white/blue wordmark, no off-screen label.
 assert "brand_row=lv_obj_create(parent)" in ui
 assert "lv_obj_set_size(brand_row,218,88)" in ui
@@ -39,6 +39,10 @@ for guard in ("ui.ui_tick_age_ms>25000U",
     assert guard in main,guard
 assert "if(uptime_ms>60000 && scan_related && song_page &&" in main
 assert "esp_restart();" in main
+assert "last_record_cancel_age_ms" in header and "last_record_cancel_age_ms" in ui
+assert "ui.last_record_cancel_age_ms<90000U" in main
+assert "song.state==LF_RECOG_MATCH || recent_cancel" in main
+assert "ui.ui_tick_age_ms>25000U" in main
 assert "nvs_flash_erase(" not in main
 assert "lf_ota_guard_start_health_check()" in main
 assert "lf_ota_guard_confirm_startup();" not in main
