@@ -5,7 +5,7 @@ ui=(Path(__file__).resolve().parents[1]/"main/ui.c").read_text()
 wake=ui.split("static void on_wake(lv_event_t *e)\n{",1)[1].split("/* Optional hardware-level",1)[0]
 finish=ui.split("static void wake_finish_async(void *arg)\n{",1)[1].split("static void on_wake",1)[0]
 sleep=ui.split("static void sleep_display(void)\n{",1)[1].split("static void on_tick",1)[0]
-tick=ui.split("static void on_tick(lv_timer_t *timer)\n{",1)[1].split("/* Append title/artist",1)[0]
+tick=ui.split("static void on_tick_body(lv_timer_t *timer)\n{",1)[1].split("/* Append title/artist",1)[0]
 assert "static bool wake_cleanup_queued;" in ui
 assert "if(!asleep)return;" in wake
 assert "activity();" in wake
