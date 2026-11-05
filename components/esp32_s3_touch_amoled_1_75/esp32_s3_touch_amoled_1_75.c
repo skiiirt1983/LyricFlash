@@ -1,3 +1,4 @@
+#include <stdatomic.h>
 #include <stdio.h>
 #include <inttypes.h>
 #include <stdlib.h>
@@ -31,7 +32,8 @@
 
 static const char *TAG = "ESP32-S3-Touch-AMOLED-1.75";
 
-#define BSP_LCD_DMA_STAGING_ROWS (4)
+#define BSP_LCD_DMA_STAGING_ROWS (8)
+#define BSP_LCD_DMA_FALLBACK_ROWS (4)
 static i2c_master_bus_handle_t i2c_handle = NULL; // I2C Handle
 static bool i2c_initialized = false;
 static esp_io_expander_handle_t io_expander = NULL; // IO expander tca9554 handle
@@ -103,6 +105,21 @@ typedef struct {
 } bsp_rotation_panel_t;
 
 static bsp_rotation_panel_t rotation_panel = {0};
+/* Read-only statistics: the Web UI never acquires the LVGL lock. */
+static atomic_uint stage_chunk_rows;
+static atomic_uint stage_chunk_submissions;
+static atomic_uint stage_call_last_us;
+static atomic_uint stage_call_max_us;
+
+void bsp_display_transfer_stats(bsp_display_transfer_stats_t *out)
+{
+    if(!out)return;
+    out->stage_rows=atomic_load(&stage_chunk_rows);
+    out->chunk_submissions=atomic_load(&stage_chunk_submissions);
+    out->stage_call_last_us=atomic_load(&stage_call_last_us);
+    out->stage_call_max_us=atomic_load(&stage_call_max_us);
+}
+
 
 static bsp_rotation_panel_t *bsp_rotation_panel_from_base(esp_lcd_panel_t *panel)
 {
@@ -147,11 +164,15 @@ static bool bsp_rotation_panel_ensure_buffer(bsp_rotation_panel_t *ctx, size_t p
         return true;
     }
 
-    free(ctx->rotation_buffer);
-    ctx->rotation_buffer = heap_caps_malloc(pixels * sizeof(uint16_t),
+    /* Allocate first: if an 8-row staging buffer cannot be reserved, retain
+       the existing 4-row DMA-safe allocation for fallback. */
+    uint16_t *new_buffer = heap_caps_malloc(pixels * sizeof(uint16_t),
                                             MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
-    ctx->rotation_buffer_pixels = ctx->rotation_buffer ? pixels : 0;
-    return ctx->rotation_buffer != NULL;
+    if(!new_buffer)return false;
+    free(ctx->rotation_buffer);
+    ctx->rotation_buffer=new_buffer;
+    ctx->rotation_buffer_pixels=pixels;
+    return true;
 }
 
 // Ensure the large PSRAM scratch used for the rotated frame is sized to fit
@@ -229,14 +250,22 @@ static esp_err_t bsp_rotation_panel_draw_staged(bsp_rotation_panel_t *ctx, int x
         (ctx->te_sync_mode || src_in_psram) && height > BSP_LCD_DMA_STAGING_ROWS;
     if (use_chunked)
     {
-        const int max_rows = BSP_LCD_DMA_STAGING_ROWS;
-        const size_t max_pixels = (size_t)width * max_rows;
+        const int64_t stage_started_us=esp_timer_get_time();
+        int max_rows=BSP_LCD_DMA_STAGING_ROWS;
+        size_t max_pixels=(size_t)width*max_rows;
         if (!bsp_rotation_panel_ensure_buffer(ctx, max_pixels * 2))
         {
-            ESP_LOGE(TAG, "Unable to allocate %" PRIu32 " px DMA staging buffer",
-                     (uint32_t)(max_pixels * 2));
-            return ESP_ERR_NO_MEM;
+            /* Memory-preserving fallback: keep the previously validated
+               chunk size rather than fail the screen or drop a frame. */
+            max_rows=BSP_LCD_DMA_FALLBACK_ROWS;
+            max_pixels=(size_t)width*max_rows;
+            if(!bsp_rotation_panel_ensure_buffer(ctx, max_pixels*2))
+            {
+                ESP_LOGE(TAG,"Unable to allocate DMA staging for %d rows",max_rows);
+                return ESP_ERR_NO_MEM;
+            }
         }
+        atomic_store(&stage_chunk_rows,(unsigned)max_rows);
 
         for (int y = 0; y < height;)
         {
@@ -246,6 +275,7 @@ static esp_err_t bsp_rotation_panel_draw_staged(bsp_rotation_panel_t *ctx, int x
             ctx->staging_slot ^= 1;
             memcpy(staging, src + ((size_t)y * width),
                    chunk_pixels * sizeof(uint16_t));
+            atomic_fetch_add(&stage_chunk_submissions,1);
             esp_err_t err = esp_lcd_panel_draw_bitmap(ctx->target,
                                                       x_start,
                                                       y_start + y,
@@ -258,7 +288,11 @@ static esp_err_t bsp_rotation_panel_draw_staged(bsp_rotation_panel_t *ctx, int x
             }
             y += rows;
         }
-
+        const int64_t elapsed_us=esp_timer_get_time()-stage_started_us;
+        const uint32_t duration=(uint32_t)(elapsed_us>0?elapsed_us:0);
+        atomic_store(&stage_call_last_us,duration);
+        if(duration>atomic_load(&stage_call_max_us))
+            atomic_store(&stage_call_max_us,duration);
         return ESP_OK;
     }
 
@@ -735,7 +769,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // display_manager_pick_render_mode / display_manager_default_buffer_pixels).
 // These heights therefore only size max_transfer_sz and the partial-buffer
 // fallback path when tear mode ends up as NONE.
-#define LVGL_BUFFER_HEIGHT_PSRAM (24)
+#define LVGL_BUFFER_HEIGHT_PSRAM (48)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
 
 esp_err_t bsp_display_brightness_init(void)
