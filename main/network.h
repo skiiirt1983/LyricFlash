@@ -33,3 +33,7 @@ uint32_t lf_network_ota_total(void);
 /* Request Wi-Fi radio state without blocking the LVGL rendering task.
    Sleep suspension is ignored during OTA and setup AP provisioning. */
 void lf_network_set_idle(bool idle);
+
+/* Read-only power state and radio-off count for on-device diagnostics. */
+const char *lf_network_wifi_power_state(void);
+uint32_t lf_network_radio_sleep_cycles(void);
