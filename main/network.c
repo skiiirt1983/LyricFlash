@@ -71,6 +71,8 @@ static void reboot_task(void *arg);
 static atomic_bool wifi_idle_requested = false;
 static atomic_bool wifi_radio_suspended = false;
 static atomic_bool wifi_worker_running = false;
+static atomic_uint wifi_retry_after_ms;
+static atomic_uint wifi_radio_sleep_cycles;
 static void wifi_idle_worker(void *arg)
 {
     (void)arg;
@@ -85,14 +87,17 @@ static void wifi_idle_worker(void *arg)
             esp_err_t err = esp_wifi_stop();
             if (err != ESP_OK) {
                 atomic_store(&wifi_radio_suspended, false);
+                atomic_store(&wifi_retry_after_ms,(uint32_t)(esp_timer_get_time()/1000LL)+1000U);
                 ESP_LOGW(TAG, "Idle Wi-Fi stop failed: %s", esp_err_to_name(err));
                 break;
             }
             if (connected_event) xEventGroupClearBits(connected_event, LF_CONNECTED);
+            atomic_fetch_add(&wifi_radio_sleep_cycles,1);
             ESP_LOGI(TAG, "Idle Wi-Fi radio suspended");
         } else {
             esp_err_t err = esp_wifi_start();
             if (err != ESP_OK) {
+                atomic_store(&wifi_retry_after_ms,(uint32_t)(esp_timer_get_time()/1000LL)+1000U);
                 ESP_LOGW(TAG, "Wake Wi-Fi start failed: %s", esp_err_to_name(err));
                 break;
             }
@@ -108,14 +113,28 @@ static void wifi_idle_worker(void *arg)
 void lf_network_set_idle(bool idle)
 {
     if (idle && (in_ap || atomic_load(&ota_busy))) return;
-    atomic_store(&wifi_idle_requested, idle);
+    const bool previous=atomic_exchange(&wifi_idle_requested,idle);
+    if(previous!=idle)atomic_store(&wifi_retry_after_ms,0);
     if (idle == atomic_load(&wifi_radio_suspended)) return;
+    const uint32_t now=(uint32_t)(esp_timer_get_time()/1000LL);
+    if((int32_t)(now-atomic_load(&wifi_retry_after_ms))<0)return;
     if (!atomic_exchange(&wifi_worker_running, true)) {
         if (xTaskCreate(wifi_idle_worker, "lf_wifi_idle", 3072, NULL, 4, NULL) != pdPASS)
             atomic_store(&wifi_worker_running, false);
     }
 }
 
+
+const char *lf_network_wifi_power_state(void)
+{
+    if(in_ap)return "setup_ap";
+    if(atomic_load(&wifi_radio_suspended))return "screen_off_radio_off";
+    return atomic_load(&wifi_worker_running)?"radio_transition":"radio_on";
+}
+uint32_t lf_network_radio_sleep_cycles(void)
+{
+    return atomic_load(&wifi_radio_sleep_cycles);
+}
 
 /* Scan completion runs on the ESP event task, UI reads on the LVGL task. */
 static portMUX_TYPE wifi_scan_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -1110,6 +1129,8 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "free_psram_bytes", d.psram_free_bytes);
     cJSON_AddBoolToObject(root, "battery_valid", d.battery_valid);
     cJSON_AddStringToObject(root, "cpu_power_profile", lf_power_cpu_profile_state());
+    cJSON_AddStringToObject(root, "wifi_radio_state", lf_network_wifi_power_state());
+    cJSON_AddNumberToObject(root, "wifi_radio_sleep_cycles", lf_network_radio_sleep_cycles());
     if (d.battery_valid) {
         cJSON_AddNumberToObject(root, "battery_percent", d.battery.percentage);
         cJSON_AddBoolToObject(root, "usb_connected", d.battery.usb_connected);
@@ -1155,6 +1176,10 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "ui_wake_count", display_stats.wake_count);
     cJSON_AddNumberToObject(root, "ui_last_wake_frame_ready_ms", display_stats.last_wake_frame_ready_ms);
     cJSON_AddNumberToObject(root, "ui_last_wake_overlay_clear_ms", display_stats.last_wake_overlay_clear_ms);
+    cJSON_AddNumberToObject(root, "ui_tick_work_last_us", display_stats.ui_tick_work_last_us);
+    cJSON_AddNumberToObject(root, "ui_tick_work_max_us", display_stats.ui_tick_work_max_us);
+    cJSON_AddNumberToObject(root, "pager_frame_gap_last_ms", display_stats.pager_frame_gap_last_ms);
+    cJSON_AddNumberToObject(root, "pager_frame_gap_max_ms", display_stats.pager_frame_gap_max_ms);
     cJSON_AddNumberToObject(root, "ui_navigation_commits", display_stats.navigation_commits);
     cJSON_AddNumberToObject(root, "ui_full_redraws", display_stats.full_redraws);
     cJSON_AddNumberToObject(root, "record_cancel_phase", display_stats.record_cancel_phase);
