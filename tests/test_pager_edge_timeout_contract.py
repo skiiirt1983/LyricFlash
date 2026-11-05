@@ -6,7 +6,7 @@ commit=ui.split("static void primary_pager_commit(int index)\n{",1)[1].split("/*
 create=ui.split("static void primary_pager_create(int target_index)\n{",1)[1].split("static void primary_pager_enter",1)[0]
 scroll=ui.split("static void primary_pager_scroll_event(lv_event_t *e)\n{",1)[1].split("static lv_obj_t *primary_page_create",1)[0]
 sleep=ui.split("static void sleep_display(void)\n{",1)[1].split("static void on_tick",1)[0]
-tick=ui.split("static void on_tick(lv_timer_t *timer)\n{",1)[1].split("/* Only the active Rolex-style",1)[0]
+tick=ui.split("static void on_tick_body(lv_timer_t *timer)\n{",1)[1].split("/* Only the active Rolex-style",1)[0]
 assert "lv_obj_set_scroll_dir(primary_pager," not in commit, "Committing a page must not restrict return swipes"
 assert "LV_DIR_HOR" not in commit, "No per-page direction change allowed"
 assert "static void primary_pager_start_snap(int target)" in ui
