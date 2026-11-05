@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/private-0.8.83-screen-off-cpu-power
+      - feature/private-0.8.83-webui-project-identity
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
