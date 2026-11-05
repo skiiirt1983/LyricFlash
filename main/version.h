@@ -1,12 +1,12 @@
 #pragma once
-/* LyricFlash 0.8.78 private alpha: guard recording overlay until finger-up, track cancelled heartbeat.
+/* LyricFlash 0.8.79 private alpha: isolate overlay cancellation redraw and add phase diagnostics.
  * retaining colour swatches, one Clock reset and separate
  * Time/AMPM, Battery, Weather and Date colours on six faces.
  * Additive schema 16 preserves NVS and prior users' clock customizations.
  * New open-licensed clock fonts remain monochrome on embedded LVGL.
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
-#define LF_VERSION "0.8.78-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.78"
+#define LF_VERSION "0.8.79-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.79"
 /* Release gate: host source checks passed; touch-cancel hardware validation pending. */
 /* Host source contracts passed; physical double-tap cancellation and pager-edge QA pending. */
 /* 0.8.75 blocked return swipe on-device despite passing source tests.
