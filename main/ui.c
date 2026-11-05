@@ -2821,11 +2821,9 @@ static void primary_pager_watchdog(uint64_t current)
     }
     int32_t x=abs(lv_obj_get_scroll_x(primary_pager));
     if(primary_pager_snapping){
-        if(abs(x-primary_pager_snap_to*466)<=2){
-            if(!primary_pager_frame_pending)
-                primary_pager_commit(primary_pager_snap_to);
-            return;
-        }
+        /* The final scroll coordinate can be reached before the pixel
+           transfer finishes. Check the hard deadline FIRST, otherwise
+           a missed REFR_READY leaves the pager stuck forever at target. */
         if(current-primary_pager_snap_started_ms>LF_PAGER_STALL_GUARD_MS){
             /* Force a complete, aligned page if panel transfers outrun the
                LVGL animation. This is preferable to getting stranded midpage. */
@@ -2833,6 +2831,12 @@ static void primary_pager_watchdog(uint64_t current)
             lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_OFF);
             primary_pager_commit(target);
             atomic_fetch_add(&pager_forced_snap_count,1);
+            return;
+        }
+        if(abs(x-primary_pager_snap_to*466)<=2){
+            if(!primary_pager_frame_pending)
+                primary_pager_commit(primary_pager_snap_to);
+            return;
         }
     }else if((pager_scrolling || abs(x-primary_pager_current*466)>4) &&
              current-primary_pager_last_move_ms>75){
