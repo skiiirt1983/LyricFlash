@@ -24,6 +24,7 @@ notices=(root/"THIRD_PARTY_NOTICES.md").read_text()
 assert "**Creator and maintainer:** [skiiirt1983]" in readme
 assert "**LyricFlash application creator and maintainer: skiiirt1983.**" in notices
 assert "original creators, copyright notices, and licenses" in notices
+assert 'LyricFlash creator and maintainer: skiiirt1983.' in (root/".github/workflows/firmware.yml").read_text()
 assert "PrintSphere" in notices and "google/fonts" in notices
 # Account/project ownership must never be expressed as ownership of upstream
 # Waveshare board support code or the licensed open-source typeface assets.

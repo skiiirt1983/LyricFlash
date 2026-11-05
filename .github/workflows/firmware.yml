@@ -116,6 +116,7 @@ jobs:
           {
             echo "LyricFlash-OTA-Version: $VERSION"
             echo "LyricFlash-OTA-Direct: https://raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/$TAG/lyricflash-ota.bin"
+            echo "LyricFlash creator and maintainer: skiiirt1983."
             echo "Private-channel experimental alpha for the original Waveshare ESP32-S3 1.75-inch device; hardware verification pending."
             echo "Full USB recovery and settings-preserving USB installation ZIP validated; use the on-device OTA for an existing LyricFlash installation."
             echo "This is not the public stable v1.0 release."
