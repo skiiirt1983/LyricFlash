@@ -2,7 +2,7 @@
 """0.8.76: never restrict physical return swipe; preserve timeout guards."""
 from pathlib import Path
 ui=(Path(__file__).resolve().parents[1]/"main/ui.c").read_text()
-commit=ui.split("static void primary_pager_commit(int index)\n{",1)[1].split("/* Present one actual position per completed QSPI refresh",1)[0]
+commit=ui.split("static void primary_pager_commit(int index)\n{",1)[1].split("/* PrintSphere-like LVGL native elapsed-time easing",1)[0]
 create=ui.split("static void primary_pager_create(int target_index)\n{",1)[1].split("static void primary_pager_enter",1)[0]
 scroll=ui.split("static void primary_pager_scroll_event(lv_event_t *e)\n{",1)[1].split("static lv_obj_t *primary_page_create",1)[0]
 sleep=ui.split("static void sleep_display(void)\n{",1)[1].split("static void on_tick",1)[0]
