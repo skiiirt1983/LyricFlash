@@ -67,6 +67,57 @@ typedef struct {
 } lf_github_request_t;
 static bool time_sync_started;
 static void reboot_task(void *arg);
+/* Requests originate from LVGL; only this worker calls the Wi-Fi driver. */
+static atomic_bool wifi_idle_requested = false;
+static atomic_bool wifi_radio_suspended = false;
+static atomic_bool wifi_worker_running = false;
+static void wifi_idle_worker(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        const bool requested = atomic_load(&wifi_idle_requested);
+        const bool suspended = atomic_load(&wifi_radio_suspended);
+        if (requested == suspended) break;
+        if (requested) {
+            if (in_ap || atomic_load(&ota_busy)) break;
+            /* Mark intentional shutdown before stop triggers DISCONNECTED. */
+            atomic_store(&wifi_radio_suspended, true);
+            esp_err_t err = esp_wifi_stop();
+            if (err != ESP_OK) {
+                atomic_store(&wifi_radio_suspended, false);
+                ESP_LOGW(TAG, "Idle Wi-Fi stop failed: %s", esp_err_to_name(err));
+                break;
+            }
+            if (connected_event) xEventGroupClearBits(connected_event, LF_CONNECTED);
+            ESP_LOGI(TAG, "Idle Wi-Fi radio suspended");
+        } else {
+            esp_err_t err = esp_wifi_start();
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "Wake Wi-Fi start failed: %s", esp_err_to_name(err));
+                break;
+            }
+            atomic_store(&wifi_radio_suspended, false);
+            esp_wifi_connect();
+            ESP_LOGI(TAG, "Wake Wi-Fi reconnect requested");
+        }
+    }
+    atomic_store(&wifi_worker_running, false);
+    /* If wake arrived while the worker was exiting, service it now. */
+    if (atomic_load(&wifi_idle_requested) != atomic_load(&wifi_radio_suspended)) {
+        lf_network_set_idle(atomic_load(&wifi_idle_requested));
+    }
+    vTaskDelete(NULL);
+}
+void lf_network_set_idle(bool idle)
+{
+    if (idle && (in_ap || atomic_load(&ota_busy))) return;
+    atomic_store(&wifi_idle_requested, idle);
+    if (!atomic_exchange(&wifi_worker_running, true)) {
+        if (xTaskCreate(wifi_idle_worker, "lf_wifi_idle", 3072, NULL, 4, NULL) != pdPASS)
+            atomic_store(&wifi_worker_running, false);
+    }
+}
+
 
 /* Scan completion runs on the ESP event task, UI reads on the LVGL task. */
 static portMUX_TYPE wifi_scan_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -210,7 +261,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     if(base==WIFI_EVENT && id==WIFI_EVENT_STA_DISCONNECTED && !in_ap) {
         xEventGroupClearBits(connected_event, LF_CONNECTED);
         strlcpy(address, "Offline", sizeof(address));
-        esp_wifi_connect();
+        if (!atomic_load(&wifi_radio_suspended) && !atomic_load(&wifi_idle_requested)) esp_wifi_connect();
     }
     if(base==IP_EVENT && id==IP_EVENT_STA_GOT_IP) {
         const ip_event_got_ip_t *got=(const ip_event_got_ip_t *)data;
