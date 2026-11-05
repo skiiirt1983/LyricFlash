@@ -228,6 +228,12 @@ static atomic_uint wake_started_ms;
 static atomic_uint wake_frame_pending_ms;
 static atomic_uint wake_frame_ready_ms;
 static atomic_uint wake_overlay_clear_ms;
+/* Allocation-free UI timing snapshots, readable without the LVGL lock. */
+static atomic_uint ui_tick_work_last_us;
+static atomic_uint ui_tick_work_max_us;
+static atomic_uint pager_frame_gap_last_ms;
+static atomic_uint pager_frame_gap_max_ms;
+static atomic_uint pager_refresh_prev_ms;
 
 void lf_ui_display_stats(lf_ui_display_stats_t *out)
 {
@@ -264,6 +270,10 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->wake_count=atomic_load(&wake_count);
     out->last_wake_frame_ready_ms=atomic_load(&wake_frame_ready_ms);
     out->last_wake_overlay_clear_ms=atomic_load(&wake_overlay_clear_ms);
+    out->ui_tick_work_last_us=atomic_load(&ui_tick_work_last_us);
+    out->ui_tick_work_max_us=atomic_load(&ui_tick_work_max_us);
+    out->pager_frame_gap_last_ms=atomic_load(&pager_frame_gap_last_ms);
+    out->pager_frame_gap_max_ms=atomic_load(&pager_frame_gap_max_ms);
     out->ui_navigation_phase=atomic_load(&ui_nav_phase);
     out->lyrics_auto_open_queued=atomic_load(&auto_open_queued_count);
     out->lyrics_auto_open_completed=atomic_load(&auto_open_completed_count);
@@ -290,6 +300,17 @@ static void display_refresh_ready_event(lv_event_t *e)
 {
     (void)e;
     atomic_fetch_add(&ui_refresh_ready_count,1);
+    /* Measured completed-refresh cadence while the pager is snapping. */
+    const uint32_t ready_now=(uint32_t)(esp_timer_get_time()/1000LL);
+    if(primary_pager_snapping){
+        const uint32_t prev=atomic_exchange(&pager_refresh_prev_ms,ready_now);
+        if(prev){
+            const uint32_t gap=ready_now-prev;
+            atomic_store(&pager_frame_gap_last_ms,gap);
+            if(gap>atomic_load(&pager_frame_gap_max_ms))
+                atomic_store(&pager_frame_gap_max_ms,gap);
+        }
+    }else atomic_store(&pager_refresh_prev_ms,0);
     const uint32_t started=atomic_exchange(&wake_frame_pending_ms,0);
     if(started)atomic_store(&wake_frame_ready_ms,
                               (uint32_t)(esp_timer_get_time()/1000LL)-started);
@@ -3439,7 +3460,13 @@ static void sleep_display(void)
        frequency but retain Wi-Fi, OTA and all wake processing. */
     lf_power_set_screen_awake(false);
 }
-static void on_tick(lv_timer_t *timer)
+/* Avoid repeated LVGL label allocation and invalidation for unchanged text. */
+static void ui_label_set_text_if_changed(lv_obj_t *obj,const char *text)
+{
+    if(obj && strcmp(lv_label_get_text(obj),text)!=0)
+        lv_label_set_text(obj,text);
+}
+static void on_tick_body(lv_timer_t *timer)
 {
     (void)timer;
     uint64_t current = now_ms();
@@ -3455,6 +3482,13 @@ static void on_tick(lv_timer_t *timer)
        keeps activity fresh on every page, including the device scroller,
        before nav-transition / overlay early-returns. */
     if(!asleep && ui_pointer_is_down())last_activity_ms=current;
+    /* Recover transient radio restart failures without creating workers on
+       every 50ms screen tick. No driver calls execute on the LVGL task. */
+    static uint64_t last_wifi_resume_retry_ms;
+    if(!asleep && current-last_wifi_resume_retry_ms>=1000U){
+        last_wifi_resume_retry_ms=current;
+        lf_network_set_idle(false);
+    }
     if(primary_pager && !timed_overlay)primary_pager_watchdog(current);
     /* Process a confirmed double-tap only after input dispatch and the
        physical release. No overlay mutation or networking in the touch
@@ -3528,6 +3562,11 @@ static void on_tick(lv_timer_t *timer)
     /* Polling fallback for wake when the cover misses a press. A wake touch
        must never trigger navigation or click the previously shown buttons. */
     if(asleep) {
+        /* The earlier late grace-period check was unreachable: this first
+           asleep branch returned before reaching it. */
+        const uint32_t off_at=atomic_load(&screen_off_started_ms);
+        if(off_at && (uint32_t)current-off_at>=120000U)
+            lf_network_set_idle(true);
         lv_indev_t *wake=lv_indev_get_next(NULL);
         while(wake) {
             if(lv_indev_get_type(wake)==LV_INDEV_TYPE_POINTER &&
@@ -3700,7 +3739,7 @@ static void on_tick(lv_timer_t *timer)
             else if (success) snprintf(value,sizeof value,"%s  %s",icon,lf_power_symbol(&st));
             else snprintf(value,sizeof value,"%s  BATTERY",LV_SYMBOL_BATTERY_FULL);
             if (success) {
-                lv_label_set_text(battery_status,value);
+                ui_label_set_text_if_changed(battery_status,value);
                 lv_obj_set_style_text_color(battery_status,lv_color_hex(st.usb_connected ? prefs->charging_color : lf_power_color(&st)),0);
             }
         }
@@ -3715,19 +3754,19 @@ static void on_tick(lv_timer_t *timer)
                 snprintf(text, sizeof text, "Setup: %.32s", lf_network_ap_ssid());
             else snprintf(text, sizeof text, "Wi-Fi connecting...");
             if(page==0)home_set_text(network_status,text);
-            else lv_label_set_text(network_status,text);
+            else ui_label_set_text_if_changed(network_status,text);
         }
         if (network_password) {
             char text[72];
             if (*lf_network_ap_ssid())
                 snprintf(text, sizeof text, "Password: %s", lf_network_ap_password());
             else snprintf(text, sizeof text, "Connected to home Wi-Fi");
-            lv_label_set_text(network_password, text);
+            ui_label_set_text_if_changed(network_password, text);
         }
         if (network_url) {
             char url_text[85];
             snprintf(url_text, sizeof url_text, "Open browser to http://%s/", lf_network_address());
-            lv_label_set_text(network_url, url_text);
+            ui_label_set_text_if_changed(network_url, url_text);
         }
     }
     /* Check deep-sleep deadline even after the screen has already turned off.
@@ -3741,14 +3780,6 @@ static void on_tick(lv_timer_t *timer)
            screen-off mode and retry once per minute, not every 50 ms. */
         deep_sleep_retry_after_ms=current+60000ULL;
         sleep_deep();
-    }
-    if (asleep) {
-        /* 120 seconds after screen-off: stop Wi-Fi unless OTA or setup AP
-           is active. The network worker handles driver calls asynchronously. */
-        const uint32_t off_at = atomic_load(&screen_off_started_ms);
-        if (off_at && (uint32_t)current - off_at >= 120000U)
-            lf_network_set_idle(true);
-        return;
     }
     if (page == 11 && !touch_held && current >= screen_animation_until_ms && current - weather_detail_refresh >= 4000) {
         weather_detail_refresh = current;
@@ -3803,6 +3834,18 @@ static void on_tick(lv_timer_t *timer)
         0.5f+(20.65f/900.0f)*(float)prefs->scroll_speed*(float)prefs->scroll_speed;
     scroll_y += (float)dt * (px_sec/1000.0f);
     lv_obj_scroll_to_y(scroll_panel, (int32_t)scroll_y, LV_ANIM_OFF);
+}
+
+/* Measures the entire 50ms UI callback, including all early returns. */
+static void on_tick(lv_timer_t *timer)
+{
+    const int64_t start=esp_timer_get_time();
+    on_tick_body(timer);
+    const int64_t elapsed=esp_timer_get_time()-start;
+    const uint32_t us=(uint32_t)(elapsed>0?elapsed:0);
+    atomic_store(&ui_tick_work_last_us,us);
+    if(us>atomic_load(&ui_tick_work_max_us))
+        atomic_store(&ui_tick_work_max_us,us);
 }
 
 /* Only the active Rolex-style clock needs a high-rate redraw.
