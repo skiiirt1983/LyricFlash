@@ -1,5 +1,6 @@
 #include "network.h"
 #include "ui.h"
+#include "bsp/display.h"
 #include "settings.h"
 #include "power.h"
 #include "weather.h"
@@ -1186,6 +1187,16 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "flush_wait_refresh_max_us", display_stats.flush_wait_refresh_max_us);
     cJSON_AddNumberToObject(root, "flush_calls_refresh_last", display_stats.flush_calls_refresh_last);
     cJSON_AddNumberToObject(root, "flush_calls_refresh_max", display_stats.flush_calls_refresh_max);
+    bsp_display_transfer_stats_t transfer_stats={0};
+    bsp_display_transfer_stats(&transfer_stats);
+    cJSON_AddNumberToObject(root,"display_dma_stage_rows",transfer_stats.stage_rows);
+    cJSON_AddNumberToObject(root,"display_dma_chunk_submissions",transfer_stats.chunk_submissions);
+    cJSON_AddNumberToObject(root,"display_dma_stage_last_us",transfer_stats.stage_call_last_us);
+    cJSON_AddNumberToObject(root,"display_dma_stage_max_us",transfer_stats.stage_call_max_us);
+    cJSON_AddNumberToObject(root,"free_internal_dma_bytes",
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT));
+    cJSON_AddNumberToObject(root,"largest_internal_dma_block_bytes",
+        heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT));
     cJSON_AddNumberToObject(root, "ui_navigation_commits", display_stats.navigation_commits);
     cJSON_AddNumberToObject(root, "ui_full_redraws", display_stats.full_redraws);
     cJSON_AddNumberToObject(root, "record_cancel_phase", display_stats.record_cancel_phase);
