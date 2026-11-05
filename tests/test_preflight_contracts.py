@@ -461,7 +461,7 @@ require('lv_event_get_scroll_anim(e)' in ui and
         '"render_cycle_last_ms"' in network and
         'lv_obj_invalidate(clock_scene);' in ui and
         'current-primary_pager_snap_started_ms>LF_PAGER_STALL_GUARD_MS' in watchdog,
-        "Paced pager snap and retained Clock recovery contract")
+        "Native LVGL pager snap and retained Clock recovery contract")
 
 # 0.8.30: physical-device regression with a 96-row rendering buffer.
 # Preserve the proven 24-row LVGL buffer and 1-slot queue; 0.8.88 restores

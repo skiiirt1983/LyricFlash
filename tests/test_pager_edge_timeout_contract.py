@@ -10,8 +10,8 @@ tick=ui.split("static void on_tick_body(lv_timer_t *timer)\n{",1)[1].split("/* O
 assert "lv_obj_set_scroll_dir(primary_pager," not in commit, "Committing a page must not restrict return swipes"
 assert "LV_DIR_HOR" not in commit, "No per-page direction change allowed"
 assert "static void primary_pager_start_snap(int target)" in ui
-assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in ui  # only allocation-failure fallback
-assert "lv_obj_scroll_to_x(primary_pager,next,LV_ANIM_OFF);" in ui
+assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in ui  # native snap
+assert "lv_obj_scroll_to_x(primary_pager,next,LV_ANIM_OFF);" not in ui
 assert "primary_pager_frame_timer" in ui
 assert "primary_pager_frame_pending" in ui
 assert "primary_pager_snap_frame" in ui

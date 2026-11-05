@@ -27,5 +27,5 @@ assert "CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1" in cfg
 assert "stage_cumulative_us" in bsp
 assert "render_dma_stage_last_us" in ui and chr(34)+"render_dma_stage_last_us"+chr(34) in net
 assert "lf_network_set_idle(true);" in ui and "lf_network_set_idle(false);" in ui
-assert "LF_PAGER_MAX_FRAME_STEP_PX 58" in ui
+assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in ui
 print("PASS: clock tick trig memoized, hand pixel-change gating, style cache off, baseline DMA/power preserved")
