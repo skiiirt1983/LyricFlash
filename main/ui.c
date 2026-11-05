@@ -122,7 +122,12 @@ static lv_obj_t *home_play_symbol;
 static lv_obj_t *home_play_hint;
 /* Overlay is owned by the existing Home pager, not a second LVGL root. */
 static lv_obj_t *home_record_layer;
-static lv_obj_t *home_record_wave;
+static lv_obj_t *home_record_wave; /* first of four inexpensive drawing strips */
+#define LF_RECORD_WAVE_SEGMENTS 4U
+#define LF_RECORD_WAVE_STRIP_WIDTH 90U
+#define LF_RECORD_WAVE_STRIP_POINTS 26U
+#define LF_RECORD_WAVE_REFRESH_MS 140U
+static lv_obj_t *home_record_wave_segments[LF_RECORD_WAVE_SEGMENTS];
 static lv_obj_t *home_record_centerline;
 static lv_obj_t *home_record_loading;
 static lv_obj_t *home_record_caption;
@@ -134,9 +139,10 @@ static atomic_uint ui_record_cancel_phase; /* 0 idle, 1 requested, 2 retire, 3 h
 static int32_t home_record_wave_bias_q8; /* UI-only DC center, 8-bit fixed point */
 static uint32_t home_record_last_frames;
 static uint64_t home_record_last_tick;
-#define LF_RECORD_WAVE_MAX_POINTS 170U
-static lv_point_precise_t home_record_wave_points[LF_RECORD_WAVE_MAX_POINTS];
-static uint32_t home_record_wave_count;
+#define LF_RECORD_WAVE_MAX_POINTS (LF_RECORD_WAVE_SEGMENTS*LF_RECORD_WAVE_STRIP_POINTS)
+static lv_point_precise_t home_record_wave_points[LF_RECORD_WAVE_SEGMENTS][LF_RECORD_WAVE_STRIP_POINTS];
+static uint8_t home_record_wave_counts[LF_RECORD_WAVE_SEGMENTS];
+static uint8_t home_record_wave_last_y;
 static uint64_t home_warning_until_ms;
 static const char *home_warning;
 static int home_visual_busy=-1;
@@ -512,8 +518,10 @@ static uint8_t nav_transition_step;
 static int32_t nav_transition_cursor;
 static lv_screen_load_anim_t nav_transition_dir;
 static uint64_t nav_transition_started_ms;
-#define LF_NAV_REVEAL_STEPS 16
-#define LF_NAV_REVEAL_PERIOD_MS 22
+/* Fewer reveal passes avoid flooding QSPI with redundant pending updates.
+   The same complete page is transferred in twelve larger strips. */
+#define LF_NAV_REVEAL_STEPS 12
+#define LF_NAV_REVEAL_PERIOD_MS 28
 #define LF_NAV_PANEL_SIZE 466
 
 /* No dual-screen animation: 0.8.3 left old/new UI trees overlapping
@@ -959,13 +967,14 @@ static void make_base(void)
     home_play_hint=NULL;
     home_record_layer=NULL;
     home_record_wave=NULL;
+    for(unsigned i=0;i<LF_RECORD_WAVE_SEGMENTS;i++)home_record_wave_segments[i]=NULL;
     home_record_centerline=NULL;
     home_record_loading=NULL;
     home_record_caption=NULL;
     home_record_attempt=0;
     home_record_last_frames=0;
     home_record_last_tick=0;
-    home_record_wave_count=0;
+    memset(home_record_wave_counts,0,sizeof(home_record_wave_counts));
     home_last_refresh_ms=0;
     home_visual_busy=-1;
     /* home_stalled_attempt is scan-id scoped and survives ordinary Home
@@ -1149,9 +1158,14 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
         lv_obj_remove_flag(home_record_layer,LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(home_record_layer);
     }
-    if(home_record_wave){
-        if(capturing)lv_obj_remove_flag(home_record_wave,LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_add_flag(home_record_wave,LV_OBJ_FLAG_HIDDEN);
+    /* Only expose strips containing captured audio. A static waveform does
+       not keep invalidating the full display while identifying. */
+    for(unsigned i=0;i<LF_RECORD_WAVE_SEGMENTS;i++){
+        lv_obj_t *strip=home_record_wave_segments[i];
+        if(!strip)continue;
+        if(capturing && (i==0 || home_record_wave_counts[i]>1))
+            lv_obj_remove_flag(strip,LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(strip,LV_OBJ_FLAG_HIDDEN);
     }
     if(home_record_centerline){
         if(capturing)lv_obj_remove_flag(home_record_centerline,LV_OBJ_FLAG_HIDDEN);
@@ -1184,47 +1198,67 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
         if(strcmp(lv_label_get_text(home_record_caption),word)!=0)
             lv_label_set_text(home_record_caption,word);
     }
-    if(!capturing||!home_record_wave)return; /* Finished waveform stays visible. */
+    if(!capturing||!home_record_wave)return;
     if(song->attempts!=home_record_attempt){
         home_record_attempt=song->attempts;
         home_record_cancel_tap_ms=0;
         home_record_wave_bias_q8=0;
         home_record_last_frames=UINT32_MAX;
-        home_record_wave_count=1;
-        home_record_wave_points[0]=(lv_point_precise_t){0,130};
-        lv_line_set_points(home_record_wave,home_record_wave_points,1);
+        home_record_wave_last_y=130;
+        memset(home_record_wave_counts,0,sizeof(home_record_wave_counts));
+        for(unsigned i=0;i<LF_RECORD_WAVE_SEGMENTS;i++){
+            home_record_wave_counts[i]=1;
+            home_record_wave_points[i][0]=(lv_point_precise_t){0,130};
+            lv_line_set_points(home_record_wave_segments[i],
+                               home_record_wave_points[i],1);
+            if(i)lv_obj_add_flag(home_record_wave_segments[i],LV_OBJ_FLAG_HIDDEN);
+        }
         home_record_last_tick=0;
     }
-    if(current-home_record_last_tick<75 ||
+    /* This visual is deliberately sampled at ~7 Hz, rather than redrawing
+       a growing 360x260 line 13 times/second. Stereo PCM, AudD uploads
+       and the 10-second capture are completely untouched. */
+    if(current-home_record_last_tick<LF_RECORD_WAVE_REFRESH_MS ||
        song->captured_frames==home_record_last_frames)return;
     home_record_last_tick=current;
     home_record_last_frames=song->captured_frames;
-    if(home_record_wave_count>=LF_RECORD_WAVE_MAX_POINTS)return;
-    /* X is based on recorded frames, so the line reaches the right edge at
-       10 seconds even if rendering frames are missed. Quiet music stays
-       near the baseline; real sound moves the trace above and below it. */
+    /* X follows the real 10-second capture; fewer visual samples do not
+       change its timing or the recording used for recognition. */
     const uint32_t x=(uint32_t)(((uint64_t)song->captured_frames*360U)/
                                 LF_SCAN_MAX_FRAMES);
-    /* Show real MIC1/MIC2 signed peak excursions, not an endlessly repeated
-       eight-point sinusoid. No raw PCM leaves the recognition worker. */
+    /* Real microphone envelope, never an invented waveform or raw PCM. */
     const int signed_peak=(int)song->capture_visual_signed;
-    /* The worker publishes which peak polarity dominates each PCM block.
-       That sign can lean one way on this microphone. Remove its slow-moving
-       visual bias (one-pole high-pass) before mapping to the screen center.
-       This never changes capture gain, samples, WAV or recognition. */
+    /* UI-only DC correction and the established, larger amplitude. */
     home_record_wave_bias_q8+=((signed_peak*256)-home_record_wave_bias_q8)/8;
     const int centered=signed_peak-home_record_wave_bias_q8/256;
     const int magnitude=centered<0?-centered:centered;
-    /* UI-only visual gain: real MIC peak samples and timing are unchanged. */
     int swing=magnitude*8;
     if(swing>108)swing=108;
     int y=130+(centered<0?swing:-swing);
     if(y<12)y=12;
     if(y>248)y=248;
-    home_record_wave_points[home_record_wave_count++]=(lv_point_precise_t){
-        (int32_t)(x>360U?360U:x),(int32_t)y};
-    lv_line_set_points(home_record_wave,home_record_wave_points,
-                       home_record_wave_count);
+    const unsigned strip=x>=360U?LF_RECORD_WAVE_SEGMENTS-1U:
+                                      x/LF_RECORD_WAVE_STRIP_WIDTH;
+    const int32_t local_x=(int32_t)x-(int32_t)(strip*LF_RECORD_WAVE_STRIP_WIDTH);
+    uint8_t count=home_record_wave_counts[strip];
+    if(count==1 && strip>0){
+        /* Continue the previous strip's last envelope at the seam. */
+        home_record_wave_points[strip][0].y=home_record_wave_last_y;
+    }
+    if(count<LF_RECORD_WAVE_STRIP_POINTS){
+        home_record_wave_points[strip][count++]=(lv_point_precise_t){local_x,y};
+    }else{
+        /* Preserve the latest position if an exceptionally long capture
+           delivers more screen samples than the bounded strip can hold. */
+        home_record_wave_points[strip][count-1]=(lv_point_precise_t){local_x,y};
+    }
+    home_record_wave_counts[strip]=count;
+    home_record_wave_last_y=(uint8_t)y;
+    lv_obj_remove_flag(home_record_wave_segments[strip],LV_OBJ_FLAG_HIDDEN);
+    /* Only this 90x260 strip becomes dirty, not the completed graph.
+       The active draw cost stays bounded even near ten seconds. */
+    lv_line_set_points(home_record_wave_segments[strip],
+                       home_record_wave_points[strip],count);
 }
 
 /* The Home screen is intentionally sparse. The Play symbol conveys idle,
@@ -1491,17 +1525,26 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_set_style_line_color(home_record_centerline,lv_color_hex(0x258854),0);
     lv_obj_set_style_line_width(home_record_centerline,2,0);
     lv_obj_remove_flag(home_record_centerline,LV_OBJ_FLAG_CLICKABLE);
-    home_record_wave=lv_line_create(home_record_layer);
-    lv_obj_set_size(home_record_wave,360,260);
-    lv_obj_align(home_record_wave,LV_ALIGN_CENTER,0,-4);
-    lv_obj_set_style_bg_opa(home_record_wave,LV_OPA_TRANSP,0);
-    lv_obj_set_style_line_color(home_record_wave,lv_color_hex(0xFFD02C),0);
-    lv_obj_set_style_line_width(home_record_wave,3,0);
-    lv_obj_set_style_line_rounded(home_record_wave,true,0);
-    lv_obj_remove_flag(home_record_wave,LV_OBJ_FLAG_CLICKABLE);
-    home_record_wave_points[0]=(lv_point_precise_t){0,130};
-    lv_line_set_points(home_record_wave,home_record_wave_points,1);
-    home_record_wave_count=1;
+    /* Four native LVGL line children tile the same 360x260 waveform.
+       Previously each new point invalidated the entire 360px graph, even
+       though only its leading edge changed. No offscreen framebuffer. */
+    for(unsigned i=0;i<LF_RECORD_WAVE_SEGMENTS;i++){
+        lv_obj_t *strip=lv_line_create(home_record_layer);
+        home_record_wave_segments[i]=strip;
+        if(i==0)home_record_wave=strip;
+        lv_obj_set_size(strip,LF_RECORD_WAVE_STRIP_WIDTH,260);
+        lv_obj_align(strip,LV_ALIGN_CENTER,-135+(int32_t)i*90,-4);
+        lv_obj_set_style_bg_opa(strip,LV_OPA_TRANSP,0);
+        lv_obj_set_style_line_color(strip,lv_color_hex(0xFFD02C),0);
+        lv_obj_set_style_line_width(strip,3,0);
+        lv_obj_set_style_line_rounded(strip,true,0);
+        lv_obj_remove_flag(strip,LV_OBJ_FLAG_CLICKABLE);
+        home_record_wave_points[i][0]=(lv_point_precise_t){0,130};
+        lv_line_set_points(strip,home_record_wave_points[i],1);
+        home_record_wave_counts[i]=1;
+        if(i)lv_obj_add_flag(strip,LV_OBJ_FLAG_HIDDEN);
+    }
+    home_record_wave_last_y=130;
     home_record_attempt=0;
     home_record_last_frames=UINT32_MAX;
     home_record_last_tick=0;
@@ -2641,7 +2684,9 @@ static void primary_pager_commit(int index)
            Only one full Clock refresh, not repeated full-frame animation. */
         if(clock_scene) {
             lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
-            lv_obj_invalidate(clock_scene);
+            /* primary_pager_pages[0] was already invalidated when the
+               swipe settled; do not enqueue the entire clock twice. */
+            if(!settled_move)lv_obj_invalidate(clock_scene);
             atomic_fetch_add(&clock_repaint_recoveries,1);
         }
         lf_clock_update();
@@ -2717,7 +2762,9 @@ static void primary_pager_scroll_event(lv_event_t *e)
         if(primary_pager_snapping && anim) {
             int32_t remaining=abs(primary_pager_snap_to*466-abs(lv_obj_get_scroll_x(primary_pager)));
             if(remaining>466)remaining=466;
-            lv_anim_set_duration(anim,95U+(uint32_t)(85U*remaining/466U));
+            /* QSPI needs longer than a 95ms settle to show intermediate
+               frames. The gesture itself still follows the finger. */
+            lv_anim_set_duration(anim,185U+(uint32_t)(105U*remaining/466U));
             lv_anim_set_path_cb(anim,lv_anim_path_ease_out);
         }
         pager_scrolling=true;
@@ -3426,7 +3473,7 @@ static void on_tick(lv_timer_t *timer)
         current - touch_pressed_at_ms >= LF_CLOCK_SETTINGS_HOLD_MS)
         show_clock_settings_popup();
     if(page==0 && !asleep && home_record_layer &&
-       current-home_record_last_tick>=75){
+       current-home_record_last_tick>=LF_RECORD_WAVE_REFRESH_MS){
         lf_recog_snapshot_t scan={0};
         lf_recog_snapshot(&scan);
         if(scan.attempts!=home_stalled_attempt &&
