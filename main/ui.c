@@ -3364,6 +3364,7 @@ static void on_wake(lv_event_t *e)
     atomic_store(&wake_started_ms,current);
     atomic_store(&wake_frame_pending_ms,current);
     asleep=false;
+    lf_network_set_idle(false); /* Wake first; reconnect runs off the UI task. */
     /* Restore full CPU performance before rendering the wake scene. */
     lf_power_set_screen_awake(true);
     activity();
@@ -3741,7 +3742,14 @@ static void on_tick(lv_timer_t *timer)
         deep_sleep_retry_after_ms=current+60000ULL;
         sleep_deep();
     }
-    if (asleep) return;
+    if (asleep) {
+        /* 120 seconds after screen-off: stop Wi-Fi unless OTA or setup AP
+           is active. The network worker handles driver calls asynchronously. */
+        const uint32_t off_at = atomic_load(&screen_off_started_ms);
+        if (off_at && (uint32_t)current - off_at >= 120000U)
+            lf_network_set_idle(true);
+        return;
+    }
     if (page == 11 && !touch_held && current >= screen_animation_until_ms && current - weather_detail_refresh >= 4000) {
         weather_detail_refresh = current;
         lf_weather_view_t weather;
