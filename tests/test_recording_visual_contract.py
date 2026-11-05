@@ -6,7 +6,7 @@ ui=(p/"main/ui.c").read_text()
 header=(p/"main/recognition.h").read_text()
 worker=(p/"main/recognition.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "0.8.79-alpha"' in version
+assert 'LF_VERSION "0.8.80-alpha"' in version
 # Feed the renderer a scalar only: the existing capture is still manual.
 assert "uint8_t capture_visual_level;" in header
 assert "int8_t capture_visual_signed;" in header
@@ -16,7 +16,7 @@ assert "result.capture_visual_level=level;" in worker
 assert "result.capture_visual_signed=signed_peak;" in worker
 assert "result.capture_visual_level=0;" in worker
 assert "lf_recog_start()" in ui and "lf_recog_stop()" in ui
-assert "LF_RECORD_WAVE_MAX_POINTS 170U" in ui
+assert "LF_RECORD_WAVE_STRIP_POINTS 26U" in ui
 assert "lv_point_precise_t home_record_wave_points" in ui
 assert "static void home_recording_update(" in ui
 assert "home_recording_update(&song,current);" in ui
@@ -31,14 +31,14 @@ assert "int y=130+(centered<0?swing:-swing);" in ui
 assert "const static int8_t phases[8]" not in ui
 assert "positive_peak" in worker and "negative_peak" in worker
 assert "if(y<12)y=12;" in ui and "if(y>248)y=248;" in ui
-assert "lv_obj_set_style_line_width(home_record_wave,3,0);" in ui
+assert "lv_obj_set_style_line_width(strip,3,0);" in ui
 assert "lv_obj_set_style_border_width(record_ring,6,0);" in ui
 assert 'lv_label_set_text(home_record_loading,"IDENTIFYING...")' in ui
 assert "const bool opening=song->state==LF_RECOG_MATCH" in ui
 assert ('lv_label_set_text(lyric_mark,"LYRIC");' in ui and
         'lv_label_set_text(flash_mark,"FLASH");' in ui)
 
-assert "lv_line_set_points(home_record_wave,home_record_wave_points" in ui
+assert "lv_line_set_points(home_record_wave_segments[strip]," in ui
 assert 'lv_color_hex(0xFFD02C)' in ui
 assert 'lv_color_hex(0x258854)' in ui
 assert "song->state==LF_RECOG_CAPTURE" in ui

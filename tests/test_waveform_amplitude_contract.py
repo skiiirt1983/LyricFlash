@@ -12,8 +12,12 @@ assert "if(swing>108)swing=108;" in wav
 assert "int y=130+(centered<0?swing:-swing);" in wav
 assert "if(y<12)y=12;" in wav and "if(y>248)y=248;" in wav
 assert "song->captured_frames*360U" in wav
-assert "current-home_record_last_tick<75" in wav
-assert "lv_line_set_points(home_record_wave,home_record_wave_points," in wav
+assert "current-home_record_last_tick<LF_RECORD_WAVE_REFRESH_MS" in wav
+assert "lv_line_set_points(home_record_wave_segments[strip]," in wav
+assert "LF_RECORD_WAVE_SEGMENTS 4U" in ui
+assert "LF_RECORD_WAVE_STRIP_WIDTH 90U" in ui
+assert "LF_RECORD_WAVE_REFRESH_MS 140U" in ui
+assert "home_record_wave_segments[strip]" in wav
 assert "const static int8_t phases[8]" not in ui
 # Signed shape is unchanged; only vertical gain increases until existing cap.
 def y_at(peak):
