@@ -15,7 +15,8 @@ reset=section("static void make_base(void)","static void ")
 assert 'home_warning="Cancelling scan...";' not in cancel
 assert "home_warning=NULL;" in cancel and "home_warning_until_ms=0;" in cancel
 assert "lf_recog_stop(); /* cancellation flag; existing worker shuts down */" in cancel
-assert "home_refresh(current);" in cancel
+assert "home_refresh(current);" not in cancel
+assert "home_last_refresh_ms=current;" in cancel  # redraw deferred until overlay is gone
 assert "lv_obj_set_style_bg_opa(timed_controls,(lv_opa_t)38,0);" in scene
 assert "lv_obj_set_size(control,72,64);" in nudge
 assert "lv_obj_align(control,LV_ALIGN_CENTER,x,-112);" in nudge
