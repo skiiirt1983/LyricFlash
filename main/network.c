@@ -250,7 +250,7 @@ static esp_err_t send_json(httpd_req_t *req, cJSON *root)
 }
 
 /* Lightweight cache-only endpoint: never run a slow hardware/diagnostics
- * probe just to paint the battery icon in the Device Studio header. */
+ * probe just to paint the battery icon in the LyricFlash Web UI header. */
 /* The Clock Studio requests the SAME low-resolution, open-licensed digit
  * glyphs used by firmware. Rendering them from this endpoint prevents the
  * phone preview and AMOLED from showing different typeface families. */

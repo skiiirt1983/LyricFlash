@@ -1346,7 +1346,7 @@ static void on_home_scan(lv_event_t *e)
     }else if(!lf_network_is_connected() || !lf_recog_has_token()) {
         home_warning=!lf_network_is_connected()?
             "Connect to Wi-Fi in Settings":
-            "Configure AudD in Device Studio";
+            "Set AudD key in web settings";
         home_warning_until_ms=now_ms()+4500U;
     }else{
         /* LV_EVENT_CLICKED follows a finger release; on_tick independently
@@ -1588,7 +1588,7 @@ static void primary_render_home_content(lv_obj_t *parent)
     /* Informational text is also the unobtrusive entry to the Lyrics page.
      * Swipes beginning on it still bubble through the primary pager. */
     /* The physical Play button is the only Home control. */
-    /* Battery and connection details remain in Device Studio and Settings.
+    /* Battery and connection details remain in LyricFlash Web UI and Settings.
      * Their previous Home labels and rectangular shortcut buttons are gone. */
     home_last_refresh_ms=0;
     home_visual_busy=-1;

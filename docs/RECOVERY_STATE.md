@@ -18,7 +18,7 @@
 - Keep all existing 0.8.57/0.8.62/0.8.64/0.8.65 tags, recovery ZIPs and per-commit `alpha-ota/releases/<tag>/` images intact.
 - Source edits without `[compile-once]` run preflight only, never compile or publish firmware.
 - After preflight succeeds, request **one** intentional `[compile-once]` push; inspect GitHub Actions for a successful ESP32-S3 build, validated full USB+OTA package and immutable prerelease before declaring it OTA-ready.
-- Firmware version labels alone do **not** confirm which source commit is currently running on the device. The physical installation must be checked in Device Studio / Firmware after flashing.
+- Firmware version labels alone do **not** confirm which source commit is currently running on the device. The physical installation must be checked in LyricFlash Web UI / Firmware after flashing.
 - Never full-flash or erase the device for an ordinary OTA update; preserve Wi-Fi, clock settings and per-song history.
 
 ## Physical-device acceptance checks (pending)
@@ -100,7 +100,7 @@ No automated build or source-test result substitutes for these device-specific c
 - `feature/private-0.8.74-pager-edge-wake-activity` branches from published 0.8.73 with no battery hardware, deep-sleep, recognition, waveform or OTA source changes.
 - Once a primary pager page is committed, restrict allowed scroll directions: Clock leftmost = toward Home only, Settings rightmost = toward Home only, Home = horizontal both directions. Disable horizontal scroll chaining out of this pager; elastic and momentum were already disabled. The goal is to prevent rendering an outside fourth page during a hard edge swipe, while preserving Home↔Clock/Settings navigation.
 - On scroll BEGIN / SCROLL / END, refresh user activity so active page flips are never mistaken for idle. Prevent auto-off during active pager scrolling/snap and navigation reveal, including the defensive `sleep_display` call.
-- Source regression `tests/test_pager_edge_timeout_contract.py` required; hardware check should distinguish **actual screen-off** (wake counter/last screen-off duration) from **unpainted black area** (OLED brightness active but UI blank) using Device Studio diagnostics.
+- Source regression `tests/test_pager_edge_timeout_contract.py` required; hardware check should distinguish **actual screen-off** (wake counter/last screen-off duration) from **unpainted black area** (OLED brightness active but UI blank) using LyricFlash Web UI diagnostics.
 - The 0.8.71/0.8.69 checkpoint sources and 0.8.72/0.8.73 prereleases remain unchanged. Deep sleep remains off.
 
 ## 0.8.75 correct LVGL edge-direction mapping; do not flash 0.8.74

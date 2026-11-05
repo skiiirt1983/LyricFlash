@@ -8,7 +8,7 @@ The firmware measures both *actual* PCM channels being sent to AudD, directly
 from ES7210 TDM slots 0 and 2 during the user-triggered 10-second scan.
 Measurements are cumulative over that attempt and reset at scan start.
 
-After a scan, open Device Studio → Identify a song, or the existing device
+After a scan, open LyricFlash Web UI → Identify a song, or the existing device
 endpoint `/api/recognize`. The JSON includes:
 
 - `audio_measured_frames`: 24 kHz frames represented by the measurements.

@@ -1,4 +1,10 @@
-# Hardware display component attribution
+# LyricFlash project credits and third-party notices
+
+**LyricFlash application creator and maintainer: skiiirt1983.**
+
+The following third-party components retain their original creators, copyright notices, and licenses. LyricFlash project authorship does not claim ownership of these upstream works.
+
+## Hardware display component attribution
 
 LyricFlash includes the Apache-2.0-licensed Waveshare ESP32-S3
 Touch AMOLED 1.75-inch board support component under

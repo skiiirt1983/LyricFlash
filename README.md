@@ -1,4 +1,10 @@
-# LyricFlash Alpha 0.8.1 — diagnostics and simpler controls
+# LyricFlash
+
+**Creator and maintainer:** [skiiirt1983](https://github.com/skiiirt1983)
+
+This repository contains the LyricFlash application. Third-party libraries, board support and fonts retain their own authors and licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+
+## Historical Alpha 0.8.1 notes
 
 Development firmware for Waveshare ESP32-S3 Touch AMOLED 1.75 (466×466, 16 MB).
 Public stable v1.0 is not released; do not promote this build without hardware validation.
