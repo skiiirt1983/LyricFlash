@@ -164,14 +164,7 @@ static bool primary_pager_initializing;
    LVGL's millisecond scroll animation issued many positions while QSPI was
    still transferring an older frame, visually skipping frames and jerking. */
 static lv_timer_t *primary_pager_frame_timer;
-static int32_t primary_pager_snap_from_x;
-static bool primary_pager_frame_pending;
-static uint32_t primary_pager_frame_render_at_issue;
-static uint32_t primary_pager_frame_ready_at_issue;
-static uint64_t primary_pager_last_frame_ms;
-#define LF_PAGER_FRAME_MIN_MS 28U
-#define LF_PAGER_MAX_FRAME_STEP_PX 58
-#define LF_PAGER_SNAP_DURATION_MS 430U
+static bool primary_pager_frame_pending; /* safe interrupted-snap cleanup */
 #define LF_PAGER_STALL_GUARD_MS 1600U
 /* 0.8.25: retain the 0.8.23 stuck-snap recovery, but always keep the
    actual clock scene visible. The optional off-screen RGB565 snapshot was
@@ -636,6 +629,8 @@ static uint32_t nav_transition_frame_ready_at_issue;
 static uint64_t screen_animation_until_ms;
 static uint64_t next_swipe_allowed_ms;
 static lv_obj_t *clock_settings_popup;
+/* Persist entry origin across nested Clock Settings menus. */
+static uint8_t clock_settings_return_page=2; /* 2 Settings, 6 Clock */
 
 /* One candidate per physical gesture; no screen swap until the finger lifts. */
 static int swipe_candidate_page = -1;
@@ -878,6 +873,7 @@ static void on_popup_settings(lv_event_t *e)
 {
     (void)e;
     clock_settings_popup=NULL;
+    clock_settings_return_page=6;
     build_clock_settings();
 }
 static void show_clock_settings_popup(void)
@@ -2812,59 +2808,22 @@ static void primary_pager_commit(int index)
         lf_clock_update();
     }
 }
-/* Present one actual position per completed QSPI refresh, not N obsolete
-   animation positions queued while a costly frame is still rendering.
-   The live native finger drag is untouched: this timer only settles after
-   release, and a new press immediately returns control to the finger. */
+/* PrintSphere-like LVGL native elapsed-time easing. Do not let the 58px
+   frame-latched cap stretch a 300ms snap into seconds on a slow renderer.
+   The same one-root pager, press cancellation and stall watchdog remain. */
 static void primary_pager_snap_frame(lv_timer_t *timer)
 {
     (void)timer;
-    if(!primary_pager || !primary_pager_snapping || asleep || timed_overlay)return;
+    if(!primary_pager||!primary_pager_snapping||asleep||timed_overlay)return;
     if(ui_pointer_is_down()){
         primary_pager_snapping=false;
         primary_pager_frame_pending=false;
         if(primary_pager_frame_timer)lv_timer_pause(primary_pager_frame_timer);
         return;
     }
-    const uint64_t current=now_ms();
-    const int32_t target_x=primary_pager_snap_to*466;
     const int32_t x=abs(lv_obj_get_scroll_x(primary_pager));
-    if(primary_pager_frame_pending){
-        /* REFR_READY alone is emitted for empty refreshes. Require a real
-           render to start AND its refresh to complete before advancing. */
-        if(atomic_load(&ui_render_count)==primary_pager_frame_render_at_issue ||
-           atomic_load(&ui_refresh_ready_count)==primary_pager_frame_ready_at_issue)
-            return;
-        primary_pager_frame_pending=false;
-    }
-    if(abs(target_x-x)<=2){
+    if(abs(x-primary_pager_snap_to*466)<=2)
         primary_pager_commit(primary_pager_snap_to);
-        return;
-    }
-    if(current-primary_pager_last_frame_ms<LF_PAGER_FRAME_MIN_MS)return;
-    uint64_t elapsed=current-primary_pager_snap_started_ms;
-    if(elapsed>LF_PAGER_SNAP_DURATION_MS)elapsed=LF_PAGER_SNAP_DURATION_MS;
-    /* Integer smoothstep: consistent ease-out based on monotonic time.
-       Limit travel per presented frame so a slow display does not jump
-       across most of a page after one long QSPI operation. */
-    const int64_t t=(int64_t)(elapsed*1024U/LF_PAGER_SNAP_DURATION_MS);
-    const int64_t eased=t*t*(3072-2*t)/(1024*1024);
-    const int32_t desired=primary_pager_snap_from_x+
-        (int32_t)(((int64_t)(target_x-primary_pager_snap_from_x)*eased)/1024);
-    int32_t advance=desired-x;
-    if(advance>LF_PAGER_MAX_FRAME_STEP_PX)advance=LF_PAGER_MAX_FRAME_STEP_PX;
-    if(advance< -LF_PAGER_MAX_FRAME_STEP_PX)advance= -LF_PAGER_MAX_FRAME_STEP_PX;
-    if(advance==0)advance=target_x>x?1:-1;
-    int32_t next=x+advance;
-    if((target_x>=x && next>target_x)||(target_x<=x && next<target_x))
-        next=target_x;
-    /* Capture both counters before invalidation; release/scroll-end may fire
-       inline, but the callback cannot mark this frame presented prematurely. */
-    primary_pager_frame_render_at_issue=atomic_load(&ui_render_count);
-    primary_pager_frame_ready_at_issue=atomic_load(&ui_refresh_ready_count);
-    primary_pager_frame_pending=true;
-    primary_pager_last_frame_ms=current;
-    lv_obj_scroll_to_x(primary_pager,next,LV_ANIM_OFF);
 }
 static void primary_pager_start_snap(int target)
 {
@@ -2876,20 +2835,18 @@ static void primary_pager_start_snap(int target)
         primary_pager_commit(target);
         return;
     }
-    primary_pager_snap_from_x=current_x;
     primary_pager_snap_to=target;
     primary_pager_snap_started_ms=now_ms();
-    primary_pager_last_frame_ms=0;
     primary_pager_frame_pending=false;
     primary_pager_snapping=true;
     pager_scrolling=true;
     if(primary_pager_frame_timer){
         lv_timer_reset(primary_pager_frame_timer);
         lv_timer_resume(primary_pager_frame_timer);
-    }else{
-        /* Startup allocation failure must never strand a swipe. */
-        lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);
     }
+    /* LV_EVENT_SCROLL_BEGIN configures 185-290ms easing. LVGL may drop
+       obsolete positions; finger press cancels the in-flight animation. */
+    lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);
 }
 static int primary_pager_target(int32_t x)
 {
@@ -2946,13 +2903,13 @@ static void primary_pager_scroll_event(lv_event_t *e)
        lv_event_get_target(e)!=primary_pager) return;
     const lv_event_code_t code=lv_event_get_code(e);
     if(code==LV_EVENT_SCROLL_BEGIN){
-        /* Only the allocation-failure LVGL fallback uses an animated
-           snap. The normal settle is render-completion paced above. */
+        /* Native LVGL elapsed-time snap drops obsolete positions during
+           costly redraws instead of accumulating one-second delays. */
         lv_anim_t *anim=lv_event_get_scroll_anim(e);
         if(primary_pager_snapping && anim) {
             int32_t remaining=abs(primary_pager_snap_to*466-abs(lv_obj_get_scroll_x(primary_pager)));
             if(remaining>466)remaining=466;
-            /* Preserve the safe LVGL fallback if the frame timer is absent. */
+            /* PrintSphere-style ease-out timing with our own touch guard. */
             lv_anim_set_duration(anim,185U+(uint32_t)(105U*remaining/466U));
             lv_anim_set_path_cb(anim,lv_anim_path_ease_out);
         }
@@ -3127,7 +3084,18 @@ static void on_clock_back(lv_event_t *e)
 }
 static void on_clock_options(lv_event_t *e)
 {
-    (void)e; activity(); build_clock_settings();
+    (void)e;
+    activity();
+    if(page==2)clock_settings_return_page=2;
+    else if(page==6)clock_settings_return_page=6;
+    build_clock_settings();
+}
+static void on_clock_settings_back(lv_event_t *e)
+{
+    (void)e;
+    activity();
+    if(clock_settings_return_page==6)build_clock();
+    else build_settings();
 }
 static void on_cycle_face(lv_event_t *e)
 {
@@ -3176,7 +3144,7 @@ static void build_clock_settings_now(void)
     button(screen, value, 239, 50, 0, 106,
            0xB2C6D3, on_weather_interval, NULL);
     button(screen, "BACK", 144, 50, 0, 176,
-           prefs->text_color, on_settings, NULL);
+           prefs->text_color, on_clock_settings_back, NULL);
 }
 static void on_basic_font(lv_event_t *e)
 {
@@ -4087,7 +4055,12 @@ static void nav_drain(void *arg)
         if(screen && !asleep)lv_obj_invalidate(screen);
         return;
     }
-    if(disp&&screen&&previous_page!=page&&!asleep)nav_transition_begin(direction);
+    if(screen && primary_pager && previous_page!=page && !asleep){
+        /* Main pager rebuilt after Clock Settings/Weather: render it in
+           one pass, not 12 staggered strips showing a half-black face. */
+        lv_obj_invalidate(screen);
+    }else if(disp&&screen&&previous_page!=page&&!asleep)
+        nav_transition_begin(direction);
     else if(screen)lv_obj_invalidate(screen);
 }
 static void nav_schedule(void (*target)(void))
