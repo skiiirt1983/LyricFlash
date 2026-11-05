@@ -188,7 +188,7 @@ require('class="lf-mark"' in pages["studio"] and
         'flex-direction:column!important' in pages["studio"] and
         'gap:24px!important' in pages["settings"] and
         'gap:24px!important' in pages["firmware"],
-        "Device Studio logo, menu spacing and Clock Studio navigation must match")
+        "LyricFlash Web UI logo, menu spacing and Clock Studio navigation must match")
 require('class="lf-mark"' in pages["settings"] and 'class="lf-mark"' in pages["firmware"],
         "LyricFlash logo/header branding missing")
 require('class="toolbar-links"' in pages["settings"] and 'class="toolbar-links"' in pages["firmware"]

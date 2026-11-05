@@ -45,6 +45,7 @@ python3 tests/test_release_package.py
 python3 tests/test_alpha_0_8.py
 python3 tests/test_web_clock_studio.py
 python3 tests/test_webui_clock_database_contract.py
+python3 tests/test_project_identity_contract.py
 node tests/test_clock_preview_runtime.js
 node tests/test_firmware_picker_runtime.js
 python3 tests/test_beta_local_installer.py
