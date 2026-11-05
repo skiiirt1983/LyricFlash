@@ -13,7 +13,10 @@ assert "LV_EVENT_SHORT_CLICKED" in home
 assert "home_record_cancel_tap_ms<=400U" in src
 assert "home_record_cancel_pending_attempt=scan.attempts;" in src
 assert "home_refresh(current);" not in section("static void on_record_cancel_double_tap(lv_event_t *e)", "static lv_obj_t *home_decor_ring")
-assert "lf_recog_stop();" not in section("static void on_record_cancel_double_tap(lv_event_t *e)", "static lv_obj_t *home_decor_ring")
+# Stop is an atomic-only flag store; LVGL screen mutation still waits for finger-up.
+assert "lf_recog_stop(); /* atomic cooperative stop; no UI mutation */" in section("static void on_record_cancel_double_tap(lv_event_t *e)", "static lv_obj_t *home_decor_ring")
+assert "lv_obj_add_flag(" not in section("static void on_record_cancel_double_tap(lv_event_t *e)", "static lv_obj_t *home_decor_ring")
+assert "lv_obj_delete(" not in section("static void on_record_cancel_double_tap(lv_event_t *e)", "static lv_obj_t *home_decor_ring")
 assert "if(home_record_cancel_pending_attempt && !ui_pointer_is_down()" in src
 assert "static bool recognition_touch_locked(void)" in src
 assert "scan.state==LF_RECOG_CAPTURE" in section("static bool recognition_touch_locked(void)","static void swipe_intent")
