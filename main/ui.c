@@ -164,7 +164,13 @@ static bool primary_pager_initializing;
    LVGL's millisecond scroll animation issued many positions while QSPI was
    still transferring an older frame, visually skipping frames and jerking. */
 static lv_timer_t *primary_pager_frame_timer;
-static bool primary_pager_frame_pending; /* safe interrupted-snap cleanup */
+/* Do not declare a swipe complete until the destination was refreshed. */
+static bool primary_pager_frame_pending;
+static bool pager_final_frame_ready;
+static int32_t pager_render_scroll_x=-1;
+static uint64_t pager_arrived_at_ms;
+static atomic_uint pager_final_frame_acks;
+static atomic_uint pager_final_frame_repaint_requests;
 #define LF_PAGER_STALL_GUARD_MS 1600U
 /* 0.8.25: retain the 0.8.23 stuck-snap recovery, but always keep the
    actual clock scene visible. The optional off-screen RGB565 snapshot was
@@ -271,6 +277,8 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->pager_forced_snaps=atomic_load(&pager_forced_snap_count);
     out->pager_snap_last_ms=atomic_load(&pager_snap_last_ms);
     out->pager_snap_max_ms=atomic_load(&pager_snap_max_ms);
+    out->pager_final_frame_acks=atomic_load(&pager_final_frame_acks);
+    out->pager_final_frame_repaint_requests=atomic_load(&pager_final_frame_repaint_requests);
     out->render_cycle_last_ms=atomic_load(&render_cycle_last_ms);
     out->render_cycle_max_ms=atomic_load(&render_cycle_max_ms);
     out->clock_repaint_recoveries=atomic_load(&clock_repaint_recoveries);
@@ -319,6 +327,8 @@ static void display_render_event(lv_event_t *e)
     atomic_fetch_add(&ui_render_count,1);
     render_cycle_start_us=esp_timer_get_time();
     draw_started_us=render_cycle_start_us;
+    pager_render_scroll_x=(primary_pager && primary_pager_snapping) ?
+        abs(lv_obj_get_scroll_x(primary_pager)) : -1;
     pager_mid_draw_pair=0;
     if(primary_pager && !asleep){
         const int32_t x=abs(lv_obj_get_scroll_x(primary_pager));
@@ -395,6 +405,16 @@ static void display_refresh_ready_event(lv_event_t *e)
     if(flush_calls_in_refresh>atomic_load(&flush_calls_refresh_max))
         atomic_store(&flush_calls_refresh_max,flush_calls_in_refresh);
     flush_calls_in_refresh=0;
+    /* Only a completed destination-position render is a valid snap commit.
+       A pointer/timer reporting X=target does not mean pixels are displayed. */
+    if(primary_pager_snapping && primary_pager && pager_render_scroll_x>=0 &&
+       abs(pager_render_scroll_x-primary_pager_snap_to*466)<=2 &&
+       abs(abs(lv_obj_get_scroll_x(primary_pager))-primary_pager_snap_to*466)<=2){
+        if(!pager_final_frame_ready)
+            atomic_fetch_add(&pager_final_frame_acks,1);
+        pager_final_frame_ready=true;
+    }
+    pager_render_scroll_x=-1;
     /* Measured completed-refresh cadence while the pager is snapping. */
     const uint32_t ready_now=(uint32_t)(esp_timer_get_time()/1000LL);
     if(primary_pager_snapping){
@@ -1034,6 +1054,9 @@ static void make_base(void)
             primary_pager_frame_timer=NULL;
         }
         primary_pager_frame_pending=false;
+        pager_final_frame_ready=false;
+        pager_render_scroll_x=-1;
+        pager_arrived_at_ms=0;
         if(clock_scene && lv_obj_get_parent(clock_scene)!=screen) {
             lv_obj_set_parent(clock_scene,screen);
             lv_obj_add_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
@@ -2812,6 +2835,9 @@ static void primary_pager_commit(int index)
     primary_pager_snapping=false;
     pager_scrolling=false;
     primary_pager_frame_pending=false;
+    pager_final_frame_ready=false;
+    pager_render_scroll_x=-1;
+    pager_arrived_at_ms=0;
     if(primary_pager_frame_timer)lv_timer_pause(primary_pager_frame_timer);
     /* Keep both physical swipe directions enabled for every pager page.
        Dynamic per-edge scroll flags in 0.8.74/0.8.75 trapped Settings:
@@ -2845,9 +2871,26 @@ static void primary_pager_commit(int index)
         lf_clock_update();
     }
 }
-/* PrintSphere-like LVGL native elapsed-time easing. Do not let the 58px
-   frame-latched cap stretch a 300ms snap into seconds on a slow renderer.
-   The same one-root pager, press cancellation and stall watchdog remain. */
+/* Native LVGL easing, but commit only after the destination frame is
+   presented. Press interrupts and the 1600ms stall guard are preserved. */
+static void primary_pager_arrived(uint64_t current)
+{
+    if(!primary_pager || !primary_pager_snapping)return;
+    if(pager_final_frame_ready){
+        primary_pager_commit(primary_pager_snap_to);
+        return;
+    }
+    if(pager_arrived_at_ms==0)pager_arrived_at_ms=current;
+    /* Most final positions naturally refresh. If not, request exactly one
+       active-page redraw; never hammer the renderer every 16ms. */
+    if(!primary_pager_frame_pending && current-pager_arrived_at_ms>=240U){
+        primary_pager_frame_pending=true;
+        if(primary_pager_pages[primary_pager_snap_to]){
+            lv_obj_invalidate(primary_pager_pages[primary_pager_snap_to]);
+            atomic_fetch_add(&pager_final_frame_repaint_requests,1);
+        }
+    }
+}
 static void primary_pager_snap_frame(lv_timer_t *timer)
 {
     (void)timer;
@@ -2855,12 +2898,14 @@ static void primary_pager_snap_frame(lv_timer_t *timer)
     if(ui_pointer_is_down()){
         primary_pager_snapping=false;
         primary_pager_frame_pending=false;
+        pager_final_frame_ready=false;
+        pager_arrived_at_ms=0;
         if(primary_pager_frame_timer)lv_timer_pause(primary_pager_frame_timer);
         return;
     }
     const int32_t x=abs(lv_obj_get_scroll_x(primary_pager));
     if(abs(x-primary_pager_snap_to*466)<=2)
-        primary_pager_commit(primary_pager_snap_to);
+        primary_pager_arrived(now_ms());
 }
 static void primary_pager_start_snap(int target)
 {
@@ -2875,6 +2920,9 @@ static void primary_pager_start_snap(int target)
     primary_pager_snap_to=target;
     primary_pager_snap_started_ms=now_ms();
     primary_pager_frame_pending=false;
+    pager_final_frame_ready=false;
+    pager_render_scroll_x=-1;
+    pager_arrived_at_ms=0;
     primary_pager_snapping=true;
     pager_scrolling=true;
     if(primary_pager_frame_timer){
@@ -2922,8 +2970,7 @@ static void primary_pager_watchdog(uint64_t current)
             return;
         }
         if(abs(x-primary_pager_snap_to*466)<=2){
-            if(!primary_pager_frame_pending)
-                primary_pager_commit(primary_pager_snap_to);
+            primary_pager_arrived(current);
             return;
         }
     }else if((pager_scrolling || abs(x-primary_pager_current*466)>4) &&
@@ -2957,6 +3004,9 @@ static void primary_pager_scroll_event(lv_event_t *e)
         if(indev && lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED){
             primary_pager_snapping=false; /* Finger interrupts existing snap. */
             primary_pager_frame_pending=false;
+            pager_final_frame_ready=false;
+            pager_render_scroll_x=-1;
+            pager_arrived_at_ms=0;
             if(primary_pager_frame_timer)lv_timer_pause(primary_pager_frame_timer);
             primary_pager_origin=primary_pager_current;
         }
@@ -2975,9 +3025,8 @@ static void primary_pager_scroll_event(lv_event_t *e)
     if(primary_pager_snapping){
         /* Some intermediate scroll-end callbacks fire during a new easing
            animation. Commit only if the target is actually reached. */
-        if(abs(x-primary_pager_snap_to*466)<=2 &&
-           !primary_pager_frame_pending)
-            primary_pager_commit(primary_pager_snap_to);
+        if(abs(x-primary_pager_snap_to*466)<=2)
+            primary_pager_arrived(now_ms());
         return;
     }
     /* Do not start a second LVGL scroll animation inside SCROLL_END.

@@ -33,6 +33,8 @@ typedef struct {
     uint32_t pager_forced_snaps;
     uint32_t pager_snap_last_ms;
     uint32_t pager_snap_max_ms;
+    uint32_t pager_final_frame_acks; /* presented destination scroll frame */
+    uint32_t pager_final_frame_repaint_requests; /* one-shot retry */
     uint32_t render_cycle_last_ms;
     uint32_t render_cycle_max_ms;
     uint32_t clock_repaint_recoveries;
