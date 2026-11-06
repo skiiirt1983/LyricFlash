@@ -123,7 +123,7 @@ static const lv_font_t *basic_element_font(uint8_t size)
 }
 static void basic_scale_element(lv_obj_t *item,uint8_t size)
 {
-    /* 0.8.103: no scale transform. Sizes above 100% use the largest native
+    /* 0.8.104: no scale transform. Sizes above 100% use the largest native
        font (basic_element_font) instead of an offscreen scaled layer that
        was re-rendered on every frame. */
     (void)item;(void)size;
@@ -150,7 +150,7 @@ static lv_obj_t *dial_line(lv_obj_t *parent, lv_point_precise_t *points, int wid
     lv_obj_set_style_line_rounded(o, true, 0);
     return o;
 }
-/* 0.8.103: an lv_line's box spans from its parent's origin to its furthest
+/* 0.8.104: an lv_line's box spans from its parent's origin to its furthest
    point, so moving a clock hand used to invalidate a ~400x400 region (most of
    the dial) 30 times per second. Keep each moving line's object tightly
    around its two endpoints so only the pixels the hand covers are redrawn. */

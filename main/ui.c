@@ -4,6 +4,8 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
+#include "esp_cpu.h"
+#include "esp_private/esp_clk.h"
 #include "esp_sleep.h"
 #include "driver/gpio.h"
 #include "power.h"
@@ -328,6 +330,11 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
 static void display_render_event(lv_event_t *e)
 {
     (void)e;
+    {
+        const unsigned mhz=(unsigned)(esp_clk_cpu_freq()/1000000);
+        atomic_store(&render_cpu_mhz_last,mhz);
+        if(mhz<atomic_load(&render_cpu_mhz_min))atomic_store(&render_cpu_mhz_min,mhz);
+    }
     atomic_fetch_add(&ui_render_count,1);
     render_cycle_start_us=esp_timer_get_time();
     draw_started_us=render_cycle_start_us;
@@ -3409,6 +3416,8 @@ static void refresh_debug(void)
     char output[1400], battery[64], signal[24];
     bsp_display_profile_t lcd={0};
     bsp_display_profile(&lcd);
+    lf_ui_bench_t bench={0};
+    lf_ui_bench(&bench);
     if (d.battery_valid)
         snprintf(battery, sizeof battery, "%d%% %s%s",
                  d.battery.percentage,
@@ -3428,6 +3437,9 @@ static void refresh_debug(void)
              "Internal RAM: %lu KB (largest %lu)\n"
              "LCD buffers: %s %lu rows\n"
              "LCD self-test: %lu KB/s, frame %lu ms\n"
+             "CPU: %lu MHz (frames min %lu)\n"
+             "Bench ms: blank %lu clock %lu home %lu set %lu\n"
+             "Bench mid ms: clk/home %lu home/set %lu\n"
              "Recent errors:\n%s\n%s\n%s",
              LF_VERSION, d.ip_address,
              d.wifi_connected ? d.wifi_ssid : "offline",
@@ -3445,6 +3457,10 @@ static void refresh_debug(void)
              (unsigned long)lcd.lvgl_buffer_rows,
              (unsigned long)lcd.selftest_kbytes_per_s,
              (unsigned long)(lcd.selftest_frame_us/1000),
+             (unsigned long)bench.cpu_mhz_measured,(unsigned long)bench.render_cpu_mhz_min,
+             (unsigned long)bench.blank_frame_ms,(unsigned long)bench.page_frame_ms[0],
+             (unsigned long)bench.page_frame_ms[1],(unsigned long)bench.page_frame_ms[2],
+             (unsigned long)bench.mid_frame_ms[0],(unsigned long)bench.mid_frame_ms[1],
              d.errors[0][0] ? d.errors[0] : "None recorded", d.errors[1], d.errors[2]);
     lv_label_set_text(debug_text, output);
 }
@@ -4092,7 +4108,7 @@ __attribute__((unused)) static void nav_transition_tick(lv_timer_t *timer)
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
 {
-    /* 0.8.103: instant screen change. The 12-strip reveal waited for a
+    /* 0.8.104: instant screen change. The 12-strip reveal waited for a
        rendered frame ACK per strip and read as 1-2 fps stutter. One full
        redraw is faster and feels like a phone page switch. */
     (void)direction;
@@ -4214,6 +4230,64 @@ static void build_debug(void) { nav_schedule(build_debug_now); }
 static void build_weather_details(void) { nav_schedule(build_weather_details_now); }
 static void build_weather_location(void) { nav_schedule(build_weather_location_now); }
 
+
+/* ---- 0.8.104 boot benchmark ------------------------------------------- */
+static lf_ui_bench_t ui_bench;
+static atomic_uint render_cpu_mhz_min=UINT32_MAX;
+static atomic_uint render_cpu_mhz_last;
+void lf_ui_bench(lf_ui_bench_t *out)
+{
+    if(!out)return;
+    *out=ui_bench;
+    const unsigned mn=atomic_load(&render_cpu_mhz_min);
+    out->render_cpu_mhz_min=mn==UINT32_MAX?0:mn;
+    out->render_cpu_mhz_last=atomic_load(&render_cpu_mhz_last);
+}
+static uint32_t bench_full_refresh_ms(void)
+{
+    lv_obj_t *active=lv_screen_active();
+    if(!active)return 0;
+    lv_obj_invalidate(active);
+    const int64_t t0=esp_timer_get_time();
+    lv_refr_now(NULL);
+    return (uint32_t)((esp_timer_get_time()-t0+500)/1000);
+}
+static void ui_boot_benchmark(void)
+{
+    /* CPU clock from the cycle counter over 5 ms of wall time. */
+    const uint32_t c0=esp_cpu_get_cycle_count();
+    const int64_t t0=esp_timer_get_time();
+    while(esp_timer_get_time()-t0<5000){}
+    const uint32_t c1=esp_cpu_get_cycle_count();
+    ui_bench.cpu_mhz_measured=(c1-c0)/5000U;
+    volatile uint32_t acc=0;
+    const int64_t l0=esp_timer_get_time();
+    for(uint32_t i=0;i<2000000U;i++)acc+=i*2654435761U;
+    ui_bench.cpu_loop_us=(uint32_t)(esp_timer_get_time()-l0);
+    (void)acc;
+    if(!primary_pager)return;
+    const bool was_init=primary_pager_initializing;
+    primary_pager_initializing=true; /* scroll handler stays passive */
+    lv_obj_add_flag(primary_pager,LV_OBJ_FLAG_HIDDEN);
+    ui_bench.blank_frame_ms=bench_full_refresh_ms();
+    lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_HIDDEN);
+    static const int32_t xs[5]={0,466,932,233,699};
+    for(int i=0;i<5;i++){
+        lv_obj_scroll_to_x(primary_pager,xs[i],LV_ANIM_OFF);
+        lv_obj_update_layout(primary_pager);
+        const uint32_t ms=bench_full_refresh_ms();
+        if(i<3)ui_bench.page_frame_ms[i]=ms;
+        else ui_bench.mid_frame_ms[i-3]=ms;
+    }
+    lv_obj_scroll_to_x(primary_pager,primary_pager_current*466,LV_ANIM_OFF);
+    primary_pager_initializing=was_init;
+    ESP_LOGI(TAG,"Benchmark: cpu=%luMHz loop=%luus blank=%lums clock=%lums home=%lums settings=%lums mid_ch=%lums mid_hs=%lums",
+             (unsigned long)ui_bench.cpu_mhz_measured,(unsigned long)ui_bench.cpu_loop_us,
+             (unsigned long)ui_bench.blank_frame_ms,(unsigned long)ui_bench.page_frame_ms[0],
+             (unsigned long)ui_bench.page_frame_ms[1],(unsigned long)ui_bench.page_frame_ms[2],
+             (unsigned long)ui_bench.mid_frame_ms[0],(unsigned long)ui_bench.mid_frame_ms[1]);
+}
+
 bool lf_ui_start(lf_settings_t *s)
 {
     prefs = s;
@@ -4250,6 +4324,8 @@ bool lf_ui_start(lf_settings_t *s)
         }
         touch=lv_indev_get_next(touch);
     }
+    ui_boot_benchmark();
+    invalidate_full_screen();
     lv_timer_create(on_tick, 50, NULL);
     /* 30 Hz sweep: visually smooth, half the redraw load of 60 Hz. */
     clock_sweep_timer=lv_timer_create(on_clock_sweep, 33, NULL);

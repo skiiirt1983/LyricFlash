@@ -1243,6 +1243,28 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "render_cycle_last_ms", display_stats.render_cycle_last_ms);
     cJSON_AddNumberToObject(root, "render_cycle_max_ms", display_stats.render_cycle_max_ms);
     cJSON_AddNumberToObject(root, "clock_repaint_recoveries", display_stats.clock_repaint_recoveries);
+    {
+        lf_ui_bench_t bench={0};
+        lf_ui_bench(&bench);
+        bsp_display_profile_t lcd={0};
+        bsp_display_profile(&lcd);
+        cJSON_AddNumberToObject(root, "bench_cpu_mhz", bench.cpu_mhz_measured);
+        cJSON_AddNumberToObject(root, "bench_cpu_loop_us", bench.cpu_loop_us);
+        cJSON_AddNumberToObject(root, "bench_blank_frame_ms", bench.blank_frame_ms);
+        cJSON_AddNumberToObject(root, "bench_clock_frame_ms", bench.page_frame_ms[0]);
+        cJSON_AddNumberToObject(root, "bench_home_frame_ms", bench.page_frame_ms[1]);
+        cJSON_AddNumberToObject(root, "bench_settings_frame_ms", bench.page_frame_ms[2]);
+        cJSON_AddNumberToObject(root, "bench_mid_clock_home_ms", bench.mid_frame_ms[0]);
+        cJSON_AddNumberToObject(root, "bench_mid_home_settings_ms", bench.mid_frame_ms[1]);
+        cJSON_AddNumberToObject(root, "render_cpu_mhz_min", bench.render_cpu_mhz_min);
+        cJSON_AddNumberToObject(root, "render_cpu_mhz_last", bench.render_cpu_mhz_last);
+        cJSON_AddBoolToObject(root, "lcd_buffers_internal", lcd.lvgl_buffers_internal);
+        cJSON_AddNumberToObject(root, "lcd_buffer_rows", lcd.lvgl_buffer_rows);
+        cJSON_AddNumberToObject(root, "lcd_internal_free_at_init", lcd.internal_free_at_init);
+        cJSON_AddNumberToObject(root, "lcd_selftest_kbps", lcd.selftest_kbytes_per_s);
+        cJSON_AddNumberToObject(root, "lcd_selftest_frame_us", lcd.selftest_frame_us);
+        cJSON_AddNumberToObject(root, "free_internal_bytes", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    }
     lf_weather_config_t weather;
     lf_weather_get_config(&weather);
     cJSON_AddStringToObject(root, "weather_city", weather.city);

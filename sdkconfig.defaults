@@ -46,7 +46,7 @@ CONFIG_LV_DEF_REFR_PERIOD=16
 # LVGL 9.5 style lookups on complex static page trees; add only 8 bytes/object.
 # CONFIG_LV_OBJ_STYLE_CACHE is not set
 
-# 0.8.103 performance profile
+# 0.8.104 performance profile
 # Build with -O2 instead of the default -Og debug optimization (LVGL software
 # rendering is several times faster).
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
@@ -57,11 +57,11 @@ CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
 # TLS buffers in PSRAM: GitHub OTA download failed with SSL_ALLOC_FAILED
 # (-0x7F00) when internal RAM was exhausted.
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
-# Render with two LVGL software draw units (both CPU cores).
-CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2
+# Single LVGL draw unit (two units are unproven; a UI-stall watchdog restart was logged).
+CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=1
 # Temporary on-screen FPS / CPU meter for hardware tuning.
 CONFIG_LV_USE_SYSMON=y
 CONFIG_LV_USE_PERF_MONITOR=y
 CONFIG_LV_PERF_MONITOR_ALIGN_BOTTOM_MID=y
-# 0.8.103: smaller peak TLS memory for the on-device GitHub OTA download.
+# 0.8.104: smaller peak TLS memory for the on-device GitHub OTA download.
 CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
