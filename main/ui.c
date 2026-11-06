@@ -4231,7 +4231,8 @@ bool lf_ui_start(lf_settings_t *s)
         touch=lv_indev_get_next(touch);
     }
     lv_timer_create(on_tick, 50, NULL);
-    clock_sweep_timer=lv_timer_create(on_clock_sweep, 16, NULL);
+    /* 30 Hz sweep: visually smooth, half the redraw load of 60 Hz. */
+    clock_sweep_timer=lv_timer_create(on_clock_sweep, 33, NULL);
     esp_lv_adapter_unlock();
     return true;
 }

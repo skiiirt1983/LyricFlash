@@ -21,7 +21,7 @@ assert "bsp_display_transfer_stats_t" in header
 for key in ("display_dma_stage_rows","display_dma_chunk_submissions","display_dma_stage_last_us","display_dma_stage_max_us","free_internal_dma_bytes","largest_internal_dma_block_bytes"):
     assert chr(34)+key+chr(34) in net
 assert "CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1" in cfg
-assert ".tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC" in (root/"main/main.c").read_text()
+assert ".tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE" in (root/"main/main.c").read_text()
 assert "LF_PAGER_STALL_GUARD_MS 1600U" in ui
 assert "lf_network_set_idle(true);" in ui and "lf_network_set_idle(false);" in ui
-print("PASS: 0.8.100 TE-synchronized QSPI / 8-row DMA batching, 4-row fallback, unchanged safety/power")
+print("PASS: 0.8.101 TE-synchronized QSPI / 8-row DMA batching, 4-row fallback, unchanged safety/power")

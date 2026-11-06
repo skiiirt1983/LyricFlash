@@ -298,8 +298,8 @@ require('lf_ui_display_stats_t' in read('main/ui.h') and
         "Thread-safe display metrics contract missing")
 
 # Hardware display recovery: local independently licensed BSP has PSRAM -> DMA
-# staging and a one-slot SPI transfer queue. TE_SYNC uses adapter 0.6.0 fixes
-# plus a bounded GPIO-TE completion wait to prevent indefinite LVGL lockup.
+# staging and a one-slot SPI transfer queue. 0.8.101: tear mode NONE (partial
+# render) with double-buffered internal-SRAM strips; TE_SYNC full-frame retired.
 bsp=read('components/esp32_s3_touch_amoled_1_75/esp32_s3_touch_amoled_1_75.c')
 display_header=read('components/esp32_s3_touch_amoled_1_75/include/bsp/display.h')
 app_main=read('main/main.c')
@@ -308,8 +308,10 @@ require('esp_ptr_external_ram(color_data)' in bsp and
         'bsp_rotation_panel_draw_staged(' in bsp and
         'BSP_LCD_DMA_STAGING_ROWS (8)' in bsp and
         'BSP_LCD_DMA_FALLBACK_ROWS (4)' in bsp and
-        'ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC' in app_main and
-        'ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE' not in app_main and
+        'ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE' in app_main and
+        'ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC' not in app_main and
+        'LVGL_BUFFER_HEIGHT_INTERNAL_FAST (24)' in bsp and
+        '.require_double_buffer = !use_te_sync && (use_psram || internal_fast),' in bsp and
         'BSP_LCD_TE_GPIO' in display_header and
         'display_cfg.lv_adapter_cfg.task_core_id = 1;' in app_main and
         'CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1' in sdk and

@@ -773,6 +773,13 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // fallback path when tear mode ends up as NONE.
 #define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
+/* 0.8.101 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+   DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
+   strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
+   Used only when tear mode is NONE and enough internal RAM remains for
+   Wi-Fi/TLS; otherwise the 0.8.99 PSRAM + DMA-staging path is kept. */
+#define LVGL_BUFFER_HEIGHT_INTERNAL_FAST (24)
+#define LVGL_INTERNAL_FAST_HEADROOM_BYTES (110 * 1024)
 
 esp_err_t bsp_display_brightness_init(void)
 {
@@ -969,9 +976,19 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
     }
 
     const bool use_te_sync = (tear_mode == ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC);
-    const bool use_psram = psram_available;
+    const size_t fast_strip_bytes =
+        (size_t)BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT_INTERNAL_FAST * BSP_LCD_BITS_PER_PIXEL / 8;
+    const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    const bool internal_fast = !use_te_sync &&
+        internal_largest >= fast_strip_bytes &&
+        internal_free >= (2 * fast_strip_bytes) + LVGL_INTERNAL_FAST_HEADROOM_BYTES;
+    const bool use_psram = psram_available && !internal_fast;
+    ESP_LOGI(TAG, "LVGL buffer placement: internal_fast=%s internal_free=%u largest=%u",
+             internal_fast ? "yes" : "no", (unsigned)internal_free, (unsigned)internal_largest);
 
-    const uint32_t buffer_height = use_psram ? LVGL_BUFFER_HEIGHT_PSRAM : LVGL_BUFFER_HEIGHT_INTERNAL;
+    const uint32_t buffer_height = internal_fast ? LVGL_BUFFER_HEIGHT_INTERNAL_FAST :
+                                   use_psram ? LVGL_BUFFER_HEIGHT_PSRAM : LVGL_BUFFER_HEIGHT_INTERNAL;
     const size_t max_transfer_sz = BSP_LCD_H_RES * buffer_height * BSP_LCD_BITS_PER_PIXEL / 8;
     const bsp_display_config_t disp_config = {
         .max_transfer_sz = max_transfer_sz,
@@ -990,7 +1007,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
              CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH,
              tear_mode,
              requested_tear_mode,
-             (use_psram && !use_te_sync) ? "yes" : "no",
+             (!use_te_sync && (use_psram || internal_fast)) ? "yes" : "no",
              BSP_LCD_DMA_STAGING_ROWS);
 
     ESP_LOGD(TAG, "Add LCD screen");
@@ -1005,7 +1022,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
             .buffer_height = buffer_height,
             .use_psram = use_psram,
             .enable_ppa_accel = false,
-            .require_double_buffer = use_psram && !use_te_sync,
+            .require_double_buffer = !use_te_sync && (use_psram || internal_fast),
         },
         .tear_avoid_mode = tear_mode,
         .te_sync = use_te_sync
