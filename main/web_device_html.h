@@ -183,7 +183,7 @@ static const char lf_device_settings_html[] =
 "<p id=\"lf-log-status\" class=\"lf-log-status\" role=\"status\" aria-live=\"polite\">Choose Diagnostics to load a snapshot.</p>\n"
 "<p class=\"muted\">Audio hardware check: verifies that the onboard ES7210 ADC responds. It does not turn on the microphones or record audio.</p><button id=\"mic-check-btn\" type=\"button\" class=\"outline\">Test microphone controller</button><div id=\"mic-check-result\" class=\"status\" role=\"status\">Not tested.</div>\n"
 "<p class=\"muted\">Step 2: check MIC1 and MIC2 RMS levels and near-rail samples (absolute amplitude ≥ 32760) with 27 dB gain. Three seconds of local audio. No audio is saved or uploaded. Test once in a quiet room and once while speaking near the microphones.</p><button id=\"mic-pcm-start\" type=\"button\" class=\"outline\">Start 3-second audio test</button> <button id=\"mic-pcm-stop\" type=\"button\" class=\"outline\" disabled>Stop test</button><div id=\"mic-pcm-result\" class=\"status\" role=\"status\" style=\"white-space:pre-wrap\">Audio input not yet tested.</div>\n"
-"<pre id=\"diagnostics\">Not yet loaded.</pre></div>\n"
+"<pre id=\"diagnostics\" hidden>Not yet loaded.</pre></div>\n"
 "\n"
 "<div id=\"maintenance-database\" hidden>\n"
 "<div class=\"database-toolbar\"><button id=\"database-refresh\" type=\"button\" class=\"outline\">Refresh database</button><span id=\"database-status\" class=\"muted\" role=\"status\">Select Database to view tracks stored on this device.</span></div>\n"
