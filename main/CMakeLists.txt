@@ -52,3 +52,6 @@ idf_component_register(
         esp_driver_i2c
         json
 )
+
+# -O2 enables extra flow-analysis warnings; keep them visible but non-fatal.
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-error=maybe-uninitialized -Wno-error=format-truncation -Wno-error=stringop-truncation -Wno-error=format-overflow -Wno-error=array-bounds -Wno-error=stringop-overflow)

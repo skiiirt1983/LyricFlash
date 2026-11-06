@@ -622,9 +622,9 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid settings JSON");
         return ESP_FAIL;
     }
-    int face, font_style, font_size, ring_mode, bg, fg, a, b, c, interval;
+    int face=0, font_style=0, font_size=0, ring_mode=0, bg=0, fg=0, a=0, b=0, c=0, interval=0;
     int element[11]={0};
-    uint8_t show_date, basic_weather, weather_enabled;
+    uint8_t show_date=0, basic_weather=0, weather_enabled=0;
     const cJSON *city = cJSON_GetObjectItemCaseSensitive(root, "city");
     bool valid =
         number_in_range(root, "clock_face", 0, 5, &face) &&
