@@ -275,17 +275,25 @@ lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
     lv_obj_set_width(time,346);
     lv_label_set_long_mode(time,LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(time,time_font(p),0);
-    /* 0% is now genuinely small (~18px), 200% roughly 96px. The
-       preexisting 60% default stays around the previous visual size. */
+    /* 0% is genuinely small, 200% large. 0.8.102: pick a natively generated
+       font size instead of a scale transform. A scaled label is re-rendered
+       into an offscreen ARGB layer for every strip it touches, every frame,
+       which made the Clock page and pager swipes crawl. */
+    int32_t zoom=256;
     if(p->basic_font_style==0 || p->basic_font_style==4 || p->basic_font_style>=24){
-        const int32_t zoom=96+(int32_t)p->basic_font_size*416/200;
-        lv_obj_set_style_transform_scale(time,zoom,0);
-        lv_obj_set_style_transform_pivot_x(time,173,0);
-        lv_obj_set_style_transform_pivot_y(time,28,0);
+        zoom=96+(int32_t)p->basic_font_size*416/200;
+        const int base_px=p->basic_font_style>=24?72:48;
+        const uint8_t family=p->basic_font_style>=24?p->basic_font_style:31;
+        const lv_font_t *native=lf_clock_custom_font_px(family,(int)(base_px*zoom/256));
+        if(native)lv_obj_set_style_text_font(time,native,0);
+        int32_t width=346*zoom/256;
+        if(width<346)width=346;
+        if(width>466)width=466;
+        lv_obj_set_width(time,width);
     }
     const int letter_spacing[5]={0,3,1,6,2};
     lv_obj_set_style_text_letter_space(time,
-         letter_spacing[p->basic_font_style<5?p->basic_font_style:0],0);
+         letter_spacing[p->basic_font_style<5?p->basic_font_style:0]*zoom/256,0);
     lv_obj_set_style_text_color(time,lv_color_hex(p->face_time_color[5]),0);
     lv_obj_set_style_text_align(time,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_align(time,LV_ALIGN_CENTER,p->basic_time_x,p->basic_time_y);

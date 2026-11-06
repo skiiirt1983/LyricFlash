@@ -37,6 +37,9 @@ FONT_SOURCES = (
 # A clock does not need the entire Unicode corpus. Keep OTA dual-slot safe.
 GLYPHS = "0123456789: AMP-"
 SIZE = 72
+# Extra native sizes so the clock never needs LVGL transform_scale layers
+# (a scaled widget is re-rendered into an offscreen ARGB buffer every frame).
+EXTRA_SIZES = (40, 56, 96, 120)
 BPP = 2
 
 
@@ -78,7 +81,19 @@ def main() -> None:
         subprocess.run(cmd, check=True, cwd=ROOT)
         if not output.exists() or output.stat().st_size < 1000:
             raise RuntimeError("No usable embedded LVGL font output: " + family)
-        manifest.append({"family": family, "source": source,
+        extra = []
+        for px in EXTRA_SIZES:
+            sized_name = f"{font_name}_{px}"
+            sized_out = OUTPUT / (sized_name + ".c")
+            sized_cmd = [c for c in cmd]
+            sized_cmd[sized_cmd.index("--size") + 1] = str(px)
+            sized_cmd[sized_cmd.index("--lv-font-name") + 1] = sized_name
+            sized_cmd[sized_cmd.index("-o") + 1] = str(sized_out)
+            subprocess.run(sized_cmd, check=True, cwd=ROOT)
+            if not sized_out.exists() or sized_out.stat().st_size < 1000:
+                raise RuntimeError(f"No usable {px}px LVGL font output: {family}")
+            extra.append(px)
+        manifest.append({"family": family, "source": source, "extra_sizes": extra,
                          "sha256": sha, "size_bytes": output.stat().st_size,
                          "lvgl_name": font_name,
                          "license": "https://github.com/google/fonts/blob/main/" +

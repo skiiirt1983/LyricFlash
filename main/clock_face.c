@@ -123,14 +123,10 @@ static const lv_font_t *basic_element_font(uint8_t size)
 }
 static void basic_scale_element(lv_obj_t *item,uint8_t size)
 {
-    if(!item)return;
-    /* 200% is up to ~78px; at 0% the 12px base stays readable. */
-    const int32_t zoom=size<=100?256:
-        256+((int32_t)size-100)*160/100;
-    lv_obj_update_layout(item); /* label autosizing before pivot calculation */
-    lv_obj_set_style_transform_scale(item,zoom,0);
-    lv_obj_set_style_transform_pivot_x(item,lv_obj_get_width(item)/2,0);
-    lv_obj_set_style_transform_pivot_y(item,20,0);
+    /* 0.8.102: no scale transform. Sizes above 100% use the largest native
+       font (basic_element_font) instead of an offscreen scaled layer that
+       was re-rendered on every frame. */
+    (void)item;(void)size;
 }
 static lv_obj_t *face_text(lv_obj_t *parent, const char *text, int x, int y,
                            const lv_font_t *font, uint32_t colour)

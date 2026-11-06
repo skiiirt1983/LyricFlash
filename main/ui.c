@@ -4031,7 +4031,7 @@ static void nav_transition_end(bool interrupted)
     atomic_fetch_add(&nav_transition_completed_count,1);
     atomic_store(&nav_transition_last_ms,(uint32_t)(now_ms()-nav_transition_started_ms));
 }
-static void nav_transition_tick(lv_timer_t *timer)
+__attribute__((unused)) static void nav_transition_tick(lv_timer_t *timer)
 {
     (void)timer;
     if(!nav_transition_active||!screen)return;
@@ -4080,6 +4080,13 @@ static void nav_transition_tick(lv_timer_t *timer)
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
 {
+    /* 0.8.102: instant screen change. The 12-strip reveal waited for a
+       rendered frame ACK per strip and read as 1-2 fps stutter. One full
+       redraw is faster and feels like a phone page switch. */
+    (void)direction;
+    if(screen)lv_obj_invalidate(screen);
+    return;
+#if 0
     if(!screen || !lv_display_get_default()){
         if(screen)lv_obj_invalidate(screen);
         return;
@@ -4107,6 +4114,7 @@ static void nav_transition_begin(lv_screen_load_anim_t direction)
     lv_display_enable_invalidation(disp,true);
     nav_transition_timer=lv_timer_create(nav_transition_tick,LF_NAV_REVEAL_PERIOD_MS,NULL);
     if(!nav_transition_timer)nav_transition_end(true);
+#endif
 }
 /* Deferred scene construction, with all LVGL modifications on its owning task. */
 static void nav_drain(void *arg)

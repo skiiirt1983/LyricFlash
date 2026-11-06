@@ -99,7 +99,7 @@ void app_main(void)
        the original clock policy. */
     if(!lf_power_cpu_profile_start())
         ESP_LOGW(TAG,"CPU screen-off scaling unavailable; original clock policy");
-    /* 0.8.101: TE_SYNC forces LVGL FULL render mode on this QSPI panel, so
+    /* 0.8.102: TE_SYNC forces LVGL FULL render mode on this QSPI panel, so
        every second-hand step, waveform tick and pager frame re-rendered all
        466x466 pixels from PSRAM. The UI is built around partial invalidation
        (pager strips, clipped clock hands), so use partial mode with
