@@ -11,6 +11,13 @@ ui=(root/"main/ui.c").read_text()
 assert "#define BSP_LCD_DMA_STAGING_ROWS (32)" in bsp
 assert "#define BSP_LCD_DMA_SECONDARY_ROWS (16)" in bsp
 assert "#define BSP_LCD_DMA_FALLBACK_ROWS (8)" in bsp
+# 0.8.94 device reported a largest DMA-capable block of ~34.8 KB.
+# A double 32-row buffer needs ~59.6 KB, whereas double 16-row fits.
+panel_width=466
+largest_reported_dma_block=34816
+assert 32*panel_width*2*2 > largest_reported_dma_block
+assert 16*panel_width*2*2 <= largest_reported_dma_block
+assert bsp.index("max_rows=BSP_LCD_DMA_SECONDARY_ROWS;") < bsp.index("max_rows=BSP_LCD_DMA_FALLBACK_ROWS;")
 assert "#define LVGL_BUFFER_HEIGHT_PSRAM (64)" in bsp
 assert "uint16_t *new_buffer = heap_caps_malloc" in bsp
 assert bsp.index("if(!new_buffer)return false;") < bsp.index("free(ctx->rotation_buffer);",bsp.index("static bool bsp_rotation_panel_ensure_buffer"))
