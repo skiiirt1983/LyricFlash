@@ -30,6 +30,7 @@ assert "pager_final_frame_acks" in h and "pager_final_frame_repaint_requests" in
 for name in ("pager_final_frame_acks","pager_final_frame_repaint_requests"):
     assert f'"{name}"' in net
 assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in ui
-assert "if(settled_move && primary_pager_pages[index])" in ui
+assert "if(settled_move && !frame_presented && primary_pager_pages[index])" in ui
+assert "pager_acknowledged_settles_no_full_repaint" in ui
 assert "lf_network_ota_in_progress()" in (root/"main/main.c").read_text()
 print("PASS: pager destination refresh acknowledgement, one-shot fallback, native scroll and recovery")

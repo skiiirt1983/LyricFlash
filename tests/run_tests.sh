@@ -28,6 +28,7 @@ python3 tests/test_frame_latched_navigation_contract.py
 python3 tests/test_clock_back_origin_contract.py
 python3 tests/test_pager_midpoint_render_contract.py
 python3 tests/test_pager_present_ack_contract.py
+python3 tests/test_acknowledged_repaint_skip_contract.py
 python3 tests/test_recognition_stall_recovery_contract.py
 python3 tests/test_ui_freeze_failsafe_contract.py
 python3 tests/test_lyrics_layout_contract.py
