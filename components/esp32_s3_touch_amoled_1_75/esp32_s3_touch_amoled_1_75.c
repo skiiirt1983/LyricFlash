@@ -255,7 +255,7 @@ static esp_err_t bsp_rotation_panel_draw_staged(bsp_rotation_panel_t *ctx, int x
     //     full-frame rotated buffer is far too large for internal heap).
     const bool src_in_psram = src != NULL && esp_ptr_external_ram(src);
     const bool use_chunked =
-        (ctx->te_sync_mode || src_in_psram) && height > BSP_LCD_DMA_STAGING_ROWS;
+        (ctx->te_sync_mode || src_in_psram) && height > BSP_LCD_DMA_FALLBACK_ROWS;
     if (use_chunked)
     {
         const int64_t stage_started_us=esp_timer_get_time();
