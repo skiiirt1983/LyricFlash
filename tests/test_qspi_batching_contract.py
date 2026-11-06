@@ -14,7 +14,7 @@ assert "#define LVGL_BUFFER_HEIGHT_PSRAM (32)" in bsp
 assert "uint16_t *new_buffer = heap_caps_malloc" in bsp
 assert bsp.index("if(!new_buffer)return false;") < bsp.index("free(ctx->rotation_buffer);",bsp.index("static bool bsp_rotation_panel_ensure_buffer"))
 assert "max_rows=BSP_LCD_DMA_FALLBACK_ROWS;" in bsp
-assert "if(!bsp_rotation_panel_ensure_buffer(ctx, max_pixels*2))" in bsp
+assert "if(!bsp_rotation_panel_ensure_buffer(ctx,max_pixels*2))" in bsp
 assert "atomic_fetch_add(&stage_chunk_submissions,1);" in bsp
 assert "bsp_display_transfer_stats(bsp_display_transfer_stats_t *out)" in bsp
 assert "bsp_display_transfer_stats_t" in header
@@ -24,4 +24,4 @@ assert "CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1" in cfg
 assert ".tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE" in (root/"main/main.c").read_text()
 assert "LF_PAGER_STALL_GUARD_MS 1600U" in ui
 assert "lf_network_set_idle(true);" in ui and "lf_network_set_idle(false);" in ui
-print("PASS: 0.8.86 24-row LVGL / 8-row DMA batching, 4-row fallback, unchanged safety/power")
+print("PASS: 0.8.99 isolated 32-row LVGL / 8-row DMA batching, 4-row fallback, unchanged safety/power")
