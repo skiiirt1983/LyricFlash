@@ -1,35 +1,33 @@
 #!/usr/bin/env python3
-"""0.8.94: never finish a swipe based only on the target coordinate."""
+"""0.8.95 regression: remove ineffective 0.8.94 destination-frame ACK gate."""
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 ui=(root/"main/ui.c").read_text()
-h=(root/"main/ui.h").read_text()
+header=(root/"main/ui.h").read_text()
 net=(root/"main/network.c").read_text()
-render=ui.split("static void display_render_event(lv_event_t *e)\n{",1)[1].split("static void display_render_ready_event",1)[0]
-refresh=ui.split("static void display_refresh_ready_event(lv_event_t *e)\n{",1)[1].split("static void invalidate_full_screen",1)[0]
-frame=ui.split("static void primary_pager_arrived(uint64_t current)\n{",1)[1].split("static void primary_pager_start_snap",1)[0]
+frame=ui.split("static void primary_pager_snap_frame(lv_timer_t *timer)\n{",1)[1].split("static void primary_pager_start_snap",1)[0]
 watchdog=ui.split("static void primary_pager_watchdog(uint64_t current)\n{",1)[1].split("static void primary_pager_scroll_event",1)[0]
 event=ui.split("static void primary_pager_scroll_event(lv_event_t *e)\n{",1)[1].split("static lv_obj_t *primary_page_create",1)[0]
-assert "pager_render_scroll_x=(primary_pager && primary_pager_snapping) ?" in render
-assert "pager_render_scroll_x=abs" not in refresh
-assert "pager_final_frame_ready=true;" in refresh
-assert "abs(pager_render_scroll_x-primary_pager_snap_to*466)<=2" in refresh
-assert "pager_final_frame_acks,1" in refresh
 assert "primary_pager_commit(primary_pager_snap_to);" in frame
-assert "if(pager_final_frame_ready){" in frame
-assert "if(!primary_pager_frame_pending && current-pager_arrived_at_ms>=240U){" in frame
-assert "lv_obj_invalidate(primary_pager_pages[primary_pager_snap_to]);" in frame
-assert "pager_final_frame_repaint_requests,1" in frame
-assert "primary_pager_arrived(current);" in watchdog
-assert "current-primary_pager_snap_started_ms>LF_PAGER_STALL_GUARD_MS" in watchdog
-assert "primary_pager_arrived(now_ms());" in event
-assert "primary_pager_commit(primary_pager_snap_to);" not in event
-assert "pager_final_frame_ready=false;" in ui
-assert "pager_arrived_at_ms=0;" in ui
-assert "pager_final_frame_acks" in h and "pager_final_frame_repaint_requests" in h
-for name in ("pager_final_frame_acks","pager_final_frame_repaint_requests"):
-    assert f'"{name}"' in net
+assert "if(!primary_pager_frame_pending)" in watchdog
+assert "primary_pager_commit(primary_pager_snap_to);" in watchdog
+assert "primary_pager_commit(primary_pager_snap_to);" in event
+assert "primary_pager_frame_pending=false;" in ui
 assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in ui
-assert "if(settled_move && primary_pager_pages[index])" in ui
-assert "lf_network_ota_in_progress()" in (root/"main/main.c").read_text()
-print("PASS: pager destination refresh acknowledgement, one-shot fallback, native scroll and recovery")
+assert "LF_PAGER_STALL_GUARD_MS 1600U" in ui
+assert "lv_obj_invalidate(primary_pager_pages[index]);" in ui
+for name in ("pager_final_frame_acks","pager_final_frame_repaint_requests","pager_final_frame_ready","pager_render_scroll_x","pager_arrived_at_ms","primary_pager_arrived"):
+    assert name not in ui,name
+    assert name not in header,name
+    assert name not in net,name
+# Retain 0.8.93 on-device improved draw culling.
+basic=(root/"main/basic_clock.c").read_text()
+clock=(root/"main/clock_face.c").read_text()
+assert "const lv_area_t *clip=&layer->_clip_area;" in basic
+assert "const lv_area_t *clip=&layer->_clip_area;" in clock
+# 0.8.94 Copy Log fix is retained, not reverted with the pager.
+web=(root/"main/web_device_html.h").read_text()
+assert "function lfSelectFullLog()" in web
+assert "function lfCopyFallback(text)" in web
+assert "left:-9999px" not in web
+print("PASS: 0.8.94 pager ACK completely reverted; 0.8.93 clock + WebUI copy correction preserved")
