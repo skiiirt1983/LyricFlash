@@ -33,12 +33,13 @@
 
 static const char *TAG = "ESP32-S3-Touch-AMOLED-1.75";
 
-#define BSP_LCD_DMA_STAGING_ROWS (32)
-#define BSP_LCD_DMA_SECONDARY_ROWS (16)
-#define BSP_LCD_DMA_FALLBACK_ROWS (8)
-/* Throughput experiment: 32-row DMA staging reduces the QSPI transaction count;
- * 16-row secondary tier fits observed internal DMA fragmentation; 8-row
- * fallback keeps the proven small allocation viable. */
+#define BSP_LCD_DMA_STAGING_ROWS (8)
+#define BSP_LCD_DMA_FALLBACK_ROWS (4)
+/* Recovery: 0.8.96 used 32-row ping-pong staging (~60 KB internal DMA RAM)
+ * and left only ~16 KB as the largest internal DMA allocation. That can starve
+ * TLS certificate processing and settings JSON allocation. Keep the 64-row
+ * LVGL PSRAM draw buffer, but reserve internal DMA RAM for networking.
+ * 8-row double buffering is ~15 KB and falls back to ~7.5 KB (4 rows). */
 static i2c_master_bus_handle_t i2c_handle = NULL; // I2C Handle
 static bool i2c_initialized = false;
 static esp_io_expander_handle_t io_expander = NULL; // IO expander tca9554 handle
@@ -262,19 +263,11 @@ static esp_err_t bsp_rotation_panel_draw_staged(bsp_rotation_panel_t *ctx, int x
         int max_rows=BSP_LCD_DMA_STAGING_ROWS;
         size_t max_pixels=(size_t)width*max_rows;
         if(!bsp_rotation_panel_ensure_buffer(ctx,max_pixels*2)){
-            /* At boot the largest contiguous internal DMA block can be
-             * ~35 KB. A 32-row ping-pong allocation needs ~60 KB on the
-             * 466px panel: try ~30 KB / 16 rows before falling all the
-             * way back to the previous 8-row geometry. */
-            max_rows=BSP_LCD_DMA_SECONDARY_ROWS;
+            max_rows=BSP_LCD_DMA_FALLBACK_ROWS;
             max_pixels=(size_t)width*max_rows;
             if(!bsp_rotation_panel_ensure_buffer(ctx,max_pixels*2)){
-                max_rows=BSP_LCD_DMA_FALLBACK_ROWS;
-                max_pixels=(size_t)width*max_rows;
-                if(!bsp_rotation_panel_ensure_buffer(ctx,max_pixels*2)){
-                    ESP_LOGE(TAG,"Unable to allocate DMA staging for %d rows",max_rows);
-                    return ESP_ERR_NO_MEM;
-                }
+                ESP_LOGE(TAG,"Unable to allocate DMA staging for %d rows",max_rows);
+                return ESP_ERR_NO_MEM;
             }
         }
         atomic_store(&stage_chunk_rows,(unsigned)max_rows);
