@@ -46,11 +46,11 @@ CONFIG_LV_DEF_REFR_PERIOD=16
 # LVGL 9.5 style lookups on complex static page trees; add only 8 bytes/object.
 # CONFIG_LV_OBJ_STYLE_CACHE is not set
 
-# 0.8.106 performance profile
+# 0.8.107 performance profile
 # Build with -O2 instead of the default -Og debug optimization (LVGL software
 # rendering is several times faster).
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
-# 0.8.106: default 32 KB data cache. The 64 KB cache took 32 KB of internal
+# 0.8.107: default 32 KB data cache. The 64 KB cache took 32 KB of internal
 # SRAM and, with internal LVGL buffers, left ~28 KB free: song ID (14 KB task
 # stack, I2S DMA, TLS) could no longer start.
 # TLS buffers in PSRAM: GitHub OTA download failed with SSL_ALLOC_FAILED
@@ -62,5 +62,7 @@ CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=1
 CONFIG_LV_USE_SYSMON=y
 CONFIG_LV_USE_PERF_MONITOR=y
 CONFIG_LV_PERF_MONITOR_ALIGN_BOTTOM_MID=y
-# 0.8.106: smaller peak TLS memory for the on-device GitHub OTA download.
+# 0.8.107: smaller peak TLS memory for the on-device GitHub OTA download.
 CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+# 0.8.107: app_main builds the whole LVGL UI; give it headroom.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192

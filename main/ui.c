@@ -3654,7 +3654,7 @@ static void on_tick_body(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
-    /* 0.8.106: LVGL stamps every input-device press itself. Use it so a
+    /* 0.8.107: LVGL stamps every input-device press itself. Use it so a
        touch that no widget callback or 50 ms pointer poll caught (common
        during slow frames) still counts as activity; the screen timeout was
        blanking the display while it was in use. */
@@ -4119,7 +4119,7 @@ __attribute__((unused)) static void nav_transition_tick(lv_timer_t *timer)
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
 {
-    /* 0.8.106: instant screen change. The 12-strip reveal waited for a
+    /* 0.8.107: instant screen change. The 12-strip reveal waited for a
        rendered frame ACK per strip and read as 1-2 fps stutter. One full
        redraw is faster and feels like a phone page switch. */
     (void)direction;
@@ -4242,7 +4242,7 @@ static void build_weather_details(void) { nav_schedule(build_weather_details_now
 static void build_weather_location(void) { nav_schedule(build_weather_location_now); }
 
 
-/* ---- 0.8.106 boot benchmark ------------------------------------------- */
+/* ---- 0.8.107 boot benchmark ------------------------------------------- */
 static lf_ui_bench_t ui_bench;
 void lf_ui_bench(lf_ui_bench_t *out)
 {
@@ -4297,6 +4297,13 @@ static void ui_boot_benchmark(void)
              (unsigned long)ui_bench.mid_frame_ms[0],(unsigned long)ui_bench.mid_frame_ms[1]);
 }
 
+static void ui_boot_benchmark_timer(lv_timer_t *timer)
+{
+    (void)timer;
+    if(asleep||!screen)return;
+    ui_boot_benchmark();
+    if(screen)lv_obj_invalidate(screen);
+}
 bool lf_ui_start(lf_settings_t *s)
 {
     prefs = s;
@@ -4333,8 +4340,11 @@ bool lf_ui_start(lf_settings_t *s)
         }
         touch=lv_indev_get_next(touch);
     }
-    ui_boot_benchmark();
-    invalidate_full_screen();
+    /* 0.8.107: run the benchmark once on the LVGL task (large stack), never
+       from app_main: a full lv_refr_now() overflowed app_main's stack in
+       0.8.107, crashed at boot and the OTA rollback restored 0.8.103. */
+    lv_timer_t *bench_timer=lv_timer_create(ui_boot_benchmark_timer,1500,NULL);
+    if(bench_timer)lv_timer_set_repeat_count(bench_timer,1);
     lv_timer_create(on_tick, 50, NULL);
     /* 30 Hz sweep: visually smooth, half the redraw load of 60 Hz. */
     clock_sweep_timer=lv_timer_create(on_clock_sweep, 33, NULL);
