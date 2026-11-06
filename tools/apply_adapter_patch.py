@@ -1,67 +1,49 @@
 #!/usr/bin/env python3
-"""Apply the bounded GPIO-TE completion guard to esp_lvgl_adapter 0.6.0.
-
-CI first resolves managed components, applies this guarded patch, then rebuilds.
-"""
+"""Apply a bounded GPIO-TE TX-done wait to esp_lvgl_adapter 0.6.0."""
 from pathlib import Path
+import re
+
 root = Path(__file__).resolve().parents[1]
 adapter = root / "managed_components/espressif__esp_lvgl_adapter/src/display/bridge/v9/lvgl_bridge_v9.c"
 if not adapter.is_file():
     raise SystemExit(f"ERROR: expected esp_lvgl_adapter source not found: {adapter}")
+
 source = adapter.read_text(encoding="utf-8")
-helper_marker = "LyricFlash local patch: %s TX-done notify timed out"
-helper_find = """    return row_bytes;
-}
+marker = "LyricFlash bounded TE TX-done wait (200ms)"
+if marker in source:
+    print("PASS: bounded GPIO-TE TX-done wait already applied")
+    raise SystemExit(0)
 
-/**
- * @brief Default flush (single buffer, no tear protection)
- */
-"""
-helper_replace = """    return row_bytes;
-}
+signature = "static void display_bridge_v9_flush_gpio_te"
+first = source.find(signature)
+if first < 0:
+    raise SystemExit("ERROR: GPIO-TE flush function not found")
+start = source.find(signature, first + len(signature))
+if start < 0:
+    raise SystemExit("ERROR: GPIO-TE flush function definition not found")
+end = source.find("static void display_bridge_v9_flush_double_full", start)
+if end < 0:
+    raise SystemExit("ERROR: end of GPIO-TE flush function not found")
 
-static bool display_bridge_v9_wait_tx_done(esp_lv_adapter_display_bridge_v9_t *impl,
-                                           const char *context)
-{
-    const TickType_t timeout = pdMS_TO_TICKS(200);
-    if (ulTaskNotifyTake(pdTRUE, timeout) != 0) {
-        return true;
+function = source[start:end]
+pattern = re.compile(
+    r"/\* Wait for transmission to complete \*/\s*"
+    r"ulTaskNotifyTake\(pdTRUE,\s*portMAX_DELAY\);\s*"
+    r"(?:if\s*\(impl->cfg.te_ctx\)\s*\{\s*"
+    r"esp_lv_adapter_te_sync_record_tx_done\(impl->cfg.te_ctx\);\s*\}\s*)?"
+    r"display_manager_flush_ready\(disp\);"
+)
+replacement = """/* LyricFlash bounded TE TX-done wait (200ms). */
+    if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(200)) == 0) {
+        ESP_LOGW(TAG, "GPIO TE flush TX-done notify timed out (200ms) -- releasing LVGL flush");
     }
-    ESP_LOGW(TAG, "LyricFlash local patch: %s TX-done notify timed out (%ums) -- releasing LVGL flush",
-             context ? context : "display", (unsigned)pdTICKS_TO_MS(timeout));
-    if (impl && impl->cfg.te_ctx) {
-        esp_lv_adapter_te_sync_record_tx_done(impl->cfg.te_ctx);
-    }
-    return false;
-}
-
-/**
- * @brief Default flush (single buffer, no tear protection)
- */
-"""
-if helper_marker not in source:
-    if helper_find not in source:
-        raise SystemExit("ERROR: adapter helper insertion point not found; refusing an unverified patch")
-    source = source.replace(helper_find, helper_replace, 1)
-gpio_marker = 'display_bridge_v9_wait_tx_done(impl, "GPIO TE flush")'
-gpio_find = """    /* Wait for transmission to complete */
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     if (impl->cfg.te_ctx) {
         esp_lv_adapter_te_sync_record_tx_done(impl->cfg.te_ctx);
     }
-    display_manager_flush_ready(disp);
-"""
-gpio_replace = """    /* Bound the panel-I/O completion wait so a missed notification cannot
-     * hold the LVGL worker and its mutex indefinitely. */
-    const bool tx_done = display_bridge_v9_wait_tx_done(impl, "GPIO TE flush");
-    if (tx_done && impl->cfg.te_ctx) {
-        esp_lv_adapter_te_sync_record_tx_done(impl->cfg.te_ctx);
-    }
-    display_manager_flush_ready(disp);
-"""
-if gpio_marker not in source:
-    if gpio_find not in source:
-        raise SystemExit("ERROR: adapter GPIO-TE wait block not found; refusing an unverified patch")
-    source = source.replace(gpio_find, gpio_replace, 1)
+    display_manager_flush_ready(disp);"""
+function, count = pattern.subn(replacement, function, count=1)
+if count != 1:
+    raise SystemExit("ERROR: expected exactly one GPIO-TE infinite TX-done wait; refusing an unverified patch")
+source = source[:start] + function + source[end:]
 adapter.write_text(source, encoding="utf-8")
-print("PASS: esp_lvgl_adapter GPIO-TE TX-done wait bounded to 200 ms")
+print("PASS: GPIO-TE TX-done wait bounded to 200 ms; TE state recorded on completion/timeout")

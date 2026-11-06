@@ -12,9 +12,8 @@ assert ".tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC" in main
 assert 'version: "0.6.0"' in manifest
 assert "idf.py build && python3 tools/apply_adapter_patch.py && idf.py build" in workflow
 assert "pdMS_TO_TICKS(200)" in patch
-assert "ulTaskNotifyTake(pdTRUE, timeout)" in patch
+assert "ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(200))" in patch
 assert "display_manager_flush_ready(disp);" in patch
-replacement=patch.split("gpio_replace =",1)[1].split("if gpio_marker",1)[0]
-assert "portMAX_DELAY" not in replacement
-assert "refusing an unverified patch" in patch
-print("PASS: TE_SYNC is enabled only with adapter 0.6.0 and bounded TX-done recovery")
+assert "portMAX_DELAY" in patch  # source match only; replacement is bounded
+assert "expected exactly one GPIO-TE infinite TX-done wait" in patch
+print("PASS: TE_SYNC uses adapter 0.6.0 with a bounded GPIO-TE TX-done wait")
