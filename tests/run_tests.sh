@@ -25,6 +25,7 @@ python3 tests/test_waveform_amplitude_contract.py
 python3 tests/test_ui_render_budget_contract.py
 python3 tests/test_frame_latched_navigation_contract.py
 python3 tests/test_clock_back_origin_contract.py
+python3 tests/test_pager_midpoint_render_contract.py
 python3 tests/test_recognition_stall_recovery_contract.py
 python3 tests/test_ui_freeze_failsafe_contract.py
 python3 tests/test_lyrics_layout_contract.py
