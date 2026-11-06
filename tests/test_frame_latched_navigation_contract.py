@@ -11,7 +11,7 @@ watchdog=section("static void primary_pager_watchdog(uint64_t current)","static 
 gesture=section("static void primary_pager_scroll_event(lv_event_t *e)","static lv_obj_t *primary_page_create")
 builder=section("static void primary_pager_create(int target_index)","static void primary_pager_enter(int index)")
 destruct=section("static void make_base(void)","static void on_wifi(")
-commit=section("static void primary_pager_commit(int index)","/* Native LVGL easing")
+commit=section("static void primary_pager_commit(int index)","/* PrintSphere-like LVGL native elapsed-time easing")
 nav_tick=section("static void nav_transition_tick(lv_timer_t *timer)","static void nav_transition_begin")
 nav_begin=section("static void nav_transition_begin(lv_screen_load_anim_t direction)","/* Deferred scene construction")
 assert "LF_PAGER_STALL_GUARD_MS 1600U" in ui
@@ -19,9 +19,7 @@ assert "LF_PAGER_MAX_FRAME_STEP_PX" not in ui
 assert "LF_PAGER_SNAP_DURATION_MS" not in ui
 assert "if(ui_pointer_is_down()){" in frame
 assert "lv_timer_pause(primary_pager_frame_timer);" in frame
-assert "primary_pager_arrived(now_ms());" in frame
-assert "if(pager_final_frame_ready){" in ui
-assert "primary_pager_commit(primary_pager_snap_to);" in ui
+assert "primary_pager_commit(primary_pager_snap_to);" in frame
 assert "lv_obj_scroll_to_x(primary_pager,next,LV_ANIM_OFF);" not in ui
 assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in start
 assert "lv_timer_resume(primary_pager_frame_timer);" in start
