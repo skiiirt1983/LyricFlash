@@ -446,7 +446,7 @@ require('lv_snapshot_take(' not in ui and
 
 # Finger-release repaint protects the active pager page from black frames.
 require('const bool settled_move=primary_pager_snapping || pager_scrolling ||' in commit and
-        'lv_obj_invalidate(primary_pager_pages[0]);' in commit and
+        'lv_obj_invalidate(primary_pager_pages[index]);' in commit and
         'lv_event_get_target(e)!=primary_pager' in pager_impl and
         'primary_pager_start_snap(target);' not in pager_impl and
         'primary_pager_start_snap(target);' in watchdog,

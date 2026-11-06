@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""0.8.91: cross-page center draw timing and safe skip of redundant settle repaint."""
+"""0.8.91: cross-page center draw timing and safe restored Home/Settings settle repaint."""
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 ui=(root/"main/ui.c").read_text()
 header=(root/"main/ui.h").read_text()
 net=(root/"main/network.c").read_text()
 commit=ui.split("static void primary_pager_commit(int index)",1)[1].split("/* PrintSphere-like",1)[0]
-assert "if(settled_move && index==0 && primary_pager_pages[0])" in commit
-assert "lv_obj_invalidate(primary_pager_pages[0]);" in commit
-assert "lv_obj_invalidate(primary_pager_pages[index]);" not in commit
+assert "if(settled_move && primary_pager_pages[index])" in commit
+assert "lv_obj_invalidate(primary_pager_pages[index]);" in commit
+assert "if(settled_move && index==0 && primary_pager_pages[0])" not in commit
 assert "lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);" in commit
 assert "if(!settled_move)lv_obj_invalidate(clock_scene);" in commit
 assert "lf_clock_update();" in commit

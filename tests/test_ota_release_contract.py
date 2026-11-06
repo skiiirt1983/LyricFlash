@@ -56,9 +56,10 @@ active_version=(root / "main/version.h").read_text()
 # The experimental private builds have separate ESP32-S3 release gates.
 # A successful compile does not prove hardware operation or catalog publication.
 assert any(f'"{ver}"' in active_version for ver in
-           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha","0.8.67-alpha","0.8.68-alpha","0.8.69-alpha","0.8.71-alpha","0.8.72-alpha","0.8.73-alpha","0.8.74-alpha","0.8.75-alpha","0.8.76-alpha","0.8.77-alpha","0.8.78-alpha","0.8.79-alpha","0.8.80-alpha","0.8.81-alpha","0.8.82-alpha","0.8.83-alpha","0.8.84-alpha","0.8.85-alpha","0.8.86-alpha","0.8.87-alpha","0.8.88-alpha","0.8.89-alpha","0.8.90-alpha","0.8.91-alpha")), "Unexpected alpha firmware version"
-if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.8.52","0.8.53","0.8.61","0.8.63","0.8.64","0.8.65","0.8.66","0.8.67","0.8.68","0.8.69","0.8.71","0.8.72","0.8.73","0.8.74","0.8.75","0.8.76","0.8.77","0.8.78","0.8.79","0.8.80","0.8.81","0.8.82","0.8.83","0.8.84","0.8.85","0.8.86","0.8.87","0.8.88","0.8.89","0.8.90","0.8.91")):
+           ("0.8.41-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha","0.8.67-alpha","0.8.68-alpha","0.8.69-alpha","0.8.71-alpha","0.8.72-alpha","0.8.73-alpha","0.8.74-alpha","0.8.75-alpha","0.8.76-alpha","0.8.77-alpha","0.8.78-alpha","0.8.79-alpha","0.8.80-alpha","0.8.81-alpha","0.8.82-alpha","0.8.83-alpha","0.8.84-alpha","0.8.85-alpha","0.8.86-alpha","0.8.87-alpha","0.8.88-alpha","0.8.89-alpha","0.8.90-alpha","0.8.91-alpha","0.8.92-alpha")), "Unexpected alpha firmware version"
+if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.8.52","0.8.53","0.8.61","0.8.63","0.8.64","0.8.65","0.8.66","0.8.67","0.8.68","0.8.69","0.8.71","0.8.72","0.8.73","0.8.74","0.8.75","0.8.76","0.8.77","0.8.78","0.8.79","0.8.80","0.8.81","0.8.82","0.8.83","0.8.84","0.8.85","0.8.86","0.8.87","0.8.88","0.8.89","0.8.90","0.8.91","0.8.92")):
     private_workflow=(root / ".github/workflows/firmware.yml").read_text()
+    is_92='"0.8.92-alpha"' in active_version
     is_91='"0.8.91-alpha"' in active_version
     is_90='"0.8.90-alpha"' in active_version
     is_89='"0.8.89-alpha"' in active_version
@@ -92,8 +93,9 @@ if any(f'"{v}-alpha"' in active_version for v in ("0.8.49","0.8.50","0.8.51","0.
     is_52='"0.8.52-alpha"' in active_version
     is_51='"0.8.51-alpha"' in active_version
     is_50='"0.8.50-alpha"' in active_version
-    version="0.8.91" if is_91 else "0.8.90" if is_90 else "0.8.89" if is_89 else "0.8.88" if is_88 else "0.8.87" if is_87 else "0.8.86" if is_86 else "0.8.85" if is_85 else "0.8.84" if is_84 else "0.8.83" if is_83 else "0.8.82" if is_82 else "0.8.81" if is_81 else "0.8.80" if is_80 else "0.8.79" if is_79 else "0.8.78" if is_78 else "0.8.77" if is_77 else "0.8.76" if is_76 else "0.8.75" if is_75 else "0.8.74" if is_74 else "0.8.73" if is_73 else "0.8.72" if is_72 else "0.8.71" if is_71 else "0.8.69" if is_69 else "0.8.68" if is_68 else "0.8.67" if is_67 else "0.8.66" if is_66 else "0.8.65" if is_65 else "0.8.64" if is_64 else "0.8.63" if is_63 else "0.8.61" if is_61 else "0.8.53" if is_53 else "0.8.52" if is_52 else "0.8.51" if is_51 else "0.8.50" if is_50 else "0.8.49"
-    expected_branch=("feature/private-0.8.91-pager-redraw-budget" if is_91
+    version="0.8.92" if is_92 else "0.8.91" if is_91 else "0.8.90" if is_90 else "0.8.89" if is_89 else "0.8.88" if is_88 else "0.8.87" if is_87 else "0.8.86" if is_86 else "0.8.85" if is_85 else "0.8.84" if is_84 else "0.8.83" if is_83 else "0.8.82" if is_82 else "0.8.81" if is_81 else "0.8.80" if is_80 else "0.8.79" if is_79 else "0.8.78" if is_78 else "0.8.77" if is_77 else "0.8.76" if is_76 else "0.8.75" if is_75 else "0.8.74" if is_74 else "0.8.73" if is_73 else "0.8.72" if is_72 else "0.8.71" if is_71 else "0.8.69" if is_69 else "0.8.68" if is_68 else "0.8.67" if is_67 else "0.8.66" if is_66 else "0.8.65" if is_65 else "0.8.64" if is_64 else "0.8.63" if is_63 else "0.8.61" if is_61 else "0.8.53" if is_53 else "0.8.52" if is_52 else "0.8.51" if is_51 else "0.8.50" if is_50 else "0.8.49"
+    expected_branch=("feature/private-0.8.92-diagnostic-log-viewer" if is_92
+                      else "feature/private-0.8.91-pager-redraw-budget" if is_91
                       else "feature/private-0.8.90-wake-recovery" if is_90
                       else "feature/private-0.8.89-native-pager-clock-back" if is_89
                       else "feature/private-0.8.88-clock-raster-repair" if is_88
