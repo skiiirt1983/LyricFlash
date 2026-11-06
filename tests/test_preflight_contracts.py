@@ -466,7 +466,7 @@ require('lv_event_get_scroll_anim(e)' in ui and
 # 0.8.30: physical-device regression with a 96-row rendering buffer.
 # Preserve the proven 24-row LVGL buffer and 1-slot queue; 0.8.88 restores
 # only with 8-row 0.8.86 DMA staging and disables LVGL style caching.
-require('LVGL_BUFFER_HEIGHT_PSRAM (24)' in bsp and
+require('LVGL_BUFFER_HEIGHT_PSRAM (32)' in bsp and
         'LVGL_BUFFER_HEIGHT_PSRAM (96)' not in bsp and
         'BSP_LCD_SPI_TRANSFER_ROWS' not in bsp and
         'BSP_LCD_H_RES * buffer_height * BSP_LCD_BITS_PER_PIXEL / 8' in bsp and

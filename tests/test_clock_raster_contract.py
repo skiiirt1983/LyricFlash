@@ -20,7 +20,7 @@ assert "if(hand_points[index][0].x==ends[0].x" in c
 assert "update_hand_if_moved(2,angle,164);" in c
 assert "sundial_shadow_points[1].x!=new_shadow[1].x" in c
 assert "# CONFIG_LV_OBJ_STYLE_CACHE is not set" in cfg
-assert "#define LVGL_BUFFER_HEIGHT_PSRAM (24)" in bsp
+assert "#define LVGL_BUFFER_HEIGHT_PSRAM (32)" in bsp
 assert "#define BSP_LCD_DMA_STAGING_ROWS (8)" in bsp
 assert "#define BSP_LCD_DMA_FALLBACK_ROWS (4)" in bsp
 assert "CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1" in cfg

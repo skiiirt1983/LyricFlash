@@ -10,7 +10,7 @@ cfg=(root/"sdkconfig.defaults").read_text()
 ui=(root/"main/ui.c").read_text()
 assert "#define BSP_LCD_DMA_STAGING_ROWS (8)" in bsp
 assert "#define BSP_LCD_DMA_FALLBACK_ROWS (4)" in bsp
-assert "#define LVGL_BUFFER_HEIGHT_PSRAM (24)" in bsp
+assert "#define LVGL_BUFFER_HEIGHT_PSRAM (32)" in bsp
 assert "uint16_t *new_buffer = heap_caps_malloc" in bsp
 assert bsp.index("if(!new_buffer)return false;") < bsp.index("free(ctx->rotation_buffer);",bsp.index("static bool bsp_rotation_panel_ensure_buffer"))
 assert "max_rows=BSP_LCD_DMA_FALLBACK_ROWS;" in bsp

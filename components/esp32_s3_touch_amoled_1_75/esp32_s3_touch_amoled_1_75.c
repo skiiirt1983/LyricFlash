@@ -771,7 +771,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // display_manager_pick_render_mode / display_manager_default_buffer_pixels).
 // These heights therefore only size max_transfer_sz and the partial-buffer
 // fallback path when tear mode ends up as NONE.
-#define LVGL_BUFFER_HEIGHT_PSRAM (24)
+#define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
 
 esp_err_t bsp_display_brightness_init(void)

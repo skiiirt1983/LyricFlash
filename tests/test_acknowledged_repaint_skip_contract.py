@@ -23,6 +23,6 @@ assert "pager_final_frame_acks" in head and "pager_final_frame_repaint_requests"
 assert "if(primary_pager_snapping && primary_pager && pager_render_scroll_x>=0" in ui
 assert "pager_final_frame_ready=true;" in ui
 assert "current-primary_pager_snap_started_ms>LF_PAGER_STALL_GUARD_MS" in ui
-assert "LVGL_BUFFER_HEIGHT_PSRAM (24)" in (root/"components/esp32_s3_touch_amoled_1_75/esp32_s3_touch_amoled_1_75.c").read_text()
+assert "LVGL_BUFFER_HEIGHT_PSRAM (32)" in (root/"components/esp32_s3_touch_amoled_1_75/esp32_s3_touch_amoled_1_75.c").read_text()
 assert "CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1" in (root/"sdkconfig.defaults").read_text()
 print("PASS: ACK-confirmed destinations omit second full repaint, unconfirmed still protected, tested DMA geometry unchanged")
