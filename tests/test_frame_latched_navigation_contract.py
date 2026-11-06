@@ -11,7 +11,7 @@ watchdog=section("static void primary_pager_watchdog(uint64_t current)","static 
 gesture=section("static void primary_pager_scroll_event(lv_event_t *e)","static lv_obj_t *primary_page_create")
 builder=section("static void primary_pager_create(int target_index)","static void primary_pager_enter(int index)")
 destruct=section("static void make_base(void)","static void on_wifi(")
-commit=section("static void primary_pager_commit(int index)","/* PrintSphere-like LVGL native elapsed-time easing")
+commit=section("static void primary_pager_commit(int index)","/* Native LVGL easing")
 nav_tick=section("static void nav_transition_tick(lv_timer_t *timer)","static void nav_transition_begin")
 nav_begin=section("static void nav_transition_begin(lv_screen_load_anim_t direction)","/* Deferred scene construction")
 assert "LF_PAGER_STALL_GUARD_MS 1600U" in ui

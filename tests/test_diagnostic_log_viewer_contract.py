@@ -25,6 +25,17 @@ assert "get('/api/diagnostics')" in html
 assert "navigator.clipboard.writeText(lfLastLog)" in html
 assert "document.execCommand('copy')" in html
 assert "manual.select();" in html
+assert 'id="lf-select-log"' in html
+assert "el('lf-select-log').onclick=lfSelectFullLog;" in html
+assert "function lfManualCopyAvailable(text){" in html
+assert "field.focus({preventScroll:true});" in html
+assert "field.blur();" in html and "field.remove();" in html
+assert "manual.hidden=true;" in html
+assert "manual.hidden=false;" in html
+assert "function lfCopyLog(){" in html
+assert "left:-9999px" not in html
+assert "manual.hidden=false;manual.focus();manual.select();" not in html
+assert "catch(()=>lfManualCopyAvailable(lfLastLog))" in html
 assert "window.isSecureContext" in html
 assert "if(!lfLastLog)" in html and "Refresh the log first" in html
 assert "if(mode==='diagnostics')el('diagnostics-btn').click();" in html
