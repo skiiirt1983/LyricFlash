@@ -773,13 +773,14 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // fallback path when tear mode ends up as NONE.
 #define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
-/* 0.8.105 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+/* 0.8.106 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
    DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
    strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
    Used only when tear mode is NONE and enough internal RAM remains for
    Wi-Fi/TLS; otherwise the 0.8.99 PSRAM + DMA-staging path is kept. */
 #define LVGL_BUFFER_HEIGHT_INTERNAL_FAST (24)
 #define LVGL_INTERNAL_FAST_HEADROOM_BYTES (110 * 1024)
+#define BSP_LVGL_INTERNAL_FAST_ENABLE 0
 
 static bsp_display_profile_t display_profile;
 void bsp_display_profile(bsp_display_profile_t *out)
@@ -1017,7 +1018,10 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         (size_t)BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT_INTERNAL_FAST * BSP_LCD_BITS_PER_PIXEL / 8;
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-    const bool internal_fast = !use_te_sync &&
+    /* 0.8.106: disabled. Hardware logs showed panel flush waits under 1 ms
+       (render, not transfer, is the bottleneck) while the 45 KB of internal
+       SRAM starved song ID. Keep LVGL strips in PSRAM with DMA staging. */
+    const bool internal_fast = BSP_LVGL_INTERNAL_FAST_ENABLE && !use_te_sync &&
         internal_largest >= fast_strip_bytes &&
         internal_free >= (2 * fast_strip_bytes) + LVGL_INTERNAL_FAST_HEADROOM_BYTES;
     const bool use_psram = psram_available && !internal_fast;

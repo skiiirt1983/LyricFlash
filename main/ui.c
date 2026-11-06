@@ -3651,7 +3651,7 @@ static void on_tick_body(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
-    /* 0.8.105: LVGL stamps every input-device press itself. Use it so a
+    /* 0.8.106: LVGL stamps every input-device press itself. Use it so a
        touch that no widget callback or 50 ms pointer poll caught (common
        during slow frames) still counts as activity; the screen timeout was
        blanking the display while it was in use. */
@@ -4116,7 +4116,7 @@ __attribute__((unused)) static void nav_transition_tick(lv_timer_t *timer)
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
 {
-    /* 0.8.105: instant screen change. The 12-strip reveal waited for a
+    /* 0.8.106: instant screen change. The 12-strip reveal waited for a
        rendered frame ACK per strip and read as 1-2 fps stutter. One full
        redraw is faster and feels like a phone page switch. */
     (void)direction;
@@ -4239,7 +4239,7 @@ static void build_weather_details(void) { nav_schedule(build_weather_details_now
 static void build_weather_location(void) { nav_schedule(build_weather_location_now); }
 
 
-/* ---- 0.8.105 boot benchmark ------------------------------------------- */
+/* ---- 0.8.106 boot benchmark ------------------------------------------- */
 static lf_ui_bench_t ui_bench;
 static atomic_uint render_cpu_mhz_min=UINT32_MAX;
 static atomic_uint render_cpu_mhz_last;
