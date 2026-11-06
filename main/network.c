@@ -136,6 +136,11 @@ uint32_t lf_network_radio_sleep_cycles(void)
 {
     return atomic_load(&wifi_radio_sleep_cycles);
 }
+/* Safe from watchdog task: never restart the CPU while OTA is flashing. */
+bool lf_network_ota_in_progress(void)
+{
+    return atomic_load(&ota_busy);
+}
 
 /* Scan completion runs on the ESP event task, UI reads on the LVGL task. */
 static portMUX_TYPE wifi_scan_mux = portMUX_INITIALIZER_UNLOCKED;

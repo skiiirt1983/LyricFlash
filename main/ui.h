@@ -44,6 +44,9 @@ typedef struct {
     uint32_t wake_count;
     uint32_t last_wake_frame_ready_ms;
     uint32_t last_wake_overlay_clear_ms;
+    bool screen_awake; /* screen state at last atomic snapshot */
+    bool wake_overlay_pending; /* current wake has not cleared input cover */
+    uint32_t last_wake_age_ms; /* ms since last wake, UINT32_MAX before first */
 uint32_t ui_tick_work_last_us;
 uint32_t ui_tick_work_max_us;
 uint32_t pager_frame_gap_last_ms;

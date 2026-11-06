@@ -37,3 +37,5 @@ void lf_network_set_idle(bool idle);
 /* Read-only power state and radio-off count for on-device diagnostics. */
 const char *lf_network_wifi_power_state(void);
 uint32_t lf_network_radio_sleep_cycles(void);
+/* Background flash operation guard for independent UI recovery monitor. */
+bool lf_network_ota_in_progress(void);

@@ -221,6 +221,9 @@ static atomic_uint wake_started_ms;
 static atomic_uint wake_frame_pending_ms;
 static atomic_uint wake_frame_ready_ms;
 static atomic_uint wake_overlay_clear_ms;
+/* Cross-task wake status: no LVGL locking needed for recovery monitoring. */
+static atomic_bool ui_screen_awake;
+static atomic_bool wake_overlay_pending;
 /* Allocation-free UI timing snapshots, readable without the LVGL lock. */
 static atomic_uint ui_tick_work_last_us;
 static atomic_uint ui_tick_work_max_us;
@@ -277,6 +280,10 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->wake_count=atomic_load(&wake_count);
     out->last_wake_frame_ready_ms=atomic_load(&wake_frame_ready_ms);
     out->last_wake_overlay_clear_ms=atomic_load(&wake_overlay_clear_ms);
+    out->screen_awake=atomic_load(&ui_screen_awake);
+    out->wake_overlay_pending=atomic_load(&wake_overlay_pending);
+    const uint32_t wake_at=atomic_load(&wake_started_ms);
+    out->last_wake_age_ms=wake_at?current-wake_at:UINT32_MAX;
     out->ui_tick_work_last_us=atomic_load(&ui_tick_work_last_us);
     out->ui_tick_work_max_us=atomic_load(&ui_tick_work_max_us);
     out->pager_frame_gap_last_ms=atomic_load(&pager_frame_gap_last_ms);
@@ -3399,6 +3406,7 @@ static void wake_finish_async(void *arg)
     lv_obj_t *cover=sleep_overlay;
     sleep_overlay=NULL;
     lv_obj_delete(cover);
+    atomic_store(&wake_overlay_pending,false);
     const uint32_t started=atomic_load(&wake_started_ms);
     if(started)atomic_store(&wake_overlay_clear_ms,
                             (uint32_t)now_ms()-started);
@@ -3426,8 +3434,10 @@ static void on_wake(lv_event_t *e)
     atomic_store(&wake_started_ms,current);
     atomic_store(&wake_frame_pending_ms,current);
     asleep=false;
-    lf_network_set_idle(false); /* Wake first; reconnect runs off the UI task. */
-    /* Restore full CPU performance before rendering the wake scene. */
+    atomic_store(&ui_screen_awake,true);
+    atomic_store(&wake_overlay_pending,true);
+    /* Prioritize the AMOLED and input task before creating the
+       asynchronous Wi-Fi restart worker after prolonged radio-off. */
     lf_power_set_screen_awake(true);
     activity();
     apply_brightness();
@@ -3442,6 +3452,9 @@ static void on_wake(lv_event_t *e)
         lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_TRANSP,LV_STATE_PRESSED);
         invalidate_full_screen();
     }
+    /* Driver reconnection is asynchronous. It cannot gate the first
+       visible wake frame, and on_tick retries after transient failures. */
+    lf_network_set_idle(false);
     touch_held=false;
     gesture_origin_valid=false;
     gesture_indev=NULL;
@@ -3478,6 +3491,8 @@ static void sleep_display(void)
     /* Preserve the current page, clock pointers and button tree. A single
        black touch-capture child handles wake without screen reconstruction. */
     asleep=true;
+    atomic_store(&ui_screen_awake,false);
+    atomic_store(&wake_overlay_pending,false);
     atomic_store(&screen_off_started_ms,(uint32_t)now_ms());
     touch_held=false;
     gesture_origin_valid=false;
@@ -4092,6 +4107,8 @@ bool lf_ui_start(lf_settings_t *s)
     prefs = s;
     activity();
     asleep = false;
+    atomic_store(&ui_screen_awake,true);
+    atomic_store(&wake_overlay_pending,false);
     if (esp_lv_adapter_lock(-1) != ESP_OK) {
         ESP_LOGE(TAG, "Cannot lock display");
         return false;
