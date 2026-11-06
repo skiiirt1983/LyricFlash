@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Apply the bounded GPIO-TE completion guard to esp_lvgl_adapter 0.6.0."""
+"""Apply the bounded GPIO-TE completion guard to esp_lvgl_adapter 0.6.0.
+
+CI first resolves managed components, applies this guarded patch, then rebuilds.
+"""
 from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 adapter = root / "managed_components/espressif__esp_lvgl_adapter/src/display/bridge/v9/lvgl_bridge_v9.c"
