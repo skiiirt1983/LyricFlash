@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/private-0.8.96-acked-page-repaint
+      - feature/private-0.8.96-render-throughput-64x32
     paths:
       - '.github/workflows/firmware.yml'
       - 'main/**'
