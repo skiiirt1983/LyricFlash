@@ -16,4 +16,4 @@ assert "CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1" in cfg
 assert "BSP_LCD_H_RES * buffer_height * BSP_LCD_BITS_PER_PIXEL / 8" in bsp
 main=(root/"main/main.c").read_text()
 assert ".tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC" in main
-print("PASS: 0.8.100 tests ONLY a 32-row PSRAM draw buffer; 0.8.95 internal DMA bounds intact")
+print("PASS: PASS: 0.8.100 TE_SYNC, 32-row QSPI transfer cap, 8-row DMA staging and 4-row fallback")

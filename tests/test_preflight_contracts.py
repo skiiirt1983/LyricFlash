@@ -298,8 +298,8 @@ require('lf_ui_display_stats_t' in read('main/ui.h') and
         "Thread-safe display metrics contract missing")
 
 # Hardware display recovery: local independently licensed BSP has PSRAM -> DMA
-# staging and a one-slot SPI transfer queue. TE wait is disabled here
-# to isolate the 0.8.16 second-flush deadlock.
+# staging and a one-slot SPI transfer queue. TE_SYNC uses adapter 0.6.0 fixes
+# plus a bounded GPIO-TE completion wait to prevent indefinite LVGL lockup.
 bsp=read('components/esp32_s3_touch_amoled_1_75/esp32_s3_touch_amoled_1_75.c')
 display_header=read('components/esp32_s3_touch_amoled_1_75/include/bsp/display.h')
 app_main=read('main/main.c')

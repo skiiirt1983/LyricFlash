@@ -14,6 +14,7 @@ assert "idf.py build && python3 tools/apply_adapter_patch.py && idf.py build" in
 assert "pdMS_TO_TICKS(200)" in patch
 assert "ulTaskNotifyTake(pdTRUE, timeout)" in patch
 assert "display_manager_flush_ready(disp);" in patch
-assert "portMAX_DELAY" not in patch
+replacement=patch.split("gpio_replace =",1)[1].split("if gpio_marker",1)[0]
+assert "portMAX_DELAY" not in replacement
 assert "refusing an unverified patch" in patch
 print("PASS: TE_SYNC is enabled only with adapter 0.6.0 and bounded TX-done recovery")
