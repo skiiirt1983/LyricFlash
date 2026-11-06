@@ -14,7 +14,7 @@ assert "#define LVGL_BUFFER_HEIGHT_PSRAM (64)" in bsp
 assert "uint16_t *new_buffer = heap_caps_malloc" in bsp
 assert bsp.index("if(!new_buffer)return false;") < bsp.index("free(ctx->rotation_buffer);",bsp.index("static bool bsp_rotation_panel_ensure_buffer"))
 assert "max_rows=BSP_LCD_DMA_FALLBACK_ROWS;" in bsp
-assert "if(!bsp_rotation_panel_ensure_buffer(ctx, max_pixels*2))" in bsp
+assert "if(!bsp_rotation_panel_ensure_buffer(ctx,max_pixels*2))" in bsp
 assert "atomic_fetch_add(&stage_chunk_submissions,1);" in bsp
 assert "bsp_display_transfer_stats(bsp_display_transfer_stats_t *out)" in bsp
 assert "bsp_display_transfer_stats_t" in header
