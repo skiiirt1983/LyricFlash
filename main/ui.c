@@ -3,6 +3,7 @@
 #include "esp_lv_adapter.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
 #include "esp_sleep.h"
 #include "driver/gpio.h"
 #include "power.h"
@@ -3405,7 +3406,9 @@ static void refresh_debug(void)
     if (!debug_text) return;
     lf_diag_snapshot_t d;
     lf_diag_snapshot(&d);
-    char output[1100], battery[64], signal[24];
+    char output[1400], battery[64], signal[24];
+    bsp_display_profile_t lcd={0};
+    bsp_display_profile(&lcd);
     if (d.battery_valid)
         snprintf(battery, sizeof battery, "%d%% %s%s",
                  d.battery.percentage,
@@ -3422,6 +3425,9 @@ static void refresh_debug(void)
              "Max UI tick gap: %lu ms\nBattery: %s\n"
              "Microphone: OFF (not enabled)\n"
              "OTA: %s\nOTA bytes: %lu/%lu\n"
+             "Internal RAM: %lu KB (largest %lu)\n"
+             "LCD buffers: %s %lu rows\n"
+             "LCD self-test: %lu KB/s, frame %lu ms\n"
              "Recent errors:\n%s\n%s\n%s",
              LF_VERSION, d.ip_address,
              d.wifi_connected ? d.wifi_ssid : "offline",
@@ -3433,6 +3439,12 @@ static void refresh_debug(void)
              lf_network_ota_result(),
              (unsigned long)lf_network_ota_received(),
              (unsigned long)lf_network_ota_total(),
+             (unsigned long)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)/1024),
+             (unsigned long)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)/1024),
+             lcd.lvgl_buffers_internal ? "internal" : "PSRAM",
+             (unsigned long)lcd.lvgl_buffer_rows,
+             (unsigned long)lcd.selftest_kbytes_per_s,
+             (unsigned long)(lcd.selftest_frame_us/1000),
              d.errors[0][0] ? d.errors[0] : "None recorded", d.errors[1], d.errors[2]);
     lv_label_set_text(debug_text, output);
 }
@@ -4080,7 +4092,7 @@ __attribute__((unused)) static void nav_transition_tick(lv_timer_t *timer)
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
 {
-    /* 0.8.102: instant screen change. The 12-strip reveal waited for a
+    /* 0.8.103: instant screen change. The 12-strip reveal waited for a
        rendered frame ACK per strip and read as 1-2 fps stutter. One full
        redraw is faster and feels like a phone page switch. */
     (void)direction;

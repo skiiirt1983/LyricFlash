@@ -773,13 +773,50 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // fallback path when tear mode ends up as NONE.
 #define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
-/* 0.8.102 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+/* 0.8.103 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
    DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
    strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
    Used only when tear mode is NONE and enough internal RAM remains for
    Wi-Fi/TLS; otherwise the 0.8.99 PSRAM + DMA-staging path is kept. */
 #define LVGL_BUFFER_HEIGHT_INTERNAL_FAST (24)
 #define LVGL_INTERNAL_FAST_HEADROOM_BYTES (110 * 1024)
+
+static bsp_display_profile_t display_profile;
+void bsp_display_profile(bsp_display_profile_t *out)
+{
+    if(out) *out = display_profile;
+}
+/* Send one full black frame in 24-row strips from internal DMA RAM and time
+   it end to end. The panel is still black at this point of boot. The final
+   brightness write is a polled command, so it returns only after every
+   queued pixel transaction has completed. */
+static void bsp_display_qspi_selftest(void)
+{
+    const int rows = 24;
+    const size_t bytes = (size_t)BSP_LCD_H_RES * rows * 2;
+    uint16_t *buf = heap_caps_calloc(1, bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    if (!buf) return;
+    const int64_t t0 = esp_timer_get_time();
+    for (int y = 0; y < BSP_LCD_V_RES; y += rows) {
+        const int h = (BSP_LCD_V_RES - y) < rows ? (BSP_LCD_V_RES - y) : rows;
+        if (esp_lcd_panel_draw_bitmap(panel_handle, 0, y, BSP_LCD_H_RES, y + h, buf) != ESP_OK) {
+            free(buf);
+            return;
+        }
+    }
+    uint32_t lcd_cmd = (0x02u << 24) | (0x51u << 8);
+    uint8_t param = 0;
+    esp_lcd_panel_io_tx_param(io_handle, lcd_cmd, &param, 1);
+    const int64_t dt = esp_timer_get_time() - t0;
+    free(buf);
+    if (dt <= 0) return;
+    const uint64_t frame_bytes = (uint64_t)BSP_LCD_H_RES * BSP_LCD_V_RES * 2;
+    display_profile.selftest_frame_us = (uint32_t)dt;
+    display_profile.selftest_kbytes_per_s = (uint32_t)(frame_bytes * 1000000ULL / 1024ULL / (uint64_t)dt);
+    ESP_LOGI(TAG, "QSPI self-test: full frame %u us, %u KB/s",
+             (unsigned)display_profile.selftest_frame_us,
+             (unsigned)display_profile.selftest_kbytes_per_s);
+}
 
 esp_err_t bsp_display_brightness_init(void)
 {
@@ -995,6 +1032,10 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
     };
 
     BSP_ERROR_CHECK_RETURN_NULL(bsp_display_new(&disp_config, &panel_handle, &io_handle));
+    display_profile.lvgl_buffers_internal = internal_fast;
+    display_profile.lvgl_buffer_rows = buffer_height;
+    display_profile.internal_free_at_init = (uint32_t)internal_free;
+    bsp_display_qspi_selftest();
     adapter_panel_handle = bsp_rotation_panel_wrap(panel_handle);
     rotation_panel.te_sync_mode = use_te_sync;
 

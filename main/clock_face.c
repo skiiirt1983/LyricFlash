@@ -123,7 +123,7 @@ static const lv_font_t *basic_element_font(uint8_t size)
 }
 static void basic_scale_element(lv_obj_t *item,uint8_t size)
 {
-    /* 0.8.102: no scale transform. Sizes above 100% use the largest native
+    /* 0.8.103: no scale transform. Sizes above 100% use the largest native
        font (basic_element_font) instead of an offscreen scaled layer that
        was re-rendered on every frame. */
     (void)item;(void)size;
@@ -150,6 +150,28 @@ static lv_obj_t *dial_line(lv_obj_t *parent, lv_point_precise_t *points, int wid
     lv_obj_set_style_line_rounded(o, true, 0);
     return o;
 }
+/* 0.8.103: an lv_line's box spans from its parent's origin to its furthest
+   point, so moving a clock hand used to invalidate a ~400x400 region (most of
+   the dial) 30 times per second. Keep each moving line's object tightly
+   around its two endpoints so only the pixels the hand covers are redrawn. */
+static void tight_line_set(lv_obj_t *line, const lv_point_precise_t *abs_pts,
+                           lv_point_precise_t *rel_store, int width)
+{
+    if(!line)return;
+    const int pad=width+2;
+    int32_t x0=(int32_t)abs_pts[0].x, y0=(int32_t)abs_pts[0].y;
+    int32_t x1=(int32_t)abs_pts[1].x, y1=(int32_t)abs_pts[1].y;
+    const int32_t minx=(x0<x1?x0:x1)-pad, miny=(y0<y1?y0:y1)-pad;
+    const int32_t maxx=(x0>x1?x0:x1)+pad, maxy=(y0>y1?y0:y1)+pad;
+    rel_store[0]=(lv_point_precise_t){x0-minx,y0-miny};
+    rel_store[1]=(lv_point_precise_t){x1-minx,y1-miny};
+    lv_obj_set_pos(line,minx,miny);
+    lv_obj_set_size(line,maxx-minx+1,maxy-miny+1);
+    lv_line_set_points(line,rel_store,2);
+}
+static lv_point_precise_t hand_rel_points[3][2];
+static int hand_widths[3];
+static lv_point_precise_t sundial_shadow_rel[2];
 static void polar(int r, float angle, lv_point_precise_t *point)
 {
     point->x = (int)(CC + cosf(angle) * r);
@@ -281,7 +303,7 @@ static void update_hand_if_moved(int index,float angle,int tip_radius)
        hand_points[index][1].y==ends[1].y)return;
     hand_points[index][0]=ends[0];
     hand_points[index][1]=ends[1];
-    lv_line_set_points(hands[index],hand_points[index],2);
+    tight_line_set(hands[index],hand_points[index],hand_rel_points[index],hand_widths[index]);
 }
 static void create_hands(lv_obj_t *parent, bool diver)
 {
@@ -293,6 +315,8 @@ static void create_hands(lv_obj_t *parent, bool diver)
         hand_points[i][0] = (lv_point_precise_t){CC, CC};
         hand_points[i][1] = (lv_point_precise_t){CC, CC};
         hands[i] = dial_line(parent, hand_points[i], widths[i], colours[i]);
+        hand_widths[i] = widths[i];
+        tight_line_set(hands[i], hand_points[i], hand_rel_points[i], widths[i]);
     }
     lv_obj_t *pin = round_panel(parent, 13, diver ? 0xD6E9E0 : 0xC7E4FF,
                                0x0E1A25, 1);
@@ -421,6 +445,7 @@ static void build_sundial(lv_obj_t *parent)
     sundial_shadow_points[0] = (lv_point_precise_t){CC, CC};
     sundial_shadow_points[1] = (lv_point_precise_t){CC + 30, CC + 30};
     sundial_shadow = dial_line(parent, sundial_shadow_points, 10, 0x504333);
+    tight_line_set(sundial_shadow, sundial_shadow_points, sundial_shadow_rel, 10);
     lv_obj_t *pivot = lv_obj_create(parent);
     lv_obj_set_size(pivot, 24, 24);
     lv_obj_align(pivot, LV_ALIGN_CENTER, 0, 0);
@@ -694,7 +719,7 @@ void lf_clock_update(void)
            sundial_shadow_points[1].y!=new_shadow[1].y){
             sundial_shadow_points[0]=new_shadow[0];
             sundial_shadow_points[1]=new_shadow[1];
-            lv_line_set_points(sundial_shadow,sundial_shadow_points,2);
+            tight_line_set(sundial_shadow,sundial_shadow_points,sundial_shadow_rel,10);
         }
     }
     if (current_style == 1 || current_style == 3 || current_style == 4 || current_style == 5) return;

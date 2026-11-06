@@ -1,6 +1,8 @@
 
 
 #pragma once
+#include <stdbool.h>
+#include <stdint.h>
 #include "esp_lcd_types.h"
 #include "driver/gpio.h"
 
@@ -42,6 +44,16 @@ typedef struct {
     uint32_t stage_cumulative_us; /* per-render snapshots subtract modulo uint32 */
 } bsp_display_transfer_stats_t;
 void bsp_display_transfer_stats(bsp_display_transfer_stats_t *out);
+
+/* 0.8.103: boot-time panel facts for on-device diagnostics. */
+typedef struct {
+    bool lvgl_buffers_internal;   /* true: double 24-row SRAM strips (fast path) */
+    uint32_t lvgl_buffer_rows;
+    uint32_t internal_free_at_init;
+    uint32_t selftest_kbytes_per_s; /* measured full-frame QSPI throughput, 0 = not run */
+    uint32_t selftest_frame_us;     /* time to send one 466x466 frame */
+} bsp_display_profile_t;
+void bsp_display_profile(bsp_display_profile_t *out);
 
 typedef enum {
     BSP_DISPLAY_ROTATE_0   = 0,
