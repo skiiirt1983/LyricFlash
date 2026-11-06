@@ -2824,11 +2824,12 @@ static void primary_pager_commit(int index)
     clock_last_refresh=0;
     activity();
     if(index==1)home_refresh(now_ms());
-    /* Native LVGL scroll already painted Home/Settings. Avoid a second
-       full-page repaint at settle; retain Clock's known black-frame
-       recovery invalidation to protect the watch scene. */
-    if(settled_move && index==0 && primary_pager_pages[0])
-        lv_obj_invalidate(primary_pager_pages[0]);
+    /* 0.8.91 removed this refresh for Home/Settings and hardware testing
+       exposed random black flashes on BOTH pages. Restore the known
+       0.8.90 defensive repaint for every settled page; page completeness
+       takes priority over avoiding one frame. Keep midpoint timings. */
+    if(settled_move && primary_pager_pages[index])
+        lv_obj_invalidate(primary_pager_pages[index]);
     if(index==0) {
         /* A touch used to reveal a black Clock after a return swipe. Do not
            depend on another touch to trigger the panel's dirty rectangle:
