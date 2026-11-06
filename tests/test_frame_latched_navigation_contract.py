@@ -19,7 +19,9 @@ assert "LF_PAGER_MAX_FRAME_STEP_PX" not in ui
 assert "LF_PAGER_SNAP_DURATION_MS" not in ui
 assert "if(ui_pointer_is_down()){" in frame
 assert "lv_timer_pause(primary_pager_frame_timer);" in frame
-assert "primary_pager_commit(primary_pager_snap_to);" in frame
+assert "primary_pager_arrived(now_ms());" in frame
+assert "if(pager_final_frame_ready){" in ui
+assert "primary_pager_commit(primary_pager_snap_to);" in ui
 assert "lv_obj_scroll_to_x(primary_pager,next,LV_ANIM_OFF);" not in ui
 assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in start
 assert "lv_timer_resume(primary_pager_frame_timer);" in start
