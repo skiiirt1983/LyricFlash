@@ -3085,7 +3085,12 @@ static void primary_pager_build_clock(void)
     lv_obj_set_style_pad_all(clock_scene,0,0);
     lv_obj_set_style_radius(clock_scene,0,0);
     lv_obj_set_style_border_width(clock_scene,0,0);
-    lv_obj_set_style_bg_opa(clock_scene,LV_OPA_COVER,0);
+    /* The Clock is a live LVGL object tree, not an opaque rectangular
+       466x466 card that slides across the Home page. The pager itself
+       paints the common theme background; only the circular face paints
+       its own background. This also removes a redundant full-screen fill
+       on every expensive Clock/Home transition frame. */
+    lv_obj_set_style_bg_opa(clock_scene,LV_OPA_TRANSP,0);
     lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_CLICKABLE);
     lf_clock_build(clock_scene,prefs->clock_face,prefs);

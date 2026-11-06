@@ -484,13 +484,20 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
     anchor_mono_us = 0;
     last_second = (time_t)-1;
     lv_obj_set_style_bg_color(parent, lv_color_hex(colour_bg()), 0);
-    lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+    /* Keep the Clock scene transparent: its old 466x466 opaque fill
+       made a square panel visibly slide across the round AMOLED and
+       forced an extra full-panel compositing pass on every swipe. */
+    lv_obj_set_style_bg_opa(parent, LV_OPA_TRANSP, 0);
     if (current_style == 0) build_diver(parent);
     else if (current_style == 1) build_digital(parent);
     else if (current_style == 2) build_classic(parent);
     else if (current_style == 3) build_retro_lcd(parent);
     else if (current_style == 4) build_sundial(parent);
     else {
+        /* Basic has no bezel: retain its saved background colour as a
+           ROUND dial instead of repainting the whole square Clock root. */
+        round_panel(parent,452,settings->basic_background,
+                    settings->basic_background,0);
         time_label = lf_basic_clock_render(parent, settings);
         if(settings->basic_font_style!=0 && settings->basic_font_style!=4 &&
            !settings->face_24h[5])

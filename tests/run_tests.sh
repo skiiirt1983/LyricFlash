@@ -17,6 +17,7 @@ python3 tests/test_wifi_sleep_grace_contract.py
 python3 tests/test_qspi_batching_contract.py
 python3 tests/test_display_pipeline_profile_contract.py
 python3 tests/test_clock_raster_contract.py
+python3 tests/test_clock_transparent_pager_contract.py
 python3 tests/test_clock_draw_clip_contract.py
 python3 tests/test_device_settings_wake_while_scrolling_contract.py
 python3 tests/test_pager_edge_timeout_contract.py

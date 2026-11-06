@@ -5,9 +5,10 @@
  * Additive schema 16 preserves NVS and prior users' clock customizations.
  * New open-licensed clock fonts remain monochrome on embedded LVGL.
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
-#define LF_VERSION "0.8.96-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.96"
+#define LF_VERSION "0.8.97-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.97"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 0.8.97: transparent Clock root removes rectangular transition card and its redundant full-screen fill; the Basic face retains its saved colour in a circular dial. Preserve 0.8.96 display throughput and safeguards. */
 /* 0.8.96: 64-row LVGL partial draw buffer, 32-row DMA staging with automatic 16-row/8-row fallbacks.
  * Display smoothness and flash elimination require hardware verification. */
 /* 0.8.75 blocked return swipe on-device despite passing source tests.
