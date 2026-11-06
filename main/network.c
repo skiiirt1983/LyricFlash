@@ -1194,6 +1194,12 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "ui_tick_work_max_us", display_stats.ui_tick_work_max_us);
     cJSON_AddNumberToObject(root, "pager_frame_gap_last_ms", display_stats.pager_frame_gap_last_ms);
     cJSON_AddNumberToObject(root, "pager_frame_gap_max_ms", display_stats.pager_frame_gap_max_ms);
+    cJSON_AddNumberToObject(root, "pager_clock_home_mid_draw_last_us", display_stats.pager_clock_home_mid_draw_last_us);
+    cJSON_AddNumberToObject(root, "pager_clock_home_mid_draw_max_us", display_stats.pager_clock_home_mid_draw_max_us);
+    cJSON_AddNumberToObject(root, "pager_clock_home_mid_draw_samples", display_stats.pager_clock_home_mid_draw_samples);
+    cJSON_AddNumberToObject(root, "pager_home_settings_mid_draw_last_us", display_stats.pager_home_settings_mid_draw_last_us);
+    cJSON_AddNumberToObject(root, "pager_home_settings_mid_draw_max_us", display_stats.pager_home_settings_mid_draw_max_us);
+    cJSON_AddNumberToObject(root, "pager_home_settings_mid_draw_samples", display_stats.pager_home_settings_mid_draw_samples);
     cJSON_AddNumberToObject(root, "render_draw_last_us", display_stats.render_draw_last_us);
     cJSON_AddNumberToObject(root, "render_draw_max_us", display_stats.render_draw_max_us);
     cJSON_AddNumberToObject(root, "flush_wait_refresh_last_us", display_stats.flush_wait_refresh_last_us);

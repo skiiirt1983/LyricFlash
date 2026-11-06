@@ -230,6 +230,11 @@ static atomic_uint ui_tick_work_max_us;
 static atomic_uint pager_frame_gap_last_ms;
 static atomic_uint pager_frame_gap_max_ms;
 static atomic_uint pager_refresh_prev_ms;
+/* Profile the overlapping-center raster workload, separated by page pair. */
+static uint8_t pager_mid_draw_pair; /* 0 edge, 1 Clock/Home, 2 Home/Settings */
+static atomic_uint pager_mid_draw_last_us[2];
+static atomic_uint pager_mid_draw_max_us[2];
+static atomic_uint pager_mid_draw_samples[2];
 /* 0.8.85: measure LVGL draw and driver wait without frame logging. */
 static int64_t draw_started_us;
 static int64_t flush_wait_started_us;
@@ -288,6 +293,12 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->ui_tick_work_max_us=atomic_load(&ui_tick_work_max_us);
     out->pager_frame_gap_last_ms=atomic_load(&pager_frame_gap_last_ms);
     out->pager_frame_gap_max_ms=atomic_load(&pager_frame_gap_max_ms);
+    out->pager_clock_home_mid_draw_last_us=atomic_load(&pager_mid_draw_last_us[0]);
+    out->pager_clock_home_mid_draw_max_us=atomic_load(&pager_mid_draw_max_us[0]);
+    out->pager_clock_home_mid_draw_samples=atomic_load(&pager_mid_draw_samples[0]);
+    out->pager_home_settings_mid_draw_last_us=atomic_load(&pager_mid_draw_last_us[1]);
+    out->pager_home_settings_mid_draw_max_us=atomic_load(&pager_mid_draw_max_us[1]);
+    out->pager_home_settings_mid_draw_samples=atomic_load(&pager_mid_draw_samples[1]);
     out->render_draw_last_us=atomic_load(&render_draw_last_us);
     out->render_draw_max_us=atomic_load(&render_draw_max_us);
     out->flush_wait_refresh_last_us=atomic_load(&flush_wait_refresh_last_us);
@@ -308,6 +319,14 @@ static void display_render_event(lv_event_t *e)
     atomic_fetch_add(&ui_render_count,1);
     render_cycle_start_us=esp_timer_get_time();
     draw_started_us=render_cycle_start_us;
+    pager_mid_draw_pair=0;
+    if(primary_pager && !asleep){
+        const int32_t x=abs(lv_obj_get_scroll_x(primary_pager));
+        const int32_t offset=x%466;
+        /* The center of each transition exposes two fully populated pages. */
+        if(offset>=150 && offset<=316 && x<932)
+            pager_mid_draw_pair=(uint8_t)(x<466?1:2);
+    }
     bsp_display_transfer_stats_t staged={0};
     bsp_display_transfer_stats(&staged);
     render_dma_stage_at_start_us=staged.stage_cumulative_us;
@@ -320,6 +339,13 @@ static void display_render_ready_event(lv_event_t *e)
     const int64_t us=esp_timer_get_time()-draw_started_us;
     draw_started_us=0;
     const uint32_t duration=(uint32_t)(us>0?us:0);
+    if(pager_mid_draw_pair){
+        const uint8_t pair=(uint8_t)(pager_mid_draw_pair-1);
+        atomic_store(&pager_mid_draw_last_us[pair],duration);
+        if(duration>atomic_load(&pager_mid_draw_max_us[pair]))
+            atomic_store(&pager_mid_draw_max_us[pair],duration);
+        atomic_fetch_add(&pager_mid_draw_samples[pair],1);
+    }
     bsp_display_transfer_stats_t staged={0};
     bsp_display_transfer_stats(&staged);
     /* Unsigned subtraction handles 32-bit monotonic wraparound. */
@@ -2798,8 +2824,11 @@ static void primary_pager_commit(int index)
     clock_last_refresh=0;
     activity();
     if(index==1)home_refresh(now_ms());
-    if(settled_move && primary_pager_pages[index])
-        lv_obj_invalidate(primary_pager_pages[index]);
+    /* Native LVGL scroll already painted Home/Settings. Avoid a second
+       full-page repaint at settle; retain Clock's known black-frame
+       recovery invalidation to protect the watch scene. */
+    if(settled_move && index==0 && primary_pager_pages[0])
+        lv_obj_invalidate(primary_pager_pages[0]);
     if(index==0) {
         /* A touch used to reveal a black Clock after a return swipe. Do not
            depend on another touch to trigger the panel's dirty rectangle:
