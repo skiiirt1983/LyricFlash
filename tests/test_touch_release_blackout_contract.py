@@ -12,7 +12,7 @@ assert "lv_obj_scroll_to_x(primary_pager" not in e
 assert "primary_pager_last_move_ms=now_ms();" in e
 assert "primary_pager_start_snap(target);" in w
 assert "lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)return;" in w
-assert "if(settled_move && primary_pager_pages[index])" in c
+assert "if(settled_move && !frame_presented && primary_pager_pages[index])" in c
 assert "lv_obj_invalidate(primary_pager_pages[index]);" in c
 assert "make_base();" not in e, "Never rebuild entire UI from pager scroll callback"
 assert "lf_clock_clear();" not in e, "Do not destroy active Clock on release"

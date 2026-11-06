@@ -35,6 +35,7 @@ assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in ui
 assert "#define LF_NAV_REVEAL_STEPS 12" in ui
 assert "#define LF_NAV_REVEAL_PERIOD_MS 28" in ui
 assert "lv_obj_invalidate(primary_pager_pages[index]);" in ui
+assert "if(settled_move && !frame_presented && primary_pager_pages[index])" in ui
 assert "if(!settled_move)lv_obj_invalidate(clock_scene);" in ui
 assert "lv_obj_set_scroll_dir(primary_pager,LV_DIR_HOR);" in ui
 assert "lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_ELASTIC);" in ui

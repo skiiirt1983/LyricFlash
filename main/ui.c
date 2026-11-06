@@ -171,6 +171,7 @@ static int32_t pager_render_scroll_x=-1;
 static uint64_t pager_arrived_at_ms;
 static atomic_uint pager_final_frame_acks;
 static atomic_uint pager_final_frame_repaint_requests;
+static atomic_uint pager_acknowledged_settles_no_full_repaint;
 #define LF_PAGER_STALL_GUARD_MS 1600U
 /* 0.8.25: retain the 0.8.23 stuck-snap recovery, but always keep the
    actual clock scene visible. The optional off-screen RGB565 snapshot was
@@ -279,6 +280,8 @@ void lf_ui_display_stats(lf_ui_display_stats_t *out)
     out->pager_snap_max_ms=atomic_load(&pager_snap_max_ms);
     out->pager_final_frame_acks=atomic_load(&pager_final_frame_acks);
     out->pager_final_frame_repaint_requests=atomic_load(&pager_final_frame_repaint_requests);
+    out->pager_acknowledged_settles_no_full_repaint=
+        atomic_load(&pager_acknowledged_settles_no_full_repaint);
     out->render_cycle_last_ms=atomic_load(&render_cycle_last_ms);
     out->render_cycle_max_ms=atomic_load(&render_cycle_max_ms);
     out->clock_repaint_recoveries=atomic_load(&clock_repaint_recoveries);
@@ -2826,7 +2829,14 @@ static void primary_pager_commit(int index)
         uint32_t maximum=atomic_load(&pager_snap_max_ms);
         if(elapsed>maximum)atomic_store(&pager_snap_max_ms,elapsed);
     }
-    /* Keep the settled panel fully painted; never wait for another touch. */
+    /* A verified LVGL REFR_READY for the final X already painted the
+       destination. 0.8.94 still repainted the WHOLE page after that ACK,
+       adding another 20-band pass and visible page flashing. 0.8.91
+       skipped this repaint before any frame ACK existed and exposed black
+       pages. Skip only with proof, and retain the protective redraw on
+       every unconfirmed/forced/initial page settlement. */
+    const bool frame_presented=primary_pager_snapping && pager_final_frame_ready &&
+                               pager_render_scroll_x==-1;
     const bool settled_move=primary_pager_snapping || pager_scrolling ||
                             primary_pager_current!=index;
     primary_pager_current=index;
@@ -2850,12 +2860,14 @@ static void primary_pager_commit(int index)
     clock_last_refresh=0;
     activity();
     if(index==1)home_refresh(now_ms());
-    /* 0.8.91 removed this refresh for Home/Settings and hardware testing
-       exposed random black flashes on BOTH pages. Restore the known
-       0.8.90 defensive repaint for every settled page; page completeness
-       takes priority over avoiding one frame. Keep midpoint timings. */
-    if(settled_move && primary_pager_pages[index])
+    /* Preserve the protective repaint whenever the target was NOT
+       already fully refreshed. When the final frame is acknowledged,
+       repainting all 466x466 pixels again is wasted and may expose a
+       second transient frame during the physical swipe. */
+    if(settled_move && !frame_presented && primary_pager_pages[index])
         lv_obj_invalidate(primary_pager_pages[index]);
+    if(settled_move && frame_presented)
+        atomic_fetch_add(&pager_acknowledged_settles_no_full_repaint,1);
     if(index==0) {
         /* A touch used to reveal a black Clock after a return swipe. Do not
            depend on another touch to trigger the panel's dirty rectangle:
@@ -2863,8 +2875,9 @@ static void primary_pager_commit(int index)
            Only one full Clock refresh, not repeated full-frame animation. */
         if(clock_scene) {
             lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
-            /* primary_pager_pages[0] was already invalidated when the
-               swipe settled; do not enqueue the entire clock twice. */
+            /* Initial or unconfirmed entry remains fully repainted
+               above. ACK-confirmed Clock entry needs only changed time
+               elements; never force a second whole-scene redraw. */
             if(!settled_move)lv_obj_invalidate(clock_scene);
             atomic_fetch_add(&clock_repaint_recoveries,1);
         }

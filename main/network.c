@@ -1239,6 +1239,7 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "pager_snap_max_ms", display_stats.pager_snap_max_ms);
     cJSON_AddNumberToObject(root, "pager_final_frame_acks", display_stats.pager_final_frame_acks);
     cJSON_AddNumberToObject(root, "pager_final_frame_repaint_requests", display_stats.pager_final_frame_repaint_requests);
+    cJSON_AddNumberToObject(root, "pager_acknowledged_settles_no_full_repaint", display_stats.pager_acknowledged_settles_no_full_repaint);
     cJSON_AddNumberToObject(root, "render_cycle_last_ms", display_stats.render_cycle_last_ms);
     cJSON_AddNumberToObject(root, "render_cycle_max_ms", display_stats.render_cycle_max_ms);
     cJSON_AddNumberToObject(root, "clock_repaint_recoveries", display_stats.clock_repaint_recoveries);

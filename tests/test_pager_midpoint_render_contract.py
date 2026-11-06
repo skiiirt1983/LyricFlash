@@ -6,7 +6,10 @@ ui=(root/"main/ui.c").read_text()
 header=(root/"main/ui.h").read_text()
 net=(root/"main/network.c").read_text()
 commit=ui.split("static void primary_pager_commit(int index)",1)[1].split("/* Native LVGL easing",1)[0]
-assert "if(settled_move && primary_pager_pages[index])" in commit
+assert "if(settled_move && !frame_presented && primary_pager_pages[index])" in commit
+assert "if(settled_move && frame_presented)" in commit
+assert "atomic_fetch_add(&pager_acknowledged_settles_no_full_repaint,1);" in commit
+assert "const bool frame_presented=primary_pager_snapping && pager_final_frame_ready" in commit
 assert "lv_obj_invalidate(primary_pager_pages[index]);" in commit
 assert "if(settled_move && index==0 && primary_pager_pages[0])" not in commit
 assert "lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);" in commit
