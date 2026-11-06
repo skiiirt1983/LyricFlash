@@ -27,7 +27,6 @@ assert "document.execCommand('copy')" in html
 assert "manual.select();" in html
 assert "window.isSecureContext" in html
 assert "if(!lfLastLog)" in html and "Refresh the log first" in html
-assert "const text=lfLastLog;" not in html or True  # text is held locally, never transmitted
 assert "if(mode==='diagnostics')el('diagnostics-btn').click();" in html
 assert "el('lf-open-log').onclick=lfOpenLog;" in html
 assert "el('lf-copy-log-modal').onclick=lfCopyLog;" in html
