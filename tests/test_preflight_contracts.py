@@ -306,8 +306,8 @@ app_main=read('main/main.c')
 sdk=read('sdkconfig.defaults')
 require('esp_ptr_external_ram(color_data)' in bsp and
         'bsp_rotation_panel_draw_staged(' in bsp and
-        'BSP_LCD_DMA_STAGING_ROWS (8)' in bsp and
-        'BSP_LCD_DMA_FALLBACK_ROWS (4)' in bsp and
+        'BSP_LCD_DMA_STAGING_ROWS (32)' in bsp and
+        'BSP_LCD_DMA_FALLBACK_ROWS (8)' in bsp and
         'ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE' in app_main and
         'ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC' not in app_main and
         'BSP_LCD_TE_GPIO' in display_header and
@@ -466,12 +466,12 @@ require('lv_event_get_scroll_anim(e)' in ui and
 # 0.8.30: physical-device regression with a 96-row rendering buffer.
 # Preserve the proven 24-row LVGL buffer and 1-slot queue; 0.8.88 restores
 # only with 8-row 0.8.86 DMA staging and disables LVGL style caching.
-require('LVGL_BUFFER_HEIGHT_PSRAM (24)' in bsp and
+require('LVGL_BUFFER_HEIGHT_PSRAM (64)' in bsp and
         'LVGL_BUFFER_HEIGHT_PSRAM (96)' not in bsp and
         'BSP_LCD_SPI_TRANSFER_ROWS' not in bsp and
         'BSP_LCD_H_RES * buffer_height * BSP_LCD_BITS_PER_PIXEL / 8' in bsp and
-        'BSP_LCD_DMA_STAGING_ROWS (8)' in bsp and
-        'BSP_LCD_DMA_FALLBACK_ROWS (4)' in bsp and
+        'BSP_LCD_DMA_STAGING_ROWS (32)' in bsp and
+        'BSP_LCD_DMA_FALLBACK_ROWS (8)' in bsp and
         'CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1' in sdk and
         'lv_obj_invalidate(clock_scene);' in ui,
         "0.8.88 preserve tested LVGL geometry, 8-row staged DMA and SPI queue depth")

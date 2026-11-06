@@ -14,6 +14,7 @@ python3 tests/test_wake_recovery_watchdog_contract.py
 python3 tests/test_wake_timer_power_contract.py
 python3 tests/test_screen_off_cpu_power_contract.py
 python3 tests/test_wifi_sleep_grace_contract.py
+python3 tests/test_qspi_batching_contract.py
 python3 tests/test_display_pipeline_profile_contract.py
 python3 tests/test_clock_raster_contract.py
 python3 tests/test_clock_draw_clip_contract.py

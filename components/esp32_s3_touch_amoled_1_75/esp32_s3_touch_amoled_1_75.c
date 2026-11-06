@@ -33,9 +33,10 @@
 
 static const char *TAG = "ESP32-S3-Touch-AMOLED-1.75";
 
-#define BSP_LCD_DMA_STAGING_ROWS (8)
-#define BSP_LCD_DMA_FALLBACK_ROWS (4)
-/* Return to 0.8.86 hardware-tested 8-row batching; retain safe 4-row fallback. */
+#define BSP_LCD_DMA_STAGING_ROWS (32)
+#define BSP_LCD_DMA_FALLBACK_ROWS (8)
+/* Throughput experiment: 32-row DMA staging reduces the QSPI transaction count;
+ * 8-row fallback keeps the proven small internal-RAM allocation viable. */
 static i2c_master_bus_handle_t i2c_handle = NULL; // I2C Handle
 static bool i2c_initialized = false;
 static esp_io_expander_handle_t io_expander = NULL; // IO expander tca9554 handle
@@ -771,7 +772,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // display_manager_pick_render_mode / display_manager_default_buffer_pixels).
 // These heights therefore only size max_transfer_sz and the partial-buffer
 // fallback path when tear mode ends up as NONE.
-#define LVGL_BUFFER_HEIGHT_PSRAM (24)
+#define LVGL_BUFFER_HEIGHT_PSRAM (64)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
 
 esp_err_t bsp_display_brightness_init(void)
