@@ -58,11 +58,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
-      - name: Compile firmware
+      - name: Compile firmware with bounded TE-sync guard
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.5.4
           target: esp32s3
+          command: idf.py build && python3 tools/apply_adapter_patch.py && idf.py build
       - name: Merge bootloader partition table and app
         uses: espressif/esp-idf-ci-action@v1
         with:
