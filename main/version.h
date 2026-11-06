@@ -8,7 +8,7 @@
 #define LF_VERSION "0.8.95-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.95"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
-/* 0.8.95 needs hardware QA; flashing still possible from the older display pipeline. */
+/* 0.8.95 preflight passed; restored old pager requires hardware QA for all three pages. */
 /* 0.8.75 blocked return swipe on-device despite passing source tests.
  * Restore LV_DIR_HOR unconditionally while retaining no-elastic/no-chain,
  * touch activity, wake cover and 0.8.72 clock pause. Host preflight passed; hardware test pending. */
