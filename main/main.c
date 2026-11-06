@@ -99,13 +99,13 @@ void app_main(void)
        the original clock policy. */
     if(!lf_power_cpu_profile_start())
         ESP_LOGW(TAG,"CPU screen-off scaling unavailable; original clock policy");
-    /* Isolate 0.8.16's second-flush TE deadlock: keep the PrintSphere-derived
-       CO5300 PSRAM DMA staging and SPI queue depth 1, but disable TE waiting
-       while keeping the same core-1 LVGL worker and application. */
+    /* Restore panel TE synchronization using esp_lvgl_adapter 0.6.0's upstream
+       buffer-switch fixes. CI applies a bounded GPIO-TE TX-done wait so a
+       missed panel completion notification cannot lock the LVGL worker forever. */
     bsp_display_cfg_t display_cfg = {
         .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
         .rotation = ESP_LV_ADAPTER_ROTATE_0,
-        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE,
+        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC,
         .touch_flags = { .swap_xy = 0, .mirror_x = 1, .mirror_y = 1 },
     };
     display_cfg.lv_adapter_cfg.task_core_id = 1;
