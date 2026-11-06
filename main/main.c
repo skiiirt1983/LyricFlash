@@ -17,13 +17,10 @@
 
 static const char *TAG = "LyricFlash";
 
-/* A physically frozen AMOLED with a responsive Web UI is an LVGL worker
- * stall, not proof that AudD failed. An independent, low-priority task
- * monitors the lock-free heartbeat. Keep the cancelled recording in scope
- * for 90 seconds: its worker may move to STOPPED before the LVGL task hangs.
- * Only a >25s heartbeat loss on a song page causes a clean restart with
- * preserved NVS, credentials and OTA partitions. No new microphone access.
- * Never reset merely because AudD/LRCLIB is slow. */
+/* Independent LVGL heartbeat + stalled-wake recovery. A normal four-hour
+ * screen-off period is NOT a stall: only an explicitly awake UI within the
+ * first 120 seconds after a wake is eligible. Never restart during OTA.
+ * The separate recognition stall rule remains unchanged. */
 static void lyricflash_display_recovery_watchdog(void *arg)
 {
     (void)arg;
@@ -41,9 +38,26 @@ static void lyricflash_display_recovery_watchdog(void *arg)
              song.state==LF_RECOG_LYRICS ||
              song.state==LF_RECOG_MATCH || recent_cancel);
         const bool song_page=ui.ui_page==0 || ui.ui_page==1 || ui.ui_page==9;
+        const bool wake_window=ui.screen_awake &&
+             ui.last_wake_age_ms!=UINT32_MAX && ui.last_wake_age_ms<120000U;
+        const bool wake_heartbeat_stalled=wake_window &&
+             ui.ui_tick_age_ms!=UINT32_MAX && ui.ui_tick_age_ms>25000U;
+        const bool wake_cover_stalled=wake_window &&
+             ui.wake_overlay_pending && ui.last_wake_age_ms>45000U;
+        if((wake_heartbeat_stalled||wake_cover_stalled) && uptime_ms>60000 &&
+           !lf_network_ota_in_progress()){
+            const uint8_t reason=wake_heartbeat_stalled?1U:2U;
+            ESP_LOGE(TAG,"Wake UI stalled reason=%u age=%lu ms tick=%lu ms cover=%d; "
+                         "saving recovery breadcrumb before settings-safe restart",
+                     (unsigned)reason,(unsigned long)ui.last_wake_age_ms,
+                     (unsigned long)ui.ui_tick_age_ms,ui.wake_overlay_pending);
+            lf_diag_wake_recovery(reason,ui.last_wake_age_ms,ui.ui_tick_age_ms);
+            vTaskDelay(pdMS_TO_TICKS(150));
+            esp_restart();
+        }
         if(uptime_ms>60000 && scan_related && song_page &&
            ui.ui_tick_age_ms!=UINT32_MAX &&
-           ui.ui_tick_age_ms>25000U){
+           ui.ui_tick_age_ms>25000U && !lf_network_ota_in_progress()){
             ESP_LOGE(TAG,"LVGL heartbeat lost %lu ms; state=%s page=%lu "
                      "cancel_phase=%lu render=%lu flush=%lu/%lu ready=%lu "
                      "restarting without wiping settings",

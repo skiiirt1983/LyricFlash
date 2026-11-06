@@ -1180,6 +1180,14 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "ui_touch_presses", display_stats.touch_presses);
     cJSON_AddNumberToObject(root, "ui_last_screen_off_ms", display_stats.last_screen_off_ms);
     cJSON_AddNumberToObject(root, "ui_wake_count", display_stats.wake_count);
+    cJSON_AddBoolToObject(root, "ui_screen_awake", display_stats.screen_awake);
+    cJSON_AddBoolToObject(root, "ui_wake_overlay_pending", display_stats.wake_overlay_pending);
+    if(display_stats.last_wake_age_ms!=UINT32_MAX)
+        cJSON_AddNumberToObject(root, "ui_last_wake_age_ms", display_stats.last_wake_age_ms);
+    cJSON_AddNumberToObject(root, "wake_recovery_count", d.wake_recovery_count);
+    cJSON_AddNumberToObject(root, "wake_recovery_last_reason_code", d.wake_recovery_last_reason);
+    cJSON_AddNumberToObject(root, "wake_recovery_last_age_ms", d.wake_recovery_last_age_ms);
+    cJSON_AddNumberToObject(root, "wake_recovery_last_tick_age_ms", d.wake_recovery_last_tick_age_ms);
     cJSON_AddNumberToObject(root, "ui_last_wake_frame_ready_ms", display_stats.last_wake_frame_ready_ms);
     cJSON_AddNumberToObject(root, "ui_last_wake_overlay_clear_ms", display_stats.last_wake_overlay_clear_ms);
     cJSON_AddNumberToObject(root, "ui_tick_work_last_us", display_stats.ui_tick_work_last_us);
