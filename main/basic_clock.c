@@ -46,6 +46,14 @@ static void draw_bar(lv_layer_t *layer,int x,int y,int w,int h,
                      uint32_t rgb,int radius)
 {
     if(w<1||h<1)return;
+    /* Every 24-row LVGL partial render previously queued the entire custom
+       numeral stencil, including rectangles outside the drawable strip.
+       Clip *before* creating draw descriptors/tasks; safe for all original
+       seven-segment, bitmap and open-font styles. The input x/y coordinates
+       are absolute (lv_obj_get_coords), like layer->_clip_area. */
+    const lv_area_t *clip=&layer->_clip_area;
+    if(x>clip->x2 || y>clip->y2 ||
+       (int64_t)x+w-1<clip->x1 || (int64_t)y+h-1<clip->y1)return;
     lv_draw_rect_dsc_t d;
     lv_draw_rect_dsc_init(&d);
     d.bg_opa=LV_OPA_COVER;

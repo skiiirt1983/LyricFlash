@@ -199,12 +199,26 @@ static void tick_draw_event(lv_event_t *e)
         /* Dress watch has only twelve markers, diver has sixty. */
         if(!diver && i%5)continue;
         const bool major=(i%5)==0;
+        /* Discard invisible ticks BEFORE lv_draw_line adds a draw task.
+           Screen clips are typically 24px high, so submitting 60 strokes
+           for every band (including remote clock panels) is needless work.
+           Expand the bound for stroke width and antialiasing. */
+        const int32_t ax=area.x1+ticks[i].x1;
+        const int32_t ay=area.y1+ticks[i].y1;
+        const int32_t bx=area.x1+ticks[i].x2;
+        const int32_t by=area.y1+ticks[i].y2;
+        const int32_t pad=(diver?(major?5:2):2)+3;
+        const lv_area_t *clip=&layer->_clip_area;
+        if((ax>bx?ax:bx)+pad<clip->x1 ||
+           (ax<bx?ax:bx)-pad>clip->x2 ||
+           (ay>by?ay:by)+pad<clip->y1 ||
+           (ay<by?ay:by)-pad>clip->y2)continue;
         lv_draw_line_dsc_t line;
         lv_draw_line_dsc_init(&line);
-        line.p1.x=area.x1+ticks[i].x1;
-        line.p1.y=area.y1+ticks[i].y1;
-        line.p2.x=area.x1+ticks[i].x2;
-        line.p2.y=area.y1+ticks[i].y2;
+        line.p1.x=ax;
+        line.p1.y=ay;
+        line.p2.x=bx;
+        line.p2.y=by;
         line.color=lv_color_hex(major?colour_fg():colour_ac());
         line.width=diver?(major?5:2):2;
         line.round_start=1;
