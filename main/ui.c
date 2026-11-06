@@ -241,6 +241,9 @@ static atomic_uint pager_frame_gap_last_ms;
 static atomic_uint pager_frame_gap_max_ms;
 static atomic_uint pager_refresh_prev_ms;
 /* Profile the overlapping-center raster workload, separated by page pair. */
+/* 0.8.104 benchmark: CPU clock sampled at every frame start. */
+static atomic_uint render_cpu_mhz_min=UINT32_MAX;
+static atomic_uint render_cpu_mhz_last;
 static uint8_t pager_mid_draw_pair; /* 0 edge, 1 Clock/Home, 2 Home/Settings */
 static atomic_uint pager_mid_draw_last_us[2];
 static atomic_uint pager_mid_draw_max_us[2];
@@ -4241,8 +4244,6 @@ static void build_weather_location(void) { nav_schedule(build_weather_location_n
 
 /* ---- 0.8.106 boot benchmark ------------------------------------------- */
 static lf_ui_bench_t ui_bench;
-static atomic_uint render_cpu_mhz_min=UINT32_MAX;
-static atomic_uint render_cpu_mhz_last;
 void lf_ui_bench(lf_ui_bench_t *out)
 {
     if(!out)return;
