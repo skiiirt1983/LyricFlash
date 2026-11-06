@@ -275,7 +275,7 @@ lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
     lv_obj_set_width(time,346);
     lv_label_set_long_mode(time,LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(time,time_font(p),0);
-    /* 0% is genuinely small, 200% large. 0.8.104: pick a natively generated
+    /* 0% is genuinely small, 200% large. 0.8.105: pick a natively generated
        font size instead of a scale transform. A scaled label is re-rendered
        into an offscreen ARGB layer for every strip it touches, every frame,
        which made the Clock page and pager swipes crawl. */
