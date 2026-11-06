@@ -8,7 +8,7 @@
 #define LF_VERSION "0.8.96-alpha"
 #define LF_VERSION_LABEL "ALPHA 0.8.96"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
-/* 0.8.96: 64-row LVGL partial draw buffer, 32-row DMA staging with 8-row fallback.
+/* 0.8.96: 64-row LVGL partial draw buffer, 32-row DMA staging with automatic 16-row/8-row fallbacks.
  * Display smoothness and flash elimination require hardware verification. */
 /* 0.8.75 blocked return swipe on-device despite passing source tests.
  * Restore LV_DIR_HOR unconditionally while retaining no-elastic/no-chain,
