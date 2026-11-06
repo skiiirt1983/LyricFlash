@@ -10,7 +10,7 @@ patch=(root/"tools/apply_adapter_patch.py").read_text()
 assert '#define LF_VERSION "0.8.100-alpha"' in version
 assert ".tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC" in main
 assert 'version: "0.6.0"' in manifest
-assert "idf.py reconfigure && python3 tools/apply_adapter_patch.py && idf.py build" in workflow
+assert "idf.py build && python3 tools/apply_adapter_patch.py && idf.py build" in workflow
 assert "pdMS_TO_TICKS(200)" in patch
 assert "ulTaskNotifyTake(pdTRUE, timeout)" in patch
 assert "display_manager_flush_ready(disp);" in patch
