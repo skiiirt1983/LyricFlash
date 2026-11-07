@@ -12,7 +12,7 @@ CONFIG_PM_DFS_INIT_AUTO=n
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_USE_CLIB_STRING=y
 CONFIG_LV_USE_CLIB_SPRINTF=y
-# 0.8.117: LVGL renders synchronously in the esp_lvgl_adapter task (no
+# 0.8.118: LVGL renders synchronously in the esp_lvgl_adapter task (no
 # separate draw thread). Benchmarks showed a fixed ~3.4 ms per 24/32-row
 # strip even for a blank frame, regardless of buffer memory, consistent with
 # draw-thread handoffs. All UI access is already serialized by
@@ -51,11 +51,11 @@ CONFIG_LV_DEF_REFR_PERIOD=16
 # LVGL 9.5 style lookups on complex static page trees; add only 8 bytes/object.
 # CONFIG_LV_OBJ_STYLE_CACHE is not set
 
-# 0.8.117 performance profile
+# 0.8.118 performance profile
 # Build with -O2 instead of the default -Og debug optimization (LVGL software
 # rendering is several times faster).
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
-# 0.8.117: default 32 KB data cache. The 64 KB cache took 32 KB of internal
+# 0.8.118: default 32 KB data cache. The 64 KB cache took 32 KB of internal
 # SRAM and, with internal LVGL buffers, left ~28 KB free: song ID (14 KB task
 # stack, I2S DMA, TLS) could no longer start.
 # TLS buffers in PSRAM: GitHub OTA download failed with SSL_ALLOC_FAILED
@@ -65,19 +65,19 @@ CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 CONFIG_LV_USE_SYSMON=y
 CONFIG_LV_USE_PERF_MONITOR=y
 CONFIG_LV_PERF_MONITOR_ALIGN_BOTTOM_MID=y
-# 0.8.117: smaller peak TLS memory for the on-device GitHub OTA download.
+# 0.8.118: smaller peak TLS memory for the on-device GitHub OTA download.
 CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
-# 0.8.117: app_main builds the whole LVGL UI; give it headroom.
+# 0.8.118: app_main builds the whole LVGL UI; give it headroom.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
-# 0.8.117: the UI uses far more than LVGL's default 4 circle radii (round
+# 0.8.118: the UI uses far more than LVGL's default 4 circle radii (round
 # buttons, rings, dial panels, markers). Each cache miss recomputes the
 # anti-aliased circle mask for every 32-row strip of every frame.
 CONFIG_LV_DRAW_SW_CIRCLE_CACHE_SIZE=32
-# 0.8.117: free ~30-40 KB of internal SRAM for double-buffered internal LVGL
+# 0.8.118: free ~30-40 KB of internal SRAM for double-buffered internal LVGL
 # strips while keeping song ID (task stacks, I2S DMA) working. Wi-Fi code
 # runs from flash cache instead of IRAM: slightly lower Wi-Fi throughput,
 # irrelevant for weather/lyrics/AudD uploads.
 CONFIG_ESP_WIFI_IRAM_OPT=n
 CONFIG_ESP_WIFI_RX_IRAM_OPT=n
-# 0.8.117: page snapshots for swipes.
+# 0.8.118: page snapshots for swipes.
 CONFIG_LV_USE_SNAPSHOT=y

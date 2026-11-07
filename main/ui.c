@@ -242,7 +242,7 @@ static atomic_uint pager_frame_gap_last_ms;
 static atomic_uint pager_frame_gap_max_ms;
 static atomic_uint pager_refresh_prev_ms;
 /* Profile the overlapping-center raster workload, separated by page pair. */
-/* 0.8.117: swipe recorder (frames between pager movement start and commit). */
+/* 0.8.118: swipe recorder (frames between pager movement start and commit). */
 static bool pager_scrolling; /* tentative definition; see later declaration */
 static lf_swipe_log_t swipe_log;
 static bool swipe_active;
@@ -299,7 +299,7 @@ static void swipe_finish(int to_index)
     if(swipe_log.count<LF_SWIPE_LOG)swipe_log.count++;
     swipe_log.total++;
 }
-/* 0.8.117: why did the screen turn off? */
+/* 0.8.118: why did the screen turn off? */
 static lf_ui_sleep_info_t sleep_info;
 void lf_ui_sleep_info(lf_ui_sleep_info_t *out){ if(out)*out=sleep_info; }
 /* 0.8.104 benchmark: CPU clock sampled at every frame start. */
@@ -3094,7 +3094,7 @@ static void primary_pager_scroll_event(lv_event_t *e)
             int32_t remaining=abs(primary_pager_snap_to*466-abs(lv_obj_get_scroll_x(primary_pager)));
             if(remaining>466)remaining=466;
             /* PrintSphere-style ease-out timing with our own touch guard. */
-            /* 0.8.117: deliberate ease-out glide into place (240-360 ms). */
+            /* 0.8.118: deliberate ease-out glide into place (240-360 ms). */
             lv_anim_set_duration(anim,240U+(uint32_t)(120U*remaining/466U));
             lv_anim_set_path_cb(anim,lv_anim_path_ease_out);
         }
@@ -3135,8 +3135,8 @@ static void primary_pager_scroll_event(lv_event_t *e)
     primary_pager_last_move_ms=now_ms();
     activity();
 }
-/* ---- 0.8.117 swipe compositor ------------------------------------------
-   0.8.117 hardware log: LVGL blitting two PSRAM page images still cost
+/* ---- 0.8.118 swipe compositor ------------------------------------------
+   0.8.118 hardware log: LVGL blitting two PSRAM page images still cost
    ~70 ms per swipe frame. Now, while idle, each pager page is rendered once
    into a panel-byte-order RGB565 PSRAM snapshot. During pager motion LVGL
    keeps handling touch and the scroll/snap animation but its invalidation is
@@ -3261,6 +3261,14 @@ static void snap_refresh_tick(lv_timer_t *t)
        !ui_pointer_is_down() && current-snap_mode_since_ms>1500){
         snap_exit();
     }
+    /* 0.8.118: drawing must never stay suspended outside a swipe. */
+    if(!snap_mode){
+        lv_display_t *d=lv_display_get_default();
+        if(d && !lv_display_is_invalidation_enabled(d)){
+            lv_display_enable_invalidation(d,true);
+            if(screen)lv_obj_invalidate(screen);
+        }
+    }
     if(snap_mode||pager_scrolling||primary_pager_snapping||ui_pointer_is_down())return;
     if(current-snap_last_clock_mark_ms>=10000){snap_last_clock_mark_ms=current;page_snap_dirty|=0x01;}
     if(current-snap_last_full_mark_ms>=30000){snap_last_full_mark_ms=current;page_snap_dirty|=0x07;}
@@ -3352,7 +3360,7 @@ static void primary_pager_create(int target_index)
        Keep bidirectional scrolling and non-elastic bounds unchanged. */
     lv_obj_set_style_bg_color(primary_pager,
                               lv_color_hex(prefs->background_color),0);
-    /* 0.8.117: transparent pager. The screen behind it has the same
+    /* 0.8.118: transparent pager. The screen behind it has the same
        colour, so edge overscroll still shows no white slice, and swipe
        midpoints (where no single page covers the screen) no longer paint
        an extra full-screen background layer. */
@@ -3474,7 +3482,7 @@ static void build_clock_settings_now(void)
     make_base();
     label(screen, "CLOCK SETTINGS", 38, &lv_font_montserrat_24, prefs->text_color);
     char value[65];
-    /* 0.8.117: single Basic face; no face picker. */
+    /* 0.8.118: single Basic face; no face picker. */
     (void)on_cycle_face;
     button(screen, "CUSTOMIZE CLOCK", 270, 55, 0, -70,
            0xB2C6D3, on_basic_settings, NULL);
@@ -3634,7 +3642,7 @@ static void build_basic_settings_now(void)
     lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_RELEASED, NULL);
     /* The ring renderer is disabled for performance. Retain saved values for
        backwards compatibility, but never expose controls that do nothing. */
-    /* 0.8.117: background colour removed (fixed black). */
+    /* 0.8.118: background colour removed (fixed black). */
     button(list,"Time text color",256,50,0,0,0xB2C6D3,on_basic_colour,(void*)1);
     button(list, prefs->basic_show_date?"Date: ON":"Date: OFF",256,50,0,0,
            0xB2C6D3,on_basic_date,NULL);
@@ -3820,7 +3828,7 @@ static void on_wake(lv_event_t *e)
    asserted low INT at sleep entry would immediately wake, so guard it.
    Timer wake is a recovery fallback in case the touch controller will not
    generate an interrupt while the SoC sleeps. Default remains OFF. */
-/* 0.8.117: on_tick samples `current` once, then helpers such as the pager
+/* 0.8.118: on_tick samples `current` once, then helpers such as the pager
    watchdog call activity() with a fresh, slightly later now_ms(). The old
    unsigned `current - last_activity_ms` then wrapped to ~2^64 and blanked
    the screen instantly while it was being touched (logged idle_ms = 0). */
@@ -3902,7 +3910,7 @@ static void on_tick_body(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
-    /* 0.8.117: LVGL stamps every input-device press itself. Use it so a
+    /* 0.8.118: LVGL stamps every input-device press itself. Use it so a
        touch that no widget callback or 50 ms pointer poll caught (common
        during slow frames) still counts as activity; the screen timeout was
        blanking the display while it was in use. */
@@ -4367,7 +4375,7 @@ __attribute__((unused)) static void nav_transition_tick(lv_timer_t *timer)
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
 {
-    /* 0.8.117: instant screen change. The 12-strip reveal waited for a
+    /* 0.8.118: instant screen change. The 12-strip reveal waited for a
        rendered frame ACK per strip and read as 1-2 fps stutter. One full
        redraw is faster and feels like a phone page switch. */
     (void)direction;
@@ -4490,7 +4498,7 @@ static void build_weather_details(void) { nav_schedule(build_weather_details_now
 static void build_weather_location(void) { nav_schedule(build_weather_location_now); }
 
 
-/* ---- 0.8.117 boot benchmark ------------------------------------------- */
+/* ---- 0.8.118 boot benchmark ------------------------------------------- */
 static lf_ui_bench_t ui_bench;
 void lf_ui_bench(lf_ui_bench_t *out)
 {
@@ -4584,7 +4592,7 @@ bool lf_ui_start(lf_settings_t *s)
     while(touch) {
         if(lv_indev_get_type(touch)==LV_INDEV_TYPE_POINTER){
             lv_indev_set_scroll_throw(touch,90);
-            /* 0.8.117: grab the page after 4 px instead of LVGL's 10 px and
+            /* 0.8.118: grab the page after 4 px instead of LVGL's 10 px and
                sample touch every 10 ms so the page tracks the finger. */
             lv_indev_set_scroll_limit(touch,4);
             if(lv_indev_get_read_timer(touch))
@@ -4593,9 +4601,9 @@ bool lf_ui_start(lf_settings_t *s)
         }
         touch=lv_indev_get_next(touch);
     }
-    /* 0.8.117: run the benchmark once on the LVGL task (large stack), never
+    /* 0.8.118: run the benchmark once on the LVGL task (large stack), never
        from app_main: a full lv_refr_now() overflowed app_main's stack in
-       0.8.117, crashed at boot and the OTA rollback restored 0.8.103. */
+       0.8.118, crashed at boot and the OTA rollback restored 0.8.103. */
     lv_timer_t *bench_timer=lv_timer_create(ui_boot_benchmark_timer,1500,NULL);
     if(bench_timer)lv_timer_set_repeat_count(bench_timer,1);
     lv_timer_create(on_tick, 50, NULL);
