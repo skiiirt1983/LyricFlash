@@ -78,7 +78,7 @@ bool lf_power_read(lf_power_state_t *state)
         .device_address = 0x34,
         .scl_speed_hz = 100000
     };
-    /* 0.8.122: attach the PMIC once and keep the handle; adding/removing a
+    /* 0.8.123: attach the PMIC once and keep the handle; adding/removing a
        device on the shared touch I2C bus every 4 s was needless churn. */
     static i2c_master_dev_handle_t dev = NULL;
     if (!dev && i2c_master_bus_add_device(bus, &cfg, &dev) != ESP_OK) { dev = NULL; return false; }

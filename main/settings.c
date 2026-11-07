@@ -205,7 +205,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     s->line_spacing_px = in_range(s->line_spacing_px, 0, 24, 5);
     s->show_progress = in_range(s->show_progress, 0, 1, 1);
     s->charging_color &= 0xFFFFFF;
-    s->clock_face = 5; /* 0.8.122: Basic is the only face */
+    s->clock_face = 5; /* 0.8.123: Basic is the only face */
     s->face_background[5] = 0x000000;
     s->basic_background = 0x000000;
     s->basic_font_style = in_range(s->basic_font_style, 0, 39, 0);

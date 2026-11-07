@@ -72,23 +72,25 @@ static void lyricflash_display_recovery_watchdog(void *arg)
             vTaskDelay(pdMS_TO_TICKS(150));
             esp_restart();
         }
-        /* 0.8.122: general LVGL-task stall guard. The UI task normally loops
+        /* 0.8.123: general LVGL-task stall guard. The UI task normally loops
            every <=10 ms; 6 s without a loop means it is blocked (e.g. a stuck
            bus transaction). Restart (settings preserved) instead of leaving a
            frozen screen. Never during OTA. */
         {
             bsp_input_health_t ih={0};
             bsp_display_input_health(&ih);
-            if(uptime_ms>30000 && ih.lvgl_loop_age_ms!=UINT32_MAX &&
-               ih.lvgl_loop_age_ms>6000U && !lf_network_ota_in_progress()){
-                ESP_LOGE(TAG,"LVGL task stalled %lu ms (touch sample age %lu ms); restarting",
-                         (unsigned long)ih.lvgl_loop_age_ms,(unsigned long)ih.touch_sample_age_ms);
-                lf_diag_wake_recovery(3,ih.lvgl_loop_age_ms,ih.touch_sample_age_ms);
+            if(uptime_ms>10000 && ih.lvgl_loop_age_ms!=UINT32_MAX &&
+               ih.lvgl_loop_age_ms>4000U && !lf_network_ota_in_progress()){
+                const uint32_t stage=bsp_ui_stage_get();
+                ESP_LOGE(TAG,"LVGL task stalled %lu ms at stage %lu; restarting",
+                         (unsigned long)ih.lvgl_loop_age_ms,(unsigned long)stage);
+                /* tick_age field carries the stuck stage for diagnostics */
+                lf_diag_wake_recovery(3,ih.lvgl_loop_age_ms,stage);
                 vTaskDelay(pdMS_TO_TICKS(150));
                 esp_restart();
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(3000));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
@@ -115,12 +117,12 @@ void app_main(void)
        the original clock policy. */
     if(!lf_power_cpu_profile_start())
         ESP_LOGW(TAG,"CPU screen-off scaling unavailable; original clock policy");
-    /* 0.8.122: TE_SYNC forces LVGL FULL render mode on this QSPI panel, so
+    /* 0.8.123: TE_SYNC forces LVGL FULL render mode on this QSPI panel, so
        every second-hand step, waveform tick and pager frame re-rendered all
        466x466 pixels from PSRAM. The UI is built around partial invalidation
        (pager strips, clipped clock hands), so use partial mode with
        double-buffered internal-SRAM strips that DMA directly to the panel. */
-    /* 0.8.122: direct LVGL/esp_lcd port (no esp_lvgl_adapter). Benchmarks:
+    /* 0.8.123: direct LVGL/esp_lcd port (no esp_lvgl_adapter). Benchmarks:
        blank full frame 47 ms through the adapter vs 13.8 ms panel transfer. */
     if (bsp_display_start_direct() == NULL) {
         ESP_LOGE(TAG, "Display initialization failed");
