@@ -3295,6 +3295,8 @@ static int32_t snap_last_x=-1;
 static uint64_t snap_dirty_not_before_ms;
 static uint64_t snap_last_full_mark_ms, snap_last_clock_mark_ms;
 static uint64_t snap_mode_since_ms;
+static bool snap_taking;
+static atomic_uint snap_sync_retakes;
 static lv_timer_t *snap_refresh_timer, *snap_comp_timer;
 static atomic_uint snap_take_count, snap_take_last_ms, snap_take_max_ms, snap_swipe_count;
 void lf_ui_snapshot_stats(uint32_t *taken,uint32_t *last_ms,uint32_t *max_ms,uint32_t *swipes)
@@ -3336,6 +3338,13 @@ static void snap_push(int32_t x)
 static void snap_enter(void)
 {
     if(snap_mode||!primary_pager)return;
+    /* 0.8.126: the page on screen changed since its picture was taken
+       (e.g. Song ID listening -> idle): retake it before the swipe shows it. */
+    const int cur=primary_pager_current;
+    if(cur>=0 && cur<3 && (page_snap_dirty&(1U<<cur))){
+        page_snap_dirty&=(uint8_t)~(1U<<cur);
+        if(page_snapshot_take(cur))atomic_fetch_add(&snap_sync_retakes,1);
+    }
     for(int i=0;i<3;i++)if(!page_snap_valid[i]||!page_snap_buf[i])return;
     lv_display_t *disp=lv_display_get_default();
     if(!disp)return;
@@ -3369,14 +3378,17 @@ static bool page_snapshot_take(int i)
     lv_obj_t *page=primary_pager_pages[i];
     if(!page||snap_mode||egg_running)return false;
     bsp_ui_stage_set(30);
+    snap_taking=true;
     const int64_t t0=esp_timer_get_time();
     if(!page_snap_buf[i]){
         page_snap_buf[i]=lv_snapshot_take(page,LV_COLOR_FORMAT_RGB565);
-        if(!page_snap_buf[i]){page_snap_valid[i]=false;return false;}
+        if(!page_snap_buf[i]){page_snap_valid[i]=false;snap_taking=false;return false;}
     }else if(lv_snapshot_take_to_draw_buf(page,LV_COLOR_FORMAT_RGB565,page_snap_buf[i])!=LV_RESULT_OK){
         page_snap_valid[i]=false;
+        snap_taking=false;
         return false;
     }
+    snap_taking=false;
     lv_draw_buf_t *b=page_snap_buf[i];
     if(b->header.w!=466||b->header.h!=466||b->header.stride<466*2){
         page_snap_valid[i]=false;
@@ -3398,6 +3410,19 @@ static void snap_mark_all_dirty(uint64_t delay_ms)
     snap_dirty_not_before_ms=now_ms()+delay_ms;
 }
 static bool ui_pointer_is_down(void);
+/* 0.8.126: any redraw of the visible Home/Settings page makes its swipe
+   picture stale. Retaken after 400 ms of quiet, or at the next swipe start. */
+static void snap_display_invalidated(lv_event_t *e)
+{
+    (void)e;
+    if(snap_mode||snap_taking||!primary_pager||pager_scrolling||
+       primary_pager_snapping||ui_pointer_is_down())return;
+    const int cur=primary_pager_current;
+    if(cur<1||cur>2)return; /* Clock keeps its 10 s refresh. */
+    page_snap_dirty|=(uint8_t)(1U<<cur);
+    snap_dirty_not_before_ms=now_ms()+400;
+}
+uint32_t lf_ui_snapshot_sync_retakes(void){return atomic_load(&snap_sync_retakes);}
 static void snap_refresh_tick(lv_timer_t *t)
 {
     (void)t;
@@ -3537,6 +3562,12 @@ static void primary_pager_create(int target_index)
     snap_reset();
     snap_mark_all_dirty(800);
     if(!snap_refresh_timer)snap_refresh_timer=lv_timer_create(snap_refresh_tick,200,NULL);
+    static bool snap_inv_hooked;
+    if(!snap_inv_hooked && lv_display_get_default()){
+        lv_display_add_event_cb(lv_display_get_default(),snap_display_invalidated,
+                                LV_EVENT_INVALIDATE_AREA,NULL);
+        snap_inv_hooked=true;
+    }
     if(!snap_comp_timer)snap_comp_timer=lv_timer_create(snap_comp_tick,10,NULL);
     lv_obj_update_layout(primary_pager);
     lv_obj_scroll_to_x(primary_pager,target_index*466,LV_ANIM_OFF);

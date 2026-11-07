@@ -1327,6 +1327,7 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
         cJSON_AddNumberToObject(root, "snapshots_taken", snap_n);
         cJSON_AddNumberToObject(root, "snapshot_last_ms", snap_last);
         cJSON_AddNumberToObject(root, "snapshot_max_ms", snap_max);
+        cJSON_AddNumberToObject(root, "snapshot_sync_retakes", lf_ui_snapshot_sync_retakes());
         cJSON *arr=cJSON_AddArrayToObject(root, "swipes_recent");
         static const char *names[3]={"clock","home","settings"};
         for(unsigned i=0;arr && i<sw.count;i++){

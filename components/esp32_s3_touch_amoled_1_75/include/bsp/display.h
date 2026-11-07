@@ -45,7 +45,7 @@ typedef struct {
 } bsp_display_transfer_stats_t;
 void bsp_display_transfer_stats(bsp_display_transfer_stats_t *out);
 
-/* 0.8.125: boot-time panel facts for on-device diagnostics. */
+/* 0.8.126: boot-time panel facts for on-device diagnostics. */
 typedef struct {
     bool lvgl_buffers_internal;   /* true: double 24-row SRAM strips (fast path) */
     uint32_t lvgl_buffer_rows;

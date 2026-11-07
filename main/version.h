@@ -5,9 +5,10 @@
  * Additive schema 16 preserves NVS and prior users' clock customizations.
  * New open-licensed clock fonts remain monochrome on embedded LVGL.
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
-#define LF_VERSION "0.8.125-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.125"
+#define LF_VERSION "0.8.126-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.126"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 0.8.126: swipe pictures refresh when the visible page changes (no stale Song ID "Listening" screen during a swipe); snapshot_sync_retakes in diagnostics. */
 /* 0.8.125: hidden extra: double-tap the Home logo to wake it up (shake, twist, pulse), send it on a lap around the screen and spring it back into place. */
 /* 0.8.124: panel SPI interrupt on core 1; never enter esp_lcd with a transfer outstanding (bounded wait, wedge flag -> immediate restart); stall guard from 2 s after boot; Copy Log works inside the log dialog. */
 /* 0.8.123: UI-task breadcrumbs kept across restart; stall guard 4 s, active from 10 s, checked every 1 s. */

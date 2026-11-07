@@ -120,3 +120,4 @@ typedef struct {
 } lf_ui_input_state_t;
 void lf_ui_input_state(lf_ui_input_state_t *out);
 void lf_ui_snapshot_stats(uint32_t *taken,uint32_t *last_ms,uint32_t *max_ms,uint32_t *swipes);
+uint32_t lf_ui_snapshot_sync_retakes(void);
