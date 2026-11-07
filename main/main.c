@@ -99,19 +99,14 @@ void app_main(void)
        the original clock policy. */
     if(!lf_power_cpu_profile_start())
         ESP_LOGW(TAG,"CPU screen-off scaling unavailable; original clock policy");
-    /* 0.8.112: TE_SYNC forces LVGL FULL render mode on this QSPI panel, so
+    /* 0.8.113: TE_SYNC forces LVGL FULL render mode on this QSPI panel, so
        every second-hand step, waveform tick and pager frame re-rendered all
        466x466 pixels from PSRAM. The UI is built around partial invalidation
        (pager strips, clipped clock hands), so use partial mode with
        double-buffered internal-SRAM strips that DMA directly to the panel. */
-    bsp_display_cfg_t display_cfg = {
-        .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
-        .rotation = ESP_LV_ADAPTER_ROTATE_0,
-        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE,
-        .touch_flags = { .swap_xy = 0, .mirror_x = 1, .mirror_y = 1 },
-    };
-    display_cfg.lv_adapter_cfg.task_core_id = 1;
-    if (bsp_display_start_with_config(&display_cfg) == NULL) {
+    /* 0.8.113: direct LVGL/esp_lcd port (no esp_lvgl_adapter). Benchmarks:
+       blank full frame 47 ms through the adapter vs 13.8 ms panel transfer. */
+    if (bsp_display_start_direct() == NULL) {
         ESP_LOGE(TAG, "Display initialization failed");
         lf_diag_error("boot", "Display start failed");
         lf_ota_guard_failure("Display start failed");

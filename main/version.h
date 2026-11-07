@@ -5,9 +5,10 @@
  * Additive schema 16 preserves NVS and prior users' clock customizations.
  * New open-licensed clock fonts remain monochrome on embedded LVGL.
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
-#define LF_VERSION "0.8.112-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.112"
+#define LF_VERSION "0.8.113-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.113"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 0.8.113: direct LVGL/esp_lcd display port (esp_lvgl_adapter bypassed): 2 x 24-row internal DMA strips, ISR-signalled flush completion. */
 /* 0.8.112: single Basic clock face (no ornate faces, ring or background colour); transparent pager removes an extra full-screen fill at swipe midpoints. */
 /* 0.8.111: fix unsigned idle-time wrap that blanked the screen while touched; LVGL OS none (synchronous rendering, no draw-thread handoffs). */
 /* 0.8.110: internal-SRAM double-buffered LVGL strips again (direct DMA, render/transfer overlap); Wi-Fi IRAM optimisations off to fund it; min internal heap in diagnostics. */

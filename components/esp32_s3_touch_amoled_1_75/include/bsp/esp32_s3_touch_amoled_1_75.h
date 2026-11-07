@@ -296,6 +296,10 @@ lv_display_t *bsp_display_start(void);
  */
 lv_display_t *bsp_display_start_with_config(bsp_display_cfg_t *cfg);
 
+/* 0.8.113: direct LVGL/esp_lcd port without esp_lvgl_adapter. Use
+   bsp_display_lock()/bsp_display_unlock() around LVGL calls. */
+lv_display_t *bsp_display_start_direct(void);
+
 /**
  * @brief Get pointer to input device (touch, buttons, ...)
  *

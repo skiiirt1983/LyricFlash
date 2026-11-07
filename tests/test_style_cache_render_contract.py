@@ -22,5 +22,5 @@ for key in ("render_dma_stage_last_us","render_dma_stage_max_us"):
     assert key in ui_head and chr(34)+key+chr(34) in net
 assert "LF_PAGER_MAX_FRAME_STEP_PX 58" in ui
 assert "lf_network_set_idle(true);" in ui and "lf_network_set_idle(false);" in ui
-assert ".tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE" in (root/"main/main.c").read_text()
+assert "bsp_display_start_direct()" in (root/"main/main.c").read_text()
 print("PASS: LVGL 9 style cache, physical-stage render timing, 24-row/4-row display and 1-slot SPI safety")

@@ -29,7 +29,7 @@ assert "static atomic_bool screen_cpu_lock_held;" in p
 assert "atomic_load(&screen_cpu_lock_held)" in p
 assert "atomic_store(&screen_cpu_lock_held,awake);" in p
 assert "lf_power_cpu_profile_start()" in main
-assert main.index("lf_power_cpu_profile_start()")<main.index("bsp_display_start_with_config")
+assert main.index("lf_power_cpu_profile_start()")<main.index("bsp_display_start_direct")
 assert "lf_power_set_screen_awake(true);" in wake
 assert wake.index("lf_power_set_screen_awake(true);")<wake.index("apply_brightness();")
 assert "lf_power_set_screen_awake(false);" in sleep

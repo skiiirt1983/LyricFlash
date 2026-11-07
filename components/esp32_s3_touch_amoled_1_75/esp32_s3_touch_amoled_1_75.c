@@ -773,7 +773,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // fallback path when tear mode ends up as NONE.
 #define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
-/* 0.8.112 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+/* 0.8.113 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
    DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
    strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
    Used only when tear mode is NONE and enough internal RAM remains for
@@ -1018,7 +1018,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         (size_t)BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT_INTERNAL_FAST * BSP_LCD_BITS_PER_PIXEL / 8;
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-    /* 0.8.112: disabled. Hardware logs showed panel flush waits under 1 ms
+    /* 0.8.113: disabled. Hardware logs showed panel flush waits under 1 ms
        (render, not transfer, is the bottleneck) while the 45 KB of internal
        SRAM starved song ID. Keep LVGL strips in PSRAM with DMA staging. */
     const bool internal_fast = BSP_LVGL_INTERNAL_FAST_ENABLE && !use_te_sync &&
@@ -1217,12 +1217,154 @@ esp_err_t bsp_display_rotation_set(bsp_display_rotation_t rotation)
     return esp_lcd_panel_io_tx_param(io_handle, lcd_cmd, &madctl, 1);
 }
 
+/* ---------------------------------------------------------------------
+ * 0.8.113: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
+ * shape), replacing esp_lvgl_adapter for this panel. Hardware benchmarks
+ * showed a blank full frame costing 47 ms through the adapter although the
+ * panel accepts a full frame in 13.8 ms. Here LVGL renders 24-row strips
+ * into two internal DMA buffers that are sent straight to the CO5300; the
+ * SPI "color transfer done" ISR releases the buffer, so rendering of the
+ * next strip overlaps the transfer of the previous one.
+ * ------------------------------------------------------------------- */
+#include "freertos/semphr.h"
+#define BSP_DIRECT_ROWS (24)
+static SemaphoreHandle_t direct_lvgl_mux;
+static lv_display_t *direct_disp;
+static bool direct_mode;
+
+/* The SPI ISR may run while flash cache is disabled (NVS/OTA writes), so it
+   only gives a semaphore; LVGL waits on it through flush_wait_cb. */
+static SemaphoreHandle_t direct_flush_done;
+static bool IRAM_ATTR bsp_direct_color_done(esp_lcd_panel_io_handle_t io,
+                                            esp_lcd_panel_io_event_data_t *edata,
+                                            void *user_ctx)
+{
+    (void)io; (void)edata; (void)user_ctx;
+    BaseType_t woken = pdFALSE;
+    xSemaphoreGiveFromISR(direct_flush_done, &woken);
+    return woken == pdTRUE;
+}
+static void bsp_direct_flush_wait(lv_display_t *disp)
+{
+    (void)disp;
+    /* Bounded: a lost completion must never freeze the UI. */
+    (void)xSemaphoreTake(direct_flush_done, pdMS_TO_TICKS(200));
+}
+static void bsp_direct_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px)
+{
+    (void)disp;
+    lv_draw_sw_rgb565_swap(px, lv_area_get_size(area));
+    if (esp_lcd_panel_draw_bitmap(panel_handle, area->x1, area->y1,
+                                  area->x2 + 1, area->y2 + 1, px) != ESP_OK) {
+        xSemaphoreGive(direct_flush_done);
+    }
+}
+static void bsp_direct_touch_read(lv_indev_t *indev, lv_indev_data_t *data)
+{
+    esp_lcd_touch_handle_t t = (esp_lcd_touch_handle_t)lv_indev_get_user_data(indev);
+    uint16_t x[1] = {0}, y[1] = {0};
+    uint8_t cnt = 0;
+    data->state = LV_INDEV_STATE_RELEASED;
+    if (!t || esp_lcd_touch_read_data(t) != ESP_OK) return;
+    if (esp_lcd_touch_get_coordinates(t, x, y, NULL, &cnt, 1) && cnt > 0) {
+        data->point.x = x[0];
+        data->point.y = y[0];
+        data->state = LV_INDEV_STATE_PRESSED;
+    }
+}
+static uint32_t bsp_direct_tick(void)
+{
+    return (uint32_t)(esp_timer_get_time() / 1000ULL);
+}
+static void bsp_direct_lvgl_task(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        uint32_t wait_ms = 5;
+        if (xSemaphoreTakeRecursive(direct_lvgl_mux, portMAX_DELAY) == pdTRUE) {
+            wait_ms = lv_timer_handler();
+            xSemaphoreGiveRecursive(direct_lvgl_mux);
+        }
+        if (wait_ms > 10) wait_ms = 10;
+        TickType_t ticks = pdMS_TO_TICKS(wait_ms);
+        vTaskDelay(ticks ? ticks : 1);
+    }
+}
+lv_display_t *bsp_display_start_direct(void)
+{
+    if (direct_disp) return direct_disp;
+    direct_lvgl_mux = xSemaphoreCreateRecursiveMutex();
+    direct_flush_done = xSemaphoreCreateBinary();
+    if (!direct_lvgl_mux || !direct_flush_done) return NULL;
+
+    const size_t strip_bytes = (size_t)BSP_LCD_H_RES * BSP_DIRECT_ROWS * BSP_LCD_BITS_PER_PIXEL / 8;
+    const bsp_display_config_t disp_config = { .max_transfer_sz = (int)strip_bytes };
+    BSP_ERROR_CHECK_RETURN_NULL(bsp_display_new(&disp_config, &panel_handle, &io_handle));
+    display_profile.lvgl_buffers_internal = true;
+    display_profile.lvgl_buffer_rows = BSP_DIRECT_ROWS;
+    display_profile.internal_free_at_init = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    bsp_display_qspi_selftest();
+
+    void *buf1 = heap_caps_malloc(strip_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    void *buf2 = heap_caps_malloc(strip_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    if (!buf1 || !buf2) {
+        ESP_LOGE(TAG, "Direct LVGL: cannot allocate 2 x %u byte DMA strips", (unsigned)strip_bytes);
+        free(buf1); free(buf2);
+        return NULL;
+    }
+
+    lv_init();
+    lv_tick_set_cb(bsp_direct_tick);
+    lv_display_t *disp = lv_display_create(BSP_LCD_H_RES, BSP_LCD_V_RES);
+    if (!disp) return NULL;
+    lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
+    lv_display_set_buffers(disp, buf1, buf2, strip_bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_set_flush_cb(disp, bsp_direct_flush);
+    lv_display_set_flush_wait_cb(disp, bsp_direct_flush_wait);
+    lv_display_add_event_cb(disp, rounder_event_cb, LV_EVENT_INVALIDATE_AREA, NULL);
+
+    const esp_lcd_panel_io_callbacks_t cbs = { .on_color_trans_done = bsp_direct_color_done };
+    BSP_ERROR_CHECK_RETURN_NULL(esp_lcd_panel_io_register_event_callbacks(io_handle, &cbs, disp));
+
+    bsp_display_cfg_t touch_cfg = {
+        .touch_flags = { .swap_xy = 0, .mirror_x = 1, .mirror_y = 1 },
+    };
+    if (bsp_touch_new(&touch_cfg, &tp) == ESP_OK && tp) {
+        lv_indev_t *indev = lv_indev_create();
+        lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_read_cb(indev, bsp_direct_touch_read);
+        lv_indev_set_user_data(indev, tp);
+        lv_indev_set_display(indev, disp);
+        disp_indev = indev;
+    } else {
+        ESP_LOGE(TAG, "Direct LVGL: touch init failed");
+    }
+
+    direct_disp = disp;
+    direct_mode = true;
+    (void)bsp_display_brightness_init();
+    if (xTaskCreatePinnedToCore(bsp_direct_lvgl_task, "lvgl", 10240, NULL, 4, NULL, 1) != pdPASS) {
+        ESP_LOGE(TAG, "Direct LVGL: cannot start LVGL task");
+        return NULL;
+    }
+    ESP_LOGI(TAG, "Direct LVGL port: 2 x %d-row internal DMA strips, no adapter", BSP_DIRECT_ROWS);
+    return disp;
+}
+
 esp_err_t bsp_display_lock(uint32_t timeout_ms)
 {
+    if (direct_mode) {
+        const TickType_t ticks = (timeout_ms == UINT32_MAX) ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms);
+        return xSemaphoreTakeRecursive(direct_lvgl_mux, ticks) == pdTRUE ? ESP_OK : ESP_ERR_TIMEOUT;
+    }
     return esp_lv_adapter_lock(timeout_ms);
 }
 
 void bsp_display_unlock(void)
 {
+    if (direct_mode) {
+        xSemaphoreGiveRecursive(direct_lvgl_mux);
+        return;
+    }
     esp_lv_adapter_unlock();
 }
