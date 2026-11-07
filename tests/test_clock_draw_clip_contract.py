@@ -44,6 +44,6 @@ for diver in (False,True):
             if cull:skipped+=1
             else:visible+=1
 assert skipped>visible*3,(skipped,visible)
-assert "snap_exit();" in (root/"main/ui.c").read_text()  # 0.8.120 swipe-only snapshots
+assert "snap_exit();" in (root/"main/ui.c").read_text()  # 0.8.121 swipe-only snapshots
 assert "lf_network_set_idle(false);" in (root/"main/ui.c").read_text()
 print(f"PASS: clipped offscreen Basic draw bars & analog marks; {skipped} invisible tick-band draw tasks avoided per full dial test")

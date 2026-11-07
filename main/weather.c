@@ -17,6 +17,10 @@
 static portMUX_TYPE weather_mux = portMUX_INITIALIZER_UNLOCKED;
 static lf_weather_config_t config = {.enabled = false, .interval_minutes = 30, .city = ""};
 static char weather_strip[68];
+/* 0.8.121: last HTTPS attempt, for /api/diagnostics. */
+static volatile int weather_last_err, weather_last_http, weather_last_bytes;
+static volatile bool weather_last_overflow;
+static volatile uint32_t weather_fetches, weather_fetch_ok;
 static char weather_details[256];
 static int weather_temperature;
 static int weather_code;
@@ -67,6 +71,10 @@ static cJSON *https_json(const char *url)
     esp_err_t err = esp_http_client_perform(client);
     int status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
+    weather_last_err = (int)err;
+    weather_last_http = status;
+    weather_last_bytes = (int)out.length;
+    weather_last_overflow = out.overflow;
     cJSON *result = NULL;
     if (err == ESP_OK && !out.overflow && status == 200 && out.length > 0)
         result = cJSON_Parse(out.data);
@@ -371,6 +379,8 @@ static void worker(void *arg)
             lf_weather_view_t updated_view = {0};
             bool ok = fetch_weather(&c, reading, sizeof reading,
                                     detailed, sizeof detailed, &t, &code, &updated_view);
+            weather_fetches++;
+            if(ok)weather_fetch_ok++;
             /* A changed configuration must not display a stale result. */
             portENTER_CRITICAL(&weather_mux);
             bool unchanged = config_generation == generation;
@@ -408,4 +418,23 @@ bool lf_weather_start(void)
     load_config();
     return xTaskCreate(worker, "lf_weather", 8192, NULL,
                        tskIDLE_PRIORITY + 1, &weather_task) == pdPASS;
+}
+
+void lf_weather_debug(lf_weather_debug_t *d)
+{
+    if(!d)return;
+    memset(d,0,sizeof(*d));
+    portENTER_CRITICAL(&weather_mux);
+    d->enabled=config.enabled;
+    snprintf(d->city,sizeof d->city,"%s",config.city);
+    snprintf(d->status,sizeof d->status,"%s",weather_strip);
+    d->valid=weather_numeric_valid;
+    d->temperature=weather_temperature;
+    portEXIT_CRITICAL(&weather_mux);
+    d->fetches=weather_fetches;
+    d->fetch_ok=weather_fetch_ok;
+    d->last_err=weather_last_err;
+    d->last_http=weather_last_http;
+    d->last_bytes=weather_last_bytes;
+    d->last_overflow=weather_last_overflow;
 }

@@ -123,7 +123,7 @@ static const lv_font_t *basic_element_font(uint8_t size)
 }
 static void basic_scale_element(lv_obj_t *item,uint8_t size)
 {
-    /* 0.8.120: no scale transform. Sizes above 100% use the largest native
+    /* 0.8.121: no scale transform. Sizes above 100% use the largest native
        font (basic_element_font) instead of an offscreen scaled layer that
        was re-rendered on every frame. */
     (void)item;(void)size;
@@ -150,7 +150,7 @@ static lv_obj_t *dial_line(lv_obj_t *parent, lv_point_precise_t *points, int wid
     lv_obj_set_style_line_rounded(o, true, 0);
     return o;
 }
-/* 0.8.120: an lv_line's box spans from its parent's origin to its furthest
+/* 0.8.121: an lv_line's box spans from its parent's origin to its furthest
    point, so moving a clock hand used to invalidate a ~400x400 region (most of
    the dial) 30 times per second. Keep each moving line's object tightly
    around its two endpoints so only the pixels the hand covers are redrawn. */
@@ -500,7 +500,7 @@ void lf_clock_clear(void)
 void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settings)
 {
     lf_clock_clear();
-    /* 0.8.120: only the Basic face remains; ornate faces were the main
+    /* 0.8.121: only the Basic face remains; ornate faces were the main
        render cost (398 ms full frame, 433 ms swipe midpoint). */
     (void)style;
     current_style = 5;
@@ -545,7 +545,10 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
     lf_weather_config_t weather_cfg;
     lf_weather_get_config(&weather_cfg);
     /* Weather is an opt-in, movable part of each independent face. */
-    if (weather_cfg.enabled && settings->face_show_weather[current_style]) {
+    /* 0.8.121: the device menu toggles basic_weather while Clock Studio
+       toggles face_show_weather; either one shows the weather on the clock. */
+    if (weather_cfg.enabled && (settings->face_show_weather[current_style] ||
+                                (current_style == 5 && settings->basic_weather))) {
         uint32_t colour = settings->face_weather_color[current_style];
         const uint8_t wz=settings->face_weather_size[current_style];
         weather_icon = lv_obj_create(parent);

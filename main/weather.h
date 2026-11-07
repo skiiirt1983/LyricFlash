@@ -52,3 +52,13 @@ typedef struct {
     unsigned day_count;
 } lf_weather_view_t;
 void lf_weather_get_view(lf_weather_view_t *out);
+
+/* 0.8.121: weather pipeline state for diagnostics. */
+typedef struct {
+    bool enabled, valid, last_overflow;
+    char city[48];
+    char status[68];
+    int temperature, last_err, last_http, last_bytes;
+    uint32_t fetches, fetch_ok;
+} lf_weather_debug_t;
+void lf_weather_debug(lf_weather_debug_t *out);

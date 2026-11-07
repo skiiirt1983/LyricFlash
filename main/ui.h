@@ -76,7 +76,7 @@ uint32_t pager_home_settings_mid_draw_samples;
     uint32_t lyrics_scene_phase; /* 0 idle, 1..5 building, 6 committed */
 } lf_ui_display_stats_t;
 void lf_ui_display_stats(lf_ui_display_stats_t *out);
-/* 0.8.120 boot benchmark: isolates CPU clock vs LVGL drawing vs panel transfer. */
+/* 0.8.121 boot benchmark: isolates CPU clock vs LVGL drawing vs panel transfer. */
 typedef struct {
     uint32_t cpu_mhz_measured;   /* cycle counter vs esp_timer at boot */
     uint32_t cpu_loop_us;        /* fixed integer workload */
@@ -96,7 +96,7 @@ typedef struct {
     uint32_t uptime_s;
 } lf_ui_sleep_info_t;
 void lf_ui_sleep_info(lf_ui_sleep_info_t *out);
-/* 0.8.120: per-swipe frame statistics, newest first. */
+/* 0.8.121: per-swipe frame statistics, newest first. */
 #define LF_SWIPE_LOG 8
 typedef struct {
     uint8_t from_page, to_page;   /* pager index: 0 Clock, 1 Home, 2 Settings */

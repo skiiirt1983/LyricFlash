@@ -747,7 +747,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         return ESP_FAIL;
     }
     (void)face;
-    current.clock_face = 5; /* 0.8.120: single Basic face */
+    current.clock_face = 5; /* 0.8.121: single Basic face */
     current.basic_font_style = (uint8_t)font_style;
     current.basic_font_size = (uint8_t)font_size;
     current.basic_time_x=(int32_t)element[0];
@@ -1290,6 +1290,26 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
         cJSON_AddNumberToObject(root, "ui_last_touch_age_ms", in.lvgl_idle_ms);
         cJSON_AddNumberToObject(root, "ui_page_id", in.page);
         cJSON_AddNumberToObject(root, "lcd_te_pulses", bsp_display_te_count());
+        lf_weather_debug_t wd;
+        lf_weather_debug(&wd);
+        lf_settings_t *ws=calloc(1,sizeof(*ws));
+        if(ws)(void)lf_settings_load(ws);
+        cJSON_AddBoolToObject(root, "weather_enabled_cfg", wd.enabled);
+        cJSON_AddStringToObject(root, "weather_city_cfg", wd.city);
+        cJSON_AddStringToObject(root, "weather_status", wd.status);
+        cJSON_AddBoolToObject(root, "weather_have_reading", wd.valid);
+        cJSON_AddNumberToObject(root, "weather_temp_c", wd.temperature);
+        cJSON_AddNumberToObject(root, "weather_fetches", wd.fetches);
+        cJSON_AddNumberToObject(root, "weather_fetch_ok", wd.fetch_ok);
+        cJSON_AddNumberToObject(root, "weather_last_esp_err", wd.last_err);
+        cJSON_AddNumberToObject(root, "weather_last_http", wd.last_http);
+        cJSON_AddNumberToObject(root, "weather_last_bytes", wd.last_bytes);
+        cJSON_AddBoolToObject(root, "weather_last_overflow", wd.last_overflow);
+        if(ws){
+            cJSON_AddBoolToObject(root, "clock_show_weather", ws->face_show_weather[5]!=0);
+            cJSON_AddBoolToObject(root, "basic_weather_menu", ws->basic_weather!=0);
+            free(ws);
+        }
         uint32_t snap_n=0,snap_last=0,snap_max=0,snap_sw=0;
         lf_ui_snapshot_stats(&snap_n,&snap_last,&snap_max,&snap_sw);
         cJSON_AddNumberToObject(root, "snapshot_swipes", snap_sw);
