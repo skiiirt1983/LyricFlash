@@ -18,7 +18,7 @@ for name in ("basic_battery_size","basic_date_size","basic_weather_size"):
 assert "basic_battery_size = 85" in settings
 for source in (settings,api):
     assert "basic_font_size" in source and "200" in source
-assert "transform_scale" not in basic  # 0.8.108: native font sizes, no scaled layers
+assert "transform_scale" not in basic  # 0.8.109: native font sizes, no scaled layers
 assert "lf_clock_custom_font_px(family," in basic
 assert "transform_scale" not in clock
 assert "basic_digit_height(" in basic and "basic_digit_cell(" in basic

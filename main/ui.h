@@ -76,7 +76,7 @@ uint32_t pager_home_settings_mid_draw_samples;
     uint32_t lyrics_scene_phase; /* 0 idle, 1..5 building, 6 committed */
 } lf_ui_display_stats_t;
 void lf_ui_display_stats(lf_ui_display_stats_t *out);
-/* 0.8.108 boot benchmark: isolates CPU clock vs LVGL drawing vs panel transfer. */
+/* 0.8.109 boot benchmark: isolates CPU clock vs LVGL drawing vs panel transfer. */
 typedef struct {
     uint32_t cpu_mhz_measured;   /* cycle counter vs esp_timer at boot */
     uint32_t cpu_loop_us;        /* fixed integer workload */
@@ -87,3 +87,12 @@ typedef struct {
     uint32_t render_cpu_mhz_last;
 } lf_ui_bench_t;
 void lf_ui_bench(lf_ui_bench_t *out);
+typedef struct {
+    uint32_t count;          /* screen-off events since boot */
+    uint32_t sleep_seconds;  /* timeout setting when the last one fired */
+    uint32_t idle_ms;        /* firmware idle time at that moment */
+    uint32_t lvgl_idle_ms;   /* LVGL input-device idle time at that moment */
+    uint32_t page;
+    uint32_t uptime_s;
+} lf_ui_sleep_info_t;
+void lf_ui_sleep_info(lf_ui_sleep_info_t *out);

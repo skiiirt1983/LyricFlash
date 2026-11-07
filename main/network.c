@@ -1264,6 +1264,14 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
         cJSON_AddNumberToObject(root, "lcd_selftest_kbps", lcd.selftest_kbytes_per_s);
         cJSON_AddNumberToObject(root, "lcd_selftest_frame_us", lcd.selftest_frame_us);
         cJSON_AddNumberToObject(root, "free_internal_bytes", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+        lf_ui_sleep_info_t sl={0};
+        lf_ui_sleep_info(&sl);
+        cJSON_AddNumberToObject(root, "screen_off_count", sl.count);
+        cJSON_AddNumberToObject(root, "screen_off_timeout_s", sl.sleep_seconds);
+        cJSON_AddNumberToObject(root, "screen_off_idle_ms", sl.idle_ms);
+        cJSON_AddNumberToObject(root, "screen_off_lvgl_idle_ms", sl.lvgl_idle_ms);
+        cJSON_AddNumberToObject(root, "screen_off_page", sl.page);
+        cJSON_AddNumberToObject(root, "screen_off_at_uptime_s", sl.uptime_s);
     }
     lf_weather_config_t weather;
     lf_weather_get_config(&weather);

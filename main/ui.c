@@ -241,6 +241,9 @@ static atomic_uint pager_frame_gap_last_ms;
 static atomic_uint pager_frame_gap_max_ms;
 static atomic_uint pager_refresh_prev_ms;
 /* Profile the overlapping-center raster workload, separated by page pair. */
+/* 0.8.109: why did the screen turn off? */
+static lf_ui_sleep_info_t sleep_info;
+void lf_ui_sleep_info(lf_ui_sleep_info_t *out){ if(out)*out=sleep_info; }
 /* 0.8.104 benchmark: CPU clock sampled at every frame start. */
 static atomic_uint render_cpu_mhz_min=UINT32_MAX;
 static atomic_uint render_cpu_mhz_last;
@@ -3613,6 +3616,15 @@ static void sleep_display(void)
        primary_pager_snapping || nav_transition_active)return;
     /* Preserve the current page, clock pointers and button tree. A single
        black touch-capture child handles wake without screen reconstruction. */
+    {
+        const uint64_t now_sleep=now_ms();
+        sleep_info.count++;
+        sleep_info.sleep_seconds=prefs?prefs->sleep_seconds:0;
+        sleep_info.idle_ms=(uint32_t)(now_sleep-last_activity_ms);
+        sleep_info.lvgl_idle_ms=lv_display_get_inactive_time(NULL);
+        sleep_info.page=(uint32_t)page;
+        sleep_info.uptime_s=(uint32_t)(now_sleep/1000ULL);
+    }
     asleep=true;
     atomic_store(&ui_screen_awake,false);
     atomic_store(&wake_overlay_pending,false);
@@ -3654,7 +3666,7 @@ static void on_tick_body(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
-    /* 0.8.108: LVGL stamps every input-device press itself. Use it so a
+    /* 0.8.109: LVGL stamps every input-device press itself. Use it so a
        touch that no widget callback or 50 ms pointer poll caught (common
        during slow frames) still counts as activity; the screen timeout was
        blanking the display while it was in use. */
@@ -4119,7 +4131,7 @@ __attribute__((unused)) static void nav_transition_tick(lv_timer_t *timer)
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
 {
-    /* 0.8.108: instant screen change. The 12-strip reveal waited for a
+    /* 0.8.109: instant screen change. The 12-strip reveal waited for a
        rendered frame ACK per strip and read as 1-2 fps stutter. One full
        redraw is faster and feels like a phone page switch. */
     (void)direction;
@@ -4242,7 +4254,7 @@ static void build_weather_details(void) { nav_schedule(build_weather_details_now
 static void build_weather_location(void) { nav_schedule(build_weather_location_now); }
 
 
-/* ---- 0.8.108 boot benchmark ------------------------------------------- */
+/* ---- 0.8.109 boot benchmark ------------------------------------------- */
 static lf_ui_bench_t ui_bench;
 void lf_ui_bench(lf_ui_bench_t *out)
 {
@@ -4340,9 +4352,9 @@ bool lf_ui_start(lf_settings_t *s)
         }
         touch=lv_indev_get_next(touch);
     }
-    /* 0.8.108: run the benchmark once on the LVGL task (large stack), never
+    /* 0.8.109: run the benchmark once on the LVGL task (large stack), never
        from app_main: a full lv_refr_now() overflowed app_main's stack in
-       0.8.108, crashed at boot and the OTA rollback restored 0.8.103. */
+       0.8.109, crashed at boot and the OTA rollback restored 0.8.103. */
     lv_timer_t *bench_timer=lv_timer_create(ui_boot_benchmark_timer,1500,NULL);
     if(bench_timer)lv_timer_set_repeat_count(bench_timer,1);
     lv_timer_create(on_tick, 50, NULL);
