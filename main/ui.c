@@ -241,7 +241,7 @@ static atomic_uint pager_frame_gap_last_ms;
 static atomic_uint pager_frame_gap_max_ms;
 static atomic_uint pager_refresh_prev_ms;
 /* Profile the overlapping-center raster workload, separated by page pair. */
-/* 0.8.110: why did the screen turn off? */
+/* 0.8.111: why did the screen turn off? */
 static lf_ui_sleep_info_t sleep_info;
 void lf_ui_sleep_info(lf_ui_sleep_info_t *out){ if(out)*out=sleep_info; }
 /* 0.8.104 benchmark: CPU clock sampled at every frame start. */
@@ -3592,6 +3592,14 @@ static void on_wake(lv_event_t *e)
    asserted low INT at sleep entry would immediately wake, so guard it.
    Timer wake is a recovery fallback in case the touch controller will not
    generate an interrupt while the SoC sleeps. Default remains OFF. */
+/* 0.8.111: on_tick samples `current` once, then helpers such as the pager
+   watchdog call activity() with a fresh, slightly later now_ms(). The old
+   unsigned `current - last_activity_ms` then wrapped to ~2^64 and blanked
+   the screen instantly while it was being touched (logged idle_ms = 0). */
+static uint64_t ui_idle_ms(uint64_t current)
+{
+    return current > last_activity_ms ? current - last_activity_ms : 0;
+}
 static void sleep_deep(void)
 {
     if (gpio_get_level(GPIO_NUM_11) != 1) {
@@ -3620,7 +3628,7 @@ static void sleep_display(void)
         const uint64_t now_sleep=now_ms();
         sleep_info.count++;
         sleep_info.sleep_seconds=prefs?prefs->sleep_seconds:0;
-        sleep_info.idle_ms=(uint32_t)(now_sleep-last_activity_ms);
+        sleep_info.idle_ms=(uint32_t)ui_idle_ms(now_sleep);
         sleep_info.lvgl_idle_ms=lv_display_get_inactive_time(NULL);
         sleep_info.page=(uint32_t)page;
         sleep_info.uptime_s=(uint32_t)(now_sleep/1000ULL);
@@ -3666,7 +3674,7 @@ static void on_tick_body(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
-    /* 0.8.110: LVGL stamps every input-device press itself. Use it so a
+    /* 0.8.111: LVGL stamps every input-device press itself. Use it so a
        touch that no widget callback or 50 ms pointer poll caught (common
        during slow frames) still counts as activity; the screen timeout was
        blanking the display while it was in use. */
@@ -3973,7 +3981,7 @@ static void on_tick_body(lv_timer_t *timer)
     static uint64_t deep_sleep_retry_after_ms;
     if (prefs->deep_sleep_minutes && !(page == 1 && timed_lyrics_mode) &&
         page != 14 && page != 15 &&
-        current-last_activity_ms >= (uint64_t)prefs->deep_sleep_minutes*60000ULL &&
+        ui_idle_ms(current) >= (uint64_t)prefs->deep_sleep_minutes*60000ULL &&
         current >= deep_sleep_retry_after_ms) {
         /* If touch INT is held low or wake setup fails, remain safely in
            screen-off mode and retry once per minute, not every 50 ms. */
@@ -3996,7 +4004,7 @@ static void on_tick_body(lv_timer_t *timer)
     if (prefs->sleep_seconds && !(page == 1 && timed_lyrics_mode) &&
         page != 14 && page != 15 && !ui_pointer_is_down() &&
         !pager_scrolling && !primary_pager_snapping && !nav_transition_active &&
-        current - last_activity_ms > (uint64_t)prefs->sleep_seconds * 1000ULL) {
+        ui_idle_ms(current) > (uint64_t)prefs->sleep_seconds * 1000ULL) {
         sleep_display();
         return;
     }
@@ -4131,7 +4139,7 @@ __attribute__((unused)) static void nav_transition_tick(lv_timer_t *timer)
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
 {
-    /* 0.8.110: instant screen change. The 12-strip reveal waited for a
+    /* 0.8.111: instant screen change. The 12-strip reveal waited for a
        rendered frame ACK per strip and read as 1-2 fps stutter. One full
        redraw is faster and feels like a phone page switch. */
     (void)direction;
@@ -4254,7 +4262,7 @@ static void build_weather_details(void) { nav_schedule(build_weather_details_now
 static void build_weather_location(void) { nav_schedule(build_weather_location_now); }
 
 
-/* ---- 0.8.110 boot benchmark ------------------------------------------- */
+/* ---- 0.8.111 boot benchmark ------------------------------------------- */
 static lf_ui_bench_t ui_bench;
 void lf_ui_bench(lf_ui_bench_t *out)
 {
@@ -4352,9 +4360,9 @@ bool lf_ui_start(lf_settings_t *s)
         }
         touch=lv_indev_get_next(touch);
     }
-    /* 0.8.110: run the benchmark once on the LVGL task (large stack), never
+    /* 0.8.111: run the benchmark once on the LVGL task (large stack), never
        from app_main: a full lv_refr_now() overflowed app_main's stack in
-       0.8.110, crashed at boot and the OTA rollback restored 0.8.103. */
+       0.8.111, crashed at boot and the OTA rollback restored 0.8.103. */
     lv_timer_t *bench_timer=lv_timer_create(ui_boot_benchmark_timer,1500,NULL);
     if(bench_timer)lv_timer_set_repeat_count(bench_timer,1);
     lv_timer_create(on_tick, 50, NULL);

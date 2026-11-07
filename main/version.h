@@ -5,9 +5,10 @@
  * Additive schema 16 preserves NVS and prior users' clock customizations.
  * New open-licensed clock fonts remain monochrome on embedded LVGL.
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
-#define LF_VERSION "0.8.110-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.110"
+#define LF_VERSION "0.8.111-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.111"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 0.8.111: fix unsigned idle-time wrap that blanked the screen while touched; LVGL OS none (synchronous rendering, no draw-thread handoffs). */
 /* 0.8.110: internal-SRAM double-buffered LVGL strips again (direct DMA, render/transfer overlap); Wi-Fi IRAM optimisations off to fund it; min internal heap in diagnostics. */
 /* 0.8.109: screen-off diagnostics (timeout setting, firmware and LVGL idle time, page). */
 /* 0.8.108: LVGL circle-mask cache 4 -> 32 radii (benchmark: blank 52 ms, Home 106 ms, Clock 212 ms full frame). */

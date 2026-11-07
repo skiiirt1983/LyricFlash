@@ -12,7 +12,7 @@ assert "lv_obj_remove_flag(slider,LV_OBJ_FLAG_EVENT_BUBBLE);" in settings
 assert "if(!asleep && ui_pointer_is_down())last_activity_ms=current;" in tick
 assert tick.index("if(!asleep && ui_pointer_is_down())last_activity_ms=current;")<tick.index("if (nav_transition_active) return;")
 assert "if(asleep || ui_pointer_is_down() || pager_scrolling ||" in sleep
-assert "!ui_pointer_is_down() &&" in tick and "current - last_activity_ms >" in tick
+assert "!ui_pointer_is_down() &&" in tick and "ui_idle_ms(current) >" in tick
 assert "lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_TRANSP,0);" in wake
 assert "lv_obj_set_style_bg_opa(sleep_overlay,LV_OPA_TRANSP,LV_STATE_PRESSED);" in wake
 assert "lv_async_call(wake_finish_async,NULL);" not in wake
