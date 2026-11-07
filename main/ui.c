@@ -3986,6 +3986,9 @@ static void on_wake(lv_event_t *e)
        asynchronous Wi-Fi restart worker after prolonged radio-off. */
     lf_power_set_screen_awake(true);
     activity();
+    /* 0.8.129: bring the clock up to date before the panel lights, so a
+       wake never shows the time from when the screen went off. */
+    if(clock_scene){lf_clock_update();page_snap_dirty|=0x01;}
     apply_brightness();
     /* Reveal the unchanged page immediately, but the transparent clickable
        cover still captures this entire waking gesture. Removing it on the
