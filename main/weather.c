@@ -17,7 +17,7 @@
 static portMUX_TYPE weather_mux = portMUX_INITIALIZER_UNLOCKED;
 static lf_weather_config_t config = {.enabled = false, .interval_minutes = 30, .city = ""};
 static char weather_strip[68];
-/* 0.8.123: last HTTPS attempt, for /api/diagnostics. */
+/* 0.8.124: last HTTPS attempt, for /api/diagnostics. */
 static volatile int weather_last_err, weather_last_http, weather_last_bytes;
 static volatile bool weather_last_overflow;
 static volatile uint32_t weather_fetches, weather_fetch_ok;

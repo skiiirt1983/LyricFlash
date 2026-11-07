@@ -53,7 +53,7 @@ typedef struct {
 } lf_weather_view_t;
 void lf_weather_get_view(lf_weather_view_t *out);
 
-/* 0.8.123: weather pipeline state for diagnostics. */
+/* 0.8.124: weather pipeline state for diagnostics. */
 typedef struct {
     bool enabled, valid, last_overflow;
     char city[48];

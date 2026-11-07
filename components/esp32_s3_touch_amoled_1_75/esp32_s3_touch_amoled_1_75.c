@@ -773,7 +773,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // fallback path when tear mode ends up as NONE.
 #define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
-/* 0.8.123 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+/* 0.8.124 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
    DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
    strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
    Used only when tear mode is NONE and enough internal RAM remains for
@@ -913,12 +913,15 @@ esp_err_t bsp_display_new(const bsp_display_config_t *config, esp_lcd_panel_hand
     assert(config != NULL && config->max_transfer_sz > 0);
 
     ESP_LOGI(TAG, "Initialize SPI bus");
-    const spi_bus_config_t buscfg = CO5300_PANEL_BUS_QSPI_CONFIG(BSP_LCD_PCLK,
+    spi_bus_config_t buscfg = CO5300_PANEL_BUS_QSPI_CONFIG(BSP_LCD_PCLK,
                                                                  BSP_LCD_DATA0,
                                                                  BSP_LCD_DATA1,
                                                                  BSP_LCD_DATA2,
                                                                  BSP_LCD_DATA3,
                                                                  config->max_transfer_sz);
+    /* 0.8.124: service the panel's SPI interrupt on core 1 (the LVGL core),
+       away from Wi-Fi, the touch I2C bus and the TE GPIO interrupt on core 0. */
+    buscfg.isr_cpu_id = ESP_INTR_CPU_AFFINITY_1;
     ESP_ERROR_CHECK(spi_bus_initialize(BSP_LCD_SPI_NUM, &buscfg, SPI_DMA_CH_AUTO));
 
     esp_lcd_panel_io_spi_config_t io_config = CO5300_PANEL_IO_QSPI_CONFIG(BSP_LCD_CS, NULL, NULL);
@@ -942,7 +945,7 @@ esp_err_t bsp_display_new(const bsp_display_config_t *config, esp_lcd_panel_hand
     esp_lcd_panel_set_gap(panel_handle, 0x06, 0);
     esp_lcd_panel_reset(panel_handle);
     esp_lcd_panel_init(panel_handle);
-    /* 0.8.123: switch the panel on dark. Its RAM holds random pixels until
+    /* 0.8.124: switch the panel on dark. Its RAM holds random pixels until
        the first black frame; at full brightness that was a white flash. */
     {
         uint8_t zero = 0;
@@ -1024,7 +1027,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         (size_t)BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT_INTERNAL_FAST * BSP_LCD_BITS_PER_PIXEL / 8;
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-    /* 0.8.123: disabled. Hardware logs showed panel flush waits under 1 ms
+    /* 0.8.124: disabled. Hardware logs showed panel flush waits under 1 ms
        (render, not transfer, is the bottleneck) while the 45 KB of internal
        SRAM starved song ID. Keep LVGL strips in PSRAM with DMA staging. */
     const bool internal_fast = BSP_LVGL_INTERNAL_FAST_ENABLE && !use_te_sync &&
@@ -1224,7 +1227,7 @@ esp_err_t bsp_display_rotation_set(bsp_display_rotation_t rotation)
 }
 
 /* ---------------------------------------------------------------------
- * 0.8.123: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
+ * 0.8.124: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
  * shape), replacing esp_lvgl_adapter for this panel. Hardware benchmarks
  * showed a blank full frame costing 47 ms through the adapter although the
  * panel accepts a full frame in 13.8 ms. Here LVGL renders 24-row strips
@@ -1238,19 +1241,24 @@ static SemaphoreHandle_t direct_lvgl_mux;
 static lv_display_t *direct_disp;
 static bool direct_mode;
 
-/* 0.8.123: ticketed transfer accounting shared by LVGL and the swipe
+/* 0.8.124: ticketed transfer accounting shared by LVGL and the swipe
    compositor. Every pixel transfer gets a ticket when submitted; the SPI
    "color done" ISR (flash-cache safe: no flash code) bumps the completed
    count and gives a wake-up semaphore. Waiters wait until completed reaches
    their ticket, so no completion can be lost or consumed by the wrong side
-   (0.8.116/0.8.123: one-shot semaphore handoffs caused 100-200 ms timeouts
+   (0.8.116/0.8.124: one-shot semaphore handoffs caused 100-200 ms timeouts
    and an apparent freeze). */
 static SemaphoreHandle_t direct_flush_done;
 static void *direct_buf[2];
 static volatile uint32_t lcd_submitted;
 static volatile uint32_t lcd_completed;
+/* 0.8.124: completions counted ONLY by the ISR (never resynchronised), so we
+   know whether esp_lcd itself would block waiting for an in-flight transfer. */
+static volatile uint32_t lcd_isr_done;
+static volatile uint32_t lcd_wait_timeouts;
+static volatile bool lcd_wedged;
 static uint32_t lvgl_last_ticket;
-/* 0.8.123: UI-task breadcrumbs. Kept in RTC memory so the step the LVGL
+/* 0.8.124: UI-task breadcrumbs. Kept in RTC memory so the step the LVGL
    task was stuck in survives the stall-guard restart. */
 #include "esp_attr.h"
 RTC_NOINIT_ATTR static uint32_t rtc_ui_stage;
@@ -1270,7 +1278,7 @@ static void bsp_ui_stage_boot(void)
     if (rtc_ui_stage_magic == 0x5A6E7A11u) ui_stage_prev_boot = rtc_ui_stage;
     rtc_ui_stage_magic = 0;
 }
-/* 0.8.123: panel TE (tearing-effect) pulse, used to start compositor frames
+/* 0.8.124: panel TE (tearing-effect) pulse, used to start compositor frames
    right as the CO5300 begins a new scan so the 14 ms write stays ahead of
    the ~16.7 ms scan (no torn/doubled swipe frames). */
 static SemaphoreHandle_t te_sem;
@@ -1305,6 +1313,7 @@ static bool IRAM_ATTR bsp_direct_color_done(esp_lcd_panel_io_handle_t io,
                                             void *user_ctx)
 {
     (void)io; (void)edata; (void)user_ctx;
+    lcd_isr_done = lcd_isr_done + 1;
     lcd_completed = lcd_completed + 1;
     BaseType_t woken = pdFALSE;
     xSemaphoreGiveFromISR(direct_flush_done, &woken);
@@ -1319,6 +1328,7 @@ static void bsp_lcd_wait_ticket(uint32_t ticket)
     const int64_t deadline = esp_timer_get_time() + 150000;
     while ((int32_t)(lcd_completed - ticket) < 0) {
         if (esp_timer_get_time() > deadline) {
+            lcd_wait_timeouts = lcd_wait_timeouts + 1;
             lcd_completed = ticket; /* resynchronise after a lost IRQ */
             break;
         }
@@ -1329,10 +1339,28 @@ static void bsp_lcd_wait_ticket(uint32_t ticket)
 static uint32_t bsp_lcd_submit(int x1, int y1, int x2, int y2, const void *px)
 {
     const uint32_t prev_stage = ui_stage;
+    /* esp_lcd waits forever for an in-flight transfer before sending the next
+       command. Never enter it while the previous transfer's interrupt is still
+       outstanding: wait here with a bound instead, and if the bus is wedged,
+       skip the transfer and flag it so the stall guard restarts at once. */
+    if (lcd_isr_done != lcd_submitted) {
+        bsp_ui_stage_set(11);
+        const int64_t deadline = esp_timer_get_time() + 100000;
+        while (lcd_isr_done != lcd_submitted && esp_timer_get_time() < deadline) {
+            (void)xSemaphoreTake(direct_flush_done, pdMS_TO_TICKS(5));
+        }
+    }
     const uint32_t ticket = lcd_submitted + 1;
+    if (lcd_isr_done != lcd_submitted) {
+        lcd_wedged = true;
+        bsp_ui_stage_set(11);
+        lcd_completed = ticket;
+        return ticket; /* not submitted: the panel bus is not completing */
+    }
     lcd_submitted = ticket;
     bsp_ui_stage_set(10);
     if (esp_lcd_panel_draw_bitmap(panel_handle, x1, y1, x2, y2, px) != ESP_OK) {
+        lcd_isr_done = lcd_isr_done + 1;
         lcd_completed = lcd_completed + 1; /* nothing in flight for this ticket */
     }
     bsp_ui_stage_set(prev_stage);
@@ -1349,7 +1377,7 @@ static void bsp_direct_flush(lv_display_t *disp, const lv_area_t *area, uint8_t 
     lv_draw_sw_rgb565_swap(px, lv_area_get_size(area));
     lvgl_last_ticket = bsp_lcd_submit(area->x1, area->y1, area->x2 + 1, area->y2 + 1, px);
 }
-/* 0.8.123: touch is sampled by its own task. A hardware log captured a
+/* 0.8.124: touch is sampled by its own task. A hardware log captured a
    freeze with LVGL believing the finger was still down and no touch read
    for 16 s: the CST9217 shares I2C with the PMIC and esp_lcd's I2C I/O waits
    without a timeout, so a stalled read blocked the whole LVGL task. LVGL now
@@ -1399,6 +1427,8 @@ static void bsp_direct_touch_read(lv_indev_t *indev, lv_indev_data_t *data)
         data->state = LV_INDEV_STATE_RELEASED;
     }
 }
+bool bsp_display_spi_wedged(void) { return lcd_wedged; }
+uint32_t bsp_display_lcd_wait_timeouts(void) { return lcd_wait_timeouts; }
 void bsp_display_input_health(bsp_input_health_t *out)
 {
     if (!out) return;
@@ -1505,7 +1535,7 @@ lv_display_t *bsp_display_start_direct(void)
     return disp;
 }
 
-/* 0.8.123: push a full frame straight to the panel, bypassing LVGL.
+/* 0.8.124: push a full frame straight to the panel, bypassing LVGL.
    The caller must hold the LVGL lock and have LVGL invalidation disabled,
    so LVGL is not flushing. Rows are produced into the two internal DMA
    strips in ping-pong: strip N+1 is filled while strip N transfers.

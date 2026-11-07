@@ -5,9 +5,10 @@
  * Additive schema 16 preserves NVS and prior users' clock customizations.
  * New open-licensed clock fonts remain monochrome on embedded LVGL.
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
-#define LF_VERSION "0.8.123-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.123"
+#define LF_VERSION "0.8.124-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.124"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 0.8.124: panel SPI interrupt on core 1; never enter esp_lcd with a transfer outstanding (bounded wait, wedge flag -> immediate restart); stall guard from 2 s after boot; Copy Log works inside the log dialog. */
 /* 0.8.123: UI-task breadcrumbs kept across restart; stall guard 4 s, active from 10 s, checked every 1 s. */
 /* 0.8.122: touch sampled in its own task (LVGL never blocks on I2C; stale samples read as released); persistent PMIC I2C handle; 6 s LVGL-stall restart guard; input health in diagnostics. */
 /* 0.8.121: clock weather shows when either the device menu or Clock Studio switch is on; weather pipeline state in diagnostics. */
