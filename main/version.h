@@ -5,9 +5,10 @@
  * Additive schema 16 preserves NVS and prior users' clock customizations.
  * New open-licensed clock fonts remain monochrome on embedded LVGL.
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
-#define LF_VERSION "0.8.107-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.107"
+#define LF_VERSION "0.8.108-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.108"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 0.8.108: LVGL circle-mask cache 4 -> 32 radii (benchmark: blank 52 ms, Home 106 ms, Clock 212 ms full frame). */
 /* 0.8.107: boot benchmark runs on the LVGL task 1.5 s after start (0.8.106 ran it on app_main's small stack and crashed into OTA rollback). */
 /* 0.8.106: restore ~77 KB internal SRAM for song ID: default 32 KB data cache, LVGL strips back in PSRAM with DMA staging. */
 /* 0.8.105: screen timeout also honours LVGL's own last-input time (screen was blanking during use). */
