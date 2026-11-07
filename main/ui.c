@@ -273,6 +273,7 @@ static void swipe_frame(uint32_t now_ms_v, uint32_t draw_us, uint32_t wait_us, i
     if(draw_us>swipe_draw_max_us)swipe_draw_max_us=draw_us;
     swipe_wait_sum_us+=wait_us;
 }
+static bool snap_mode; /* tentative definition; see snapshot module */
 static void snap_exit(void);
 static void snap_reset(void);
 static void snap_enter(void);
@@ -3227,7 +3228,8 @@ static bool page_snapshot_take(int i)
         lv_obj_add_event_cb(img,snap_img_deleted,LV_EVENT_DELETE,(void *)(intptr_t)i);
         page_snap_img[i]=img;
     }
-    lv_image_cache_drop(page_snap_buf[i]);
+    /* Re-point the image so LVGL re-reads the refreshed pixels. */
+    lv_image_set_src(page_snap_img[i],NULL);
     lv_image_set_src(page_snap_img[i],page_snap_buf[i]);
     page_snap_valid[i]=true;
     const uint32_t ms=(uint32_t)((esp_timer_get_time()-t0)/1000);
