@@ -5,9 +5,10 @@
  * Additive schema 16 preserves NVS and prior users' clock customizations.
  * New open-licensed clock fonts remain monochrome on embedded LVGL.
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
-#define LF_VERSION "0.8.128-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.128"
+#define LF_VERSION "0.8.129-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.129"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 0.8.129: off-screen Clock keeps the current time and its swipe picture refreshes each minute (no time jump when swiping to Clock). */
 /* 0.8.128: one combined Clock Settings list (no gap, no Customize sub-screen); clock-face weather fixed (face was built before weather settings loaded); weather refetch on first time sync; AM/PM placed beside the digits. Fixes the 0.8.126/0.8.127 build. */
 /* 0.8.127: on-screen FPS/CPU meter removed. */
 /* 0.8.126: swipe pictures refresh when the visible page changes (no stale Song ID "Listening" screen during a swipe); snapshot_sync_retakes in diagnostics. */

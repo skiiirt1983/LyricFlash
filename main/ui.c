@@ -28,6 +28,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 #include <string.h>
 #include <math.h>
 #include <stdatomic.h>
@@ -3380,6 +3381,7 @@ static bool page_snapshot_take(int i)
     if(!page||snap_mode||egg_running)return false;
     bsp_ui_stage_set(30);
     snap_taking=true;
+    lv_obj_update_layout(page);
     const int64_t t0=esp_timer_get_time();
     if(!page_snap_buf[i]){
         page_snap_buf[i]=lv_snapshot_take(page,LV_COLOR_FORMAT_RGB565);
@@ -3419,7 +3421,7 @@ static void snap_display_invalidated(lv_event_t *e)
     if(snap_mode||snap_taking||!primary_pager||pager_scrolling||
        primary_pager_snapping||ui_pointer_is_down())return;
     const int cur=primary_pager_current;
-    if(cur<1||cur>2)return; /* Clock keeps its 10 s refresh. */
+    if(cur<0||cur>2)return;
     page_snap_dirty|=(uint8_t)(1U<<cur);
     snap_dirty_not_before_ms=now_ms()+400;
 }
@@ -4416,6 +4418,18 @@ static void on_tick_body(lv_timer_t *timer)
     if (page == 6 && !pager_scrolling && !touch_held && !clock_settings_popup && current >= screen_animation_until_ms && current - clock_last_refresh >= 950) {
         clock_last_refresh = current;
         lf_clock_update();
+    } else if (page != 6 && primary_pager && clock_scene && !pager_scrolling &&
+               !primary_pager_snapping && !snap_mode) {
+        /* 0.8.129: the off-screen Clock keeps the right time, and its swipe
+           picture is refreshed each minute, so swiping to it never shows an
+           old time that then jumps. */
+        static time_t clock_offscreen_minute;
+        const time_t minute=time(NULL)/60;
+        if(minute!=clock_offscreen_minute){
+            clock_offscreen_minute=minute;
+            lf_clock_update();
+            page_snap_dirty|=0x01;
+        }
     }
     /* Preserve the live song and alignment modal during calibration.
        The old paused-song sleep blacked out controls without restoration. */
