@@ -61,10 +61,9 @@ CONFIG_COMPILER_OPTIMIZATION_PERF=y
 # TLS buffers in PSRAM: GitHub OTA download failed with SSL_ALLOC_FAILED
 # (-0x7F00) when internal RAM was exhausted.
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
-# Temporary on-screen FPS / CPU meter for hardware tuning.
-CONFIG_LV_USE_SYSMON=y
-CONFIG_LV_USE_PERF_MONITOR=y
-CONFIG_LV_PERF_MONITOR_ALIGN_BOTTOM_MID=y
+# On-screen FPS / CPU meter off (tuning finished; swipe stats live in diagnostics).
+# CONFIG_LV_USE_SYSMON is not set
+# CONFIG_LV_USE_PERF_MONITOR is not set
 # 0.8.124: smaller peak TLS memory for the on-device GitHub OTA download.
 CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
 # 0.8.124: app_main builds the whole LVGL UI; give it headroom.
