@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include <stdatomic.h>
 
 static const char *TAG = "LyricFlashUI";
@@ -293,6 +294,8 @@ static void swipe_frame(uint32_t now_ms_v, uint32_t draw_us, uint32_t wait_us, i
     swipe_wait_sum_us+=wait_us;
 }
 static bool snap_mode; /* tentative definition; see snapshot module */
+static void egg_finish(void);
+static bool egg_running;
 static void snap_exit(void);
 static void snap_reset(void);
 static void snap_enter(void);
@@ -1159,6 +1162,7 @@ static void make_base(void)
             lv_obj_set_parent(clock_scene,screen);
             lv_obj_add_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);
         }
+        egg_finish();
         snap_reset();
         primary_pager=NULL;
         primary_pager_pages[0]=primary_pager_pages[1]=primary_pager_pages[2]=NULL;
@@ -1647,6 +1651,104 @@ static lv_obj_t *home_decor_ring(lv_obj_t *parent,int diameter,uint32_t color)
     lv_obj_remove_flag(ring,LV_OBJ_FLAG_SCROLLABLE);
     return ring;
 }
+/* ---- 0.8.125 secret: double-tap the Home logo ---------------------------
+   The icon "wakes up" (shakes off water: wiggle, twist, pulse), runs one lap
+   around the round screen and springs back into place. Drawn as a small
+   lv_image copy on the top layer so only ~100 px squares are redrawn. */
+static lv_obj_t *egg_icon_src;
+static lv_obj_t *egg_img;
+static bool egg_running;
+static uint64_t egg_last_tap_ms;
+static float egg_x0, egg_y0, egg_r0, egg_a0;
+#define EGG_PI 3.14159265f
+#define EGG_TOTAL_MS 2700
+#define LF_EGG_HALF 40
+static void egg_finish(void)
+{
+    if(!egg_running)return;
+    egg_running=false;
+    if(egg_img){lv_obj_delete(egg_img);egg_img=NULL;}
+    if(egg_icon_src)lv_obj_remove_flag(egg_icon_src,LV_OBJ_FLAG_HIDDEN);
+}
+static void egg_finish_async(void *arg){(void)arg;egg_finish();}
+static void egg_anim_done(lv_anim_t *a){(void)a;lv_async_call(egg_finish_async,NULL);}
+static void egg_exec(void *var,int32_t v)
+{
+    lv_obj_t *img=(lv_obj_t *)var;
+    float cx=egg_x0, cy=egg_y0;
+    int32_t scale=256, rot=0;
+    if(v<900){
+        /* Wake-up: fast wiggle + twist, slower pulse, all easing off. */
+        const float p=(float)v/900.f, decay=1.f-0.6f*p;
+        cx+=11.f*decay*sinf(p*2.f*EGG_PI*7.f);
+        cy+=3.f*decay*sinf(p*2.f*EGG_PI*11.f);
+        scale=256+(int32_t)(52.f*decay*sinf(p*2.f*EGG_PI*3.f));
+        rot=(int32_t)(140.f*decay*sinf(p*2.f*EGG_PI*7.f)); /* 0.1 degree units */
+    }else if(v<2300){
+        /* Lap: swing out to the rim, one clockwise loop, come back in. */
+        const float p=(float)(v-900)/1400.f;
+        const float e=p<0.5f?2.f*p*p:1.f-(-2.f*p+2.f)*(-2.f*p+2.f)/2.f;
+        const float ang=egg_a0+2.f*EGG_PI*e;
+        const float r=egg_r0+(180.f-egg_r0)*sinf(EGG_PI*p);
+        cx=233.f+r*cosf(ang);
+        cy=233.f+r*sinf(ang);
+        rot=(int32_t)(3600.f*e);
+        scale=256+(int32_t)(32.f*sinf(EGG_PI*p));
+    }else{
+        /* Landing: small springy bounce. */
+        const float p=(float)(v-2300)/400.f;
+        scale=256+(int32_t)(70.f*expf(-4.f*p)*cosf(p*2.f*EGG_PI*2.f));
+    }
+    lv_image_set_scale(img,(uint32_t)scale);
+    lv_image_set_rotation(img,rot);
+    lv_obj_set_pos(img,(int32_t)cx-LF_EGG_HALF,(int32_t)cy-LF_EGG_HALF);
+}
+static void egg_start(void)
+{
+    if(egg_running||!egg_icon_src||asleep||snap_mode||pager_scrolling||primary_pager_snapping)return;
+    lv_area_t a;
+    lv_obj_get_coords(egg_icon_src,&a);
+    egg_x0=(a.x1+a.x2+1)/2.f;
+    egg_y0=(a.y1+a.y2+1)/2.f;
+    egg_r0=sqrtf((egg_x0-233.f)*(egg_x0-233.f)+(egg_y0-233.f)*(egg_y0-233.f));
+    egg_a0=atan2f(egg_y0-233.f,egg_x0-233.f);
+    lv_obj_t *img=lv_image_create(lv_layer_top());
+    lv_image_set_src(img,lv_canvas_get_image(egg_icon_src));
+    lv_image_set_pivot(img,LF_EGG_HALF,LF_EGG_HALF);
+    lv_obj_remove_flag(img,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_pos(img,(int32_t)egg_x0-LF_EGG_HALF,(int32_t)egg_y0-LF_EGG_HALF);
+    egg_img=img;
+    egg_running=true;
+    lv_obj_add_flag(egg_icon_src,LV_OBJ_FLAG_HIDDEN);
+    activity();
+    lv_anim_t an;
+    lv_anim_init(&an);
+    lv_anim_set_var(&an,img);
+    lv_anim_set_exec_cb(&an,egg_exec);
+    lv_anim_set_values(&an,0,EGG_TOTAL_MS);
+    lv_anim_set_duration(&an,EGG_TOTAL_MS);
+    lv_anim_set_path_cb(&an,lv_anim_path_linear);
+    lv_anim_set_completed_cb(&an,egg_anim_done);
+    lv_anim_start(&an);
+}
+static void egg_logo_tap(lv_event_t *e)
+{
+    (void)e;
+    const uint64_t t=now_ms();
+    if(egg_last_tap_ms && t-egg_last_tap_ms<450){
+        egg_last_tap_ms=0;
+        egg_start();
+    }else{
+        egg_last_tap_ms=t;
+    }
+}
+static void egg_src_deleted(lv_event_t *e)
+{
+    if(lv_event_get_target(e)==egg_icon_src){
+        egg_finish();
+        egg_icon_src=NULL;
+    }
+}
 static void primary_render_home_content(lv_obj_t *parent)
 {
     /* A single flex header keeps the icon directly beside the wordmark,
@@ -1671,8 +1773,15 @@ static void primary_render_home_content(lv_obj_t *parent)
     lv_obj_set_style_border_width(mark,0,0);
     lv_obj_set_style_pad_all(mark,0,0);
     lv_obj_remove_flag(mark,LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_remove_flag(mark,LV_OBJ_FLAG_CLICKABLE);
-    (void)lf_brand_icon_create(mark);
+    /* 0.8.125: tappable for the secret double-tap; swipes still bubble to
+       the pager (SHORT_CLICKED never fires for a drag). */
+    lv_obj_add_flag(mark,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(mark,LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(mark,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(mark,egg_logo_tap,LV_EVENT_SHORT_CLICKED,NULL);
+    egg_finish();
+    egg_icon_src=lf_brand_icon_create(mark);
+    if(egg_icon_src)lv_obj_add_event_cb(egg_icon_src,egg_src_deleted,LV_EVENT_DELETE,NULL);
     /* Two stacked lines sit to the right of the enlarged cloud-and-bolt.
        Compact vertical flex keeps both words within the round display. */
     lv_obj_t *wordmark_col=lv_obj_create(brand_row);
@@ -3115,6 +3224,7 @@ static void primary_pager_scroll_event(lv_event_t *e)
        lv_event_get_target(e)!=primary_pager) return;
     const lv_event_code_t code=lv_event_get_code(e);
     if(code==LV_EVENT_SCROLL_BEGIN){
+        egg_finish();
         snap_enter();
         /* Native LVGL elapsed-time snap drops obsolete positions during
            costly redraws instead of accumulating one-second delays. */
@@ -3257,7 +3367,7 @@ static void snap_comp_tick(lv_timer_t *t)
 static bool page_snapshot_take(int i)
 {
     lv_obj_t *page=primary_pager_pages[i];
-    if(!page||snap_mode)return false;
+    if(!page||snap_mode||egg_running)return false;
     bsp_ui_stage_set(30);
     const int64_t t0=esp_timer_get_time();
     if(!page_snap_buf[i]){
@@ -3897,6 +4007,7 @@ static void sleep_display(void)
        including nested Device Settings scroll/slider event targets. */
     if(asleep || ui_pointer_is_down() || pager_scrolling ||
        primary_pager_snapping || nav_transition_active)return;
+    egg_finish();
     /* Preserve the current page, clock pointers and button tree. A single
        black touch-capture child handles wake without screen reconstruction. */
     {

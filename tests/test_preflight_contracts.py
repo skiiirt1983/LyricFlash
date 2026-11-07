@@ -143,7 +143,7 @@ require('static void pager_build(' not in ui and
         'lv_obj_set_flex_flow(p,LV_FLEX_FLOW_ROW);' not in ui and
         'lv_obj_scroll_to_x(pager_scroll' not in ui and
         'lv_obj_set_style_translate_x(screen,' not in ui and
-        'lv_anim_set_exec_cb(' not in ui,
+        ui.count('lv_anim_set_exec_cb(') == ui.count('lv_anim_set_exec_cb(&an,egg_exec)') <= 1,
         "Recovery must not restore the broken multi-screen pager or root animations")
 require('static void build_home(void) { nav_schedule(build_home_now); }' in ui and
         'static void build_settings(void) { nav_schedule(build_settings_now); }' in ui and
@@ -298,7 +298,7 @@ require('lf_ui_display_stats_t' in read('main/ui.h') and
         "Thread-safe display metrics contract missing")
 
 # Hardware display recovery: local independently licensed BSP has PSRAM -> DMA
-# staging and a one-slot SPI transfer queue. 0.8.124: tear mode NONE (partial
+# staging and a one-slot SPI transfer queue. 0.8.125: tear mode NONE (partial
 # render) with double-buffered internal-SRAM strips; TE_SYNC full-frame retired.
 bsp=read('components/esp32_s3_touch_amoled_1_75/esp32_s3_touch_amoled_1_75.c')
 display_header=read('components/esp32_s3_touch_amoled_1_75/include/bsp/display.h')
@@ -434,7 +434,7 @@ require('primary_pager_snap_started_ms' in ui and
 # No snapshot image, no off-screen proxy, no dynamic hiding of real clock.
 # Repaint on Clock settle *without requiring an additional touch*.
 commit=ui.split('static void primary_pager_commit(int index)\n{',1)[1].split('static void primary_pager_start_snap',1)[0]
-# 0.8.124: page snapshots are used during swipes only; the commit must
+# 0.8.125: page snapshots are used during swipes only; the commit must
 # restore live widgets AND explicitly repaint the settled page.
 require('snap_exit();' in commit and
         'lv_obj_invalidate(primary_pager_pages[index]);' in commit and

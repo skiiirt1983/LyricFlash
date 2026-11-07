@@ -16,7 +16,7 @@ assert 'lv_obj_set_style_translate_x(' not in ui
 # layer is the sole exception, and never moves the Clock/Home/Settings pager.
 assert ui.count('lv_obj_set_style_translate_y(')==1
 assert 'lv_obj_set_style_translate_y(timed_scroll_group,target,0)' in ui
-assert 'lv_anim_set_exec_cb(' not in ui
+assert ui.count('lv_anim_set_exec_cb(') == ui.count('lv_anim_set_exec_cb(&an,egg_exec)') <= 1
 assert 'render_home();' in ui and 'render_clock();' in ui and 'render_settings();' in ui
 assert 'lv_indev_get_state(ptr)==LV_INDEV_STATE_PRESSED' in ui
 assert 'lv_screen_load(screen);' in ui
@@ -72,7 +72,7 @@ header=(p/'main/version.h').read_text()
 match=re.search(r'^#define LF_VERSION "([^"]+)"',header,re.MULTILINE)
 assert match, "Missing LF_VERSION"
 version=match.group(1)
-assert version in ("0.8.41-alpha","0.8.42-alpha","0.8.43-alpha","0.8.44-alpha","0.8.45-alpha","0.8.46-alpha","0.8.47-alpha","0.8.48-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha","0.8.67-alpha","0.8.68-alpha","0.8.69-alpha","0.8.71-alpha","0.8.72-alpha","0.8.73-alpha","0.8.74-alpha","0.8.75-alpha","0.8.76-alpha","0.8.77-alpha","0.8.78-alpha","0.8.79-alpha","0.8.80-alpha","0.8.81-alpha","0.8.82-alpha","0.8.83-alpha","0.8.84-alpha","0.8.85-alpha","0.8.86-alpha","0.8.87-alpha","0.8.88-alpha","0.8.89-alpha","0.8.90-alpha","0.8.91-alpha","0.8.92-alpha","0.8.93-alpha","0.8.94-alpha","0.8.95-alpha","0.8.124-alpha"), version
+assert version in ("0.8.41-alpha","0.8.42-alpha","0.8.43-alpha","0.8.44-alpha","0.8.45-alpha","0.8.46-alpha","0.8.47-alpha","0.8.48-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha","0.8.67-alpha","0.8.68-alpha","0.8.69-alpha","0.8.71-alpha","0.8.72-alpha","0.8.73-alpha","0.8.74-alpha","0.8.75-alpha","0.8.76-alpha","0.8.77-alpha","0.8.78-alpha","0.8.79-alpha","0.8.80-alpha","0.8.81-alpha","0.8.82-alpha","0.8.83-alpha","0.8.84-alpha","0.8.85-alpha","0.8.86-alpha","0.8.87-alpha","0.8.88-alpha","0.8.89-alpha","0.8.90-alpha","0.8.91-alpha","0.8.92-alpha","0.8.93-alpha","0.8.94-alpha","0.8.95-alpha","0.8.125-alpha"), version
 assert f'set(PROJECT_VER "{version}")' in (p/'CMakeLists.txt').read_text(), (
     "ESP-IDF app descriptor PROJECT_VER must agree with LF_VERSION"
 )

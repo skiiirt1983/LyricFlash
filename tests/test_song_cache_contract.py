@@ -10,7 +10,7 @@ brand=(p/"main/brand_icon.c").read_text()
 cm=(p/"main/CMakeLists.txt").read_text()
 version=(p/"main/version.h").read_text()
 part=(p/"partitions.csv").read_text()
-assert 'LF_VERSION "0.8.124-alpha"' in version
+assert 'LF_VERSION "0.8.125-alpha"' in version
 assert "0x100000" in part and "0x500000" in part
 assert '"song_cache.c"' in cm and '"brand_icon.c"' in cm
 assert 'LF_CACHE_NS "lf_songs"' in cache
@@ -37,6 +37,6 @@ assert "const bool exiting_lyrics=timed_overlay!=NULL;" in ui
 assert "if(was_pager && primary_pager){" in ui
 assert "if(page==1 && timed_lyrics_mode)last_activity_ms=current;" in ui
 assert "ui.ui_page==9" in (p/"main/main.c").read_text()
-assert "(void)lf_brand_icon_create(mark);" in ui
+assert "egg_icon_src=lf_brand_icon_create(mark);" in ui
 assert "LyricFlash_Icon_128.png" in brand and "lv_canvas_set_buffer(" in brand
 print("PASS: persistent lyrics and song profiles, manual flash writes, tempo/sync sliders, custom original brand, UI recovery")
