@@ -773,7 +773,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // fallback path when tear mode ends up as NONE.
 #define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
-/* 0.8.114 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+/* 0.8.115 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
    DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
    strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
    Used only when tear mode is NONE and enough internal RAM remains for
@@ -1018,7 +1018,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         (size_t)BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT_INTERNAL_FAST * BSP_LCD_BITS_PER_PIXEL / 8;
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-    /* 0.8.114: disabled. Hardware logs showed panel flush waits under 1 ms
+    /* 0.8.115: disabled. Hardware logs showed panel flush waits under 1 ms
        (render, not transfer, is the bottleneck) while the 45 KB of internal
        SRAM starved song ID. Keep LVGL strips in PSRAM with DMA staging. */
     const bool internal_fast = BSP_LVGL_INTERNAL_FAST_ENABLE && !use_te_sync &&
@@ -1218,7 +1218,7 @@ esp_err_t bsp_display_rotation_set(bsp_display_rotation_t rotation)
 }
 
 /* ---------------------------------------------------------------------
- * 0.8.114: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
+ * 0.8.115: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
  * shape), replacing esp_lvgl_adapter for this panel. Hardware benchmarks
  * showed a blank full frame costing 47 ms through the adapter although the
  * panel accepts a full frame in 13.8 ms. Here LVGL renders 24-row strips

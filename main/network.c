@@ -746,7 +746,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         return ESP_FAIL;
     }
     (void)face;
-    current.clock_face = 5; /* 0.8.114: single Basic face */
+    current.clock_face = 5; /* 0.8.115: single Basic face */
     current.basic_font_style = (uint8_t)font_style;
     current.basic_font_size = (uint8_t)font_size;
     current.basic_time_x=(int32_t)element[0];
@@ -1278,6 +1278,12 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
         lf_swipe_log_t sw;
         lf_ui_swipe_log(&sw);
         cJSON_AddNumberToObject(root, "swipes_total", sw.total);
+        uint32_t snap_n=0,snap_last=0,snap_max=0,snap_sw=0;
+        lf_ui_snapshot_stats(&snap_n,&snap_last,&snap_max,&snap_sw);
+        cJSON_AddNumberToObject(root, "snapshot_swipes", snap_sw);
+        cJSON_AddNumberToObject(root, "snapshots_taken", snap_n);
+        cJSON_AddNumberToObject(root, "snapshot_last_ms", snap_last);
+        cJSON_AddNumberToObject(root, "snapshot_max_ms", snap_max);
         cJSON *arr=cJSON_AddArrayToObject(root, "swipes_recent");
         static const char *names[3]={"clock","home","settings"};
         for(unsigned i=0;arr && i<sw.count;i++){

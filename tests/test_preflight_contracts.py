@@ -298,7 +298,7 @@ require('lf_ui_display_stats_t' in read('main/ui.h') and
         "Thread-safe display metrics contract missing")
 
 # Hardware display recovery: local independently licensed BSP has PSRAM -> DMA
-# staging and a one-slot SPI transfer queue. 0.8.114: tear mode NONE (partial
+# staging and a one-slot SPI transfer queue. 0.8.115: tear mode NONE (partial
 # render) with double-buffered internal-SRAM strips; TE_SYNC full-frame retired.
 bsp=read('components/esp32_s3_touch_amoled_1_75/esp32_s3_touch_amoled_1_75.c')
 display_header=read('components/esp32_s3_touch_amoled_1_75/include/bsp/display.h')
@@ -434,10 +434,11 @@ require('primary_pager_snap_started_ms' in ui and
 # No snapshot image, no off-screen proxy, no dynamic hiding of real clock.
 # Repaint on Clock settle *without requiring an additional touch*.
 commit=ui.split('static void primary_pager_commit(int index)\n{',1)[1].split('static void primary_pager_start_snap',1)[0]
-require('lv_snapshot_take(' not in ui and
+# 0.8.115: page snapshots are used during swipes only; the commit must
+# restore live widgets AND explicitly repaint the settled page.
+require('snap_exit();' in commit and
+        'lv_obj_invalidate(primary_pager_pages[index]);' in commit and
         'primary_clock_snapshot' not in ui and
-        'primary_clock_image' not in ui and
-        'CONFIG_LV_USE_SNAPSHOT=y' not in read('sdkconfig.defaults') and
         'lv_obj_remove_flag(clock_scene,LV_OBJ_FLAG_HIDDEN);' in commit and
         'lv_obj_invalidate(clock_scene);' in commit and
         'atomic_fetch_add(&clock_repaint_recoveries,1);' in commit and
