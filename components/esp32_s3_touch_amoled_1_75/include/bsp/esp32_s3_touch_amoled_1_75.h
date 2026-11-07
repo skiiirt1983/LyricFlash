@@ -296,13 +296,19 @@ lv_display_t *bsp_display_start(void);
  */
 lv_display_t *bsp_display_start_with_config(bsp_display_cfg_t *cfg);
 
-/* 0.8.121: direct LVGL/esp_lcd port without esp_lvgl_adapter. Use
+/* 0.8.122: direct LVGL/esp_lcd port without esp_lvgl_adapter. Use
    bsp_display_lock()/bsp_display_unlock() around LVGL calls. */
 lv_display_t *bsp_display_start_direct(void);
-/* 0.8.121: compose and send a full frame directly (LVGL suspended). */
+/* 0.8.122: compose and send a full frame directly (LVGL suspended). */
 typedef void (*bsp_row_fill_cb_t)(uint16_t *dst, int y0, int rows, void *ctx);
 esp_err_t bsp_display_push_frame(bsp_row_fill_cb_t fill, void *ctx);
 uint32_t bsp_display_te_count(void);
+/* 0.8.122: touch sampler and LVGL task liveness. */
+typedef struct {
+    uint32_t touch_reads, touch_failures, touch_read_max_us;
+    uint32_t touch_sample_age_ms, lvgl_loop_age_ms;
+} bsp_input_health_t;
+void bsp_display_input_health(bsp_input_health_t *out);
 
 /**
  * @brief Get pointer to input device (touch, buttons, ...)

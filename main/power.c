@@ -78,14 +78,15 @@ bool lf_power_read(lf_power_state_t *state)
         .device_address = 0x34,
         .scl_speed_hz = 100000
     };
-    i2c_master_dev_handle_t dev = NULL;
-    if (i2c_master_bus_add_device(bus, &cfg, &dev) != ESP_OK) return false;
+    /* 0.8.122: attach the PMIC once and keep the handle; adding/removing a
+       device on the shared touch I2C bus every 4 s was needless churn. */
+    static i2c_master_dev_handle_t dev = NULL;
+    if (!dev && i2c_master_bus_add_device(bus, &cfg, &dev) != ESP_OK) { dev = NULL; return false; }
     uint8_t status1 = 0, status2 = 0, soc = 0;
     const uint8_t r0 = 0x00, r1 = 0x01, ra = 0xA4;
     esp_err_t a = i2c_master_transmit_receive(dev, &r0, 1, &status1, 1, 100);
     esp_err_t b = i2c_master_transmit_receive(dev, &r1, 1, &status2, 1, 100);
     esp_err_t c = i2c_master_transmit_receive(dev, &ra, 1, &soc, 1, 100);
-    (void)i2c_master_bus_rm_device(dev);
     if (a != ESP_OK || b != ESP_OK || c != ESP_OK) return false;
     *state = lf_power_decode(status1, status2, soc);
     return true;

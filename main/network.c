@@ -747,7 +747,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         return ESP_FAIL;
     }
     (void)face;
-    current.clock_face = 5; /* 0.8.121: single Basic face */
+    current.clock_face = 5; /* 0.8.122: single Basic face */
     current.basic_font_style = (uint8_t)font_style;
     current.basic_font_size = (uint8_t)font_size;
     current.basic_time_x=(int32_t)element[0];
@@ -1290,6 +1290,13 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
         cJSON_AddNumberToObject(root, "ui_last_touch_age_ms", in.lvgl_idle_ms);
         cJSON_AddNumberToObject(root, "ui_page_id", in.page);
         cJSON_AddNumberToObject(root, "lcd_te_pulses", bsp_display_te_count());
+        bsp_input_health_t ih={0};
+        bsp_display_input_health(&ih);
+        cJSON_AddNumberToObject(root, "touch_reads", ih.touch_reads);
+        cJSON_AddNumberToObject(root, "touch_read_failures", ih.touch_failures);
+        cJSON_AddNumberToObject(root, "touch_read_max_us", ih.touch_read_max_us);
+        cJSON_AddNumberToObject(root, "touch_sample_age_ms", ih.touch_sample_age_ms);
+        cJSON_AddNumberToObject(root, "lvgl_loop_age_ms", ih.lvgl_loop_age_ms);
         lf_weather_debug_t wd;
         lf_weather_debug(&wd);
         lf_settings_t *ws=calloc(1,sizeof(*ws));

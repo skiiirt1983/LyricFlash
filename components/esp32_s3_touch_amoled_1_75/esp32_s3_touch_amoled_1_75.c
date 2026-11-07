@@ -773,7 +773,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // fallback path when tear mode ends up as NONE.
 #define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
-/* 0.8.121 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+/* 0.8.122 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
    DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
    strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
    Used only when tear mode is NONE and enough internal RAM remains for
@@ -942,7 +942,7 @@ esp_err_t bsp_display_new(const bsp_display_config_t *config, esp_lcd_panel_hand
     esp_lcd_panel_set_gap(panel_handle, 0x06, 0);
     esp_lcd_panel_reset(panel_handle);
     esp_lcd_panel_init(panel_handle);
-    /* 0.8.121: switch the panel on dark. Its RAM holds random pixels until
+    /* 0.8.122: switch the panel on dark. Its RAM holds random pixels until
        the first black frame; at full brightness that was a white flash. */
     {
         uint8_t zero = 0;
@@ -1024,7 +1024,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         (size_t)BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT_INTERNAL_FAST * BSP_LCD_BITS_PER_PIXEL / 8;
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-    /* 0.8.121: disabled. Hardware logs showed panel flush waits under 1 ms
+    /* 0.8.122: disabled. Hardware logs showed panel flush waits under 1 ms
        (render, not transfer, is the bottleneck) while the 45 KB of internal
        SRAM starved song ID. Keep LVGL strips in PSRAM with DMA staging. */
     const bool internal_fast = BSP_LVGL_INTERNAL_FAST_ENABLE && !use_te_sync &&
@@ -1224,7 +1224,7 @@ esp_err_t bsp_display_rotation_set(bsp_display_rotation_t rotation)
 }
 
 /* ---------------------------------------------------------------------
- * 0.8.121: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
+ * 0.8.122: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
  * shape), replacing esp_lvgl_adapter for this panel. Hardware benchmarks
  * showed a blank full frame costing 47 ms through the adapter although the
  * panel accepts a full frame in 13.8 ms. Here LVGL renders 24-row strips
@@ -1238,19 +1238,19 @@ static SemaphoreHandle_t direct_lvgl_mux;
 static lv_display_t *direct_disp;
 static bool direct_mode;
 
-/* 0.8.121: ticketed transfer accounting shared by LVGL and the swipe
+/* 0.8.122: ticketed transfer accounting shared by LVGL and the swipe
    compositor. Every pixel transfer gets a ticket when submitted; the SPI
    "color done" ISR (flash-cache safe: no flash code) bumps the completed
    count and gives a wake-up semaphore. Waiters wait until completed reaches
    their ticket, so no completion can be lost or consumed by the wrong side
-   (0.8.116/0.8.121: one-shot semaphore handoffs caused 100-200 ms timeouts
+   (0.8.116/0.8.122: one-shot semaphore handoffs caused 100-200 ms timeouts
    and an apparent freeze). */
 static SemaphoreHandle_t direct_flush_done;
 static void *direct_buf[2];
 static volatile uint32_t lcd_submitted;
 static volatile uint32_t lcd_completed;
 static uint32_t lvgl_last_ticket;
-/* 0.8.121: panel TE (tearing-effect) pulse, used to start compositor frames
+/* 0.8.122: panel TE (tearing-effect) pulse, used to start compositor frames
    right as the CO5300 begins a new scan so the 14 ms write stays ahead of
    the ~16.7 ms scan (no torn/doubled swipe frames). */
 static SemaphoreHandle_t te_sem;
@@ -1323,18 +1323,68 @@ static void bsp_direct_flush(lv_display_t *disp, const lv_area_t *area, uint8_t 
     lv_draw_sw_rgb565_swap(px, lv_area_get_size(area));
     lvgl_last_ticket = bsp_lcd_submit(area->x1, area->y1, area->x2 + 1, area->y2 + 1, px);
 }
+/* 0.8.122: touch is sampled by its own task. A hardware log captured a
+   freeze with LVGL believing the finger was still down and no touch read
+   for 16 s: the CST9217 shares I2C with the PMIC and esp_lcd's I2C I/O waits
+   without a timeout, so a stalled read blocked the whole LVGL task. LVGL now
+   only reads a cached sample and treats a stale sample as released. */
+static portMUX_TYPE touch_mux = portMUX_INITIALIZER_UNLOCKED;
+static uint16_t touch_x, touch_y;
+static bool touch_pressed;
+static int64_t touch_sample_us;
+static volatile uint32_t touch_reads, touch_fail, touch_read_max_us;
+static volatile int64_t lvgl_loop_us;
+static void bsp_touch_task(void *arg)
+{
+    esp_lcd_touch_handle_t t = (esp_lcd_touch_handle_t)arg;
+    for (;;) {
+        const int64_t t0 = esp_timer_get_time();
+        uint16_t x[1] = {0}, y[1] = {0};
+        uint8_t cnt = 0;
+        bool ok = esp_lcd_touch_read_data(t) == ESP_OK;
+        bool down = ok && esp_lcd_touch_get_coordinates(t, x, y, NULL, &cnt, 1) && cnt > 0;
+        const int64_t t1 = esp_timer_get_time();
+        const uint32_t dur = (uint32_t)(t1 - t0);
+        touch_reads = touch_reads + 1;
+        if (!ok) touch_fail = touch_fail + 1;
+        if (dur > touch_read_max_us) touch_read_max_us = dur;
+        portENTER_CRITICAL(&touch_mux);
+        touch_pressed = down;
+        if (down) { touch_x = x[0]; touch_y = y[0]; }
+        touch_sample_us = t1;
+        portEXIT_CRITICAL(&touch_mux);
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
 static void bsp_direct_touch_read(lv_indev_t *indev, lv_indev_data_t *data)
 {
-    esp_lcd_touch_handle_t t = (esp_lcd_touch_handle_t)lv_indev_get_user_data(indev);
-    uint16_t x[1] = {0}, y[1] = {0};
-    uint8_t cnt = 0;
-    data->state = LV_INDEV_STATE_RELEASED;
-    if (!t || esp_lcd_touch_read_data(t) != ESP_OK) return;
-    if (esp_lcd_touch_get_coordinates(t, x, y, NULL, &cnt, 1) && cnt > 0) {
-        data->point.x = x[0];
-        data->point.y = y[0];
+    (void)indev;
+    portENTER_CRITICAL(&touch_mux);
+    const bool down = touch_pressed;
+    const uint16_t x = touch_x, y = touch_y;
+    const int64_t at = touch_sample_us;
+    portEXIT_CRITICAL(&touch_mux);
+    /* A sample older than 150 ms (stalled I2C) never holds a finger down. */
+    if (down && esp_timer_get_time() - at < 150000) {
+        data->point.x = x;
+        data->point.y = y;
         data->state = LV_INDEV_STATE_PRESSED;
+    } else {
+        data->state = LV_INDEV_STATE_RELEASED;
     }
+}
+void bsp_display_input_health(bsp_input_health_t *out)
+{
+    if (!out) return;
+    const int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&touch_mux);
+    const int64_t at = touch_sample_us;
+    portEXIT_CRITICAL(&touch_mux);
+    out->touch_reads = touch_reads;
+    out->touch_failures = touch_fail;
+    out->touch_read_max_us = touch_read_max_us;
+    out->touch_sample_age_ms = at ? (uint32_t)((now - at) / 1000) : UINT32_MAX;
+    out->lvgl_loop_age_ms = lvgl_loop_us ? (uint32_t)((now - lvgl_loop_us) / 1000) : UINT32_MAX;
 }
 static uint32_t bsp_direct_tick(void)
 {
@@ -1345,6 +1395,7 @@ static void bsp_direct_lvgl_task(void *arg)
     (void)arg;
     for (;;) {
         uint32_t wait_ms = 5;
+        lvgl_loop_us = esp_timer_get_time();
         if (xSemaphoreTakeRecursive(direct_lvgl_mux, portMAX_DELAY) == pdTRUE) {
             wait_ms = lv_timer_handler();
             xSemaphoreGiveRecursive(direct_lvgl_mux);
@@ -1402,6 +1453,9 @@ lv_display_t *bsp_display_start_direct(void)
         lv_indev_set_user_data(indev, tp);
         lv_indev_set_display(indev, disp);
         disp_indev = indev;
+        if (xTaskCreatePinnedToCore(bsp_touch_task, "touch", 4096, tp, 5, NULL, 0) != pdPASS) {
+            ESP_LOGE(TAG, "Direct LVGL: cannot start touch task");
+        }
     } else {
         ESP_LOGE(TAG, "Direct LVGL: touch init failed");
     }
@@ -1421,7 +1475,7 @@ lv_display_t *bsp_display_start_direct(void)
     return disp;
 }
 
-/* 0.8.121: push a full frame straight to the panel, bypassing LVGL.
+/* 0.8.122: push a full frame straight to the panel, bypassing LVGL.
    The caller must hold the LVGL lock and have LVGL invalidation disabled,
    so LVGL is not flushing. Rows are produced into the two internal DMA
    strips in ping-pong: strip N+1 is filled while strip N transfers.
