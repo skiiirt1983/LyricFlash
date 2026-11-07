@@ -746,7 +746,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         return ESP_FAIL;
     }
     (void)face;
-    current.clock_face = 5; /* 0.8.118: single Basic face */
+    current.clock_face = 5; /* 0.8.119: single Basic face */
     current.basic_font_style = (uint8_t)font_style;
     current.basic_font_size = (uint8_t)font_size;
     current.basic_time_x=(int32_t)element[0];
@@ -1278,6 +1278,16 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
         lf_swipe_log_t sw;
         lf_ui_swipe_log(&sw);
         cJSON_AddNumberToObject(root, "swipes_total", sw.total);
+        lf_ui_input_state_t in={0};
+        lf_ui_input_state(&in);
+        cJSON_AddBoolToObject(root, "ui_compositor_active", in.snap_mode);
+        cJSON_AddBoolToObject(root, "ui_pager_scrolling", in.pager_scrolling);
+        cJSON_AddBoolToObject(root, "ui_pager_snapping", in.pager_snapping);
+        cJSON_AddBoolToObject(root, "ui_touch_held", in.touch_held);
+        cJSON_AddBoolToObject(root, "ui_drawing_enabled", in.invalidation_enabled);
+        cJSON_AddBoolToObject(root, "ui_touch_pressed_now", in.indev_pressed);
+        cJSON_AddNumberToObject(root, "ui_last_touch_age_ms", in.lvgl_idle_ms);
+        cJSON_AddNumberToObject(root, "ui_page_id", in.page);
         uint32_t snap_n=0,snap_last=0,snap_max=0,snap_sw=0;
         lf_ui_snapshot_stats(&snap_n,&snap_last,&snap_max,&snap_sw);
         cJSON_AddNumberToObject(root, "snapshot_swipes", snap_sw);

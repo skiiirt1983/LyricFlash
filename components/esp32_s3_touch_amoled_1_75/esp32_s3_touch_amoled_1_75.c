@@ -773,7 +773,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // fallback path when tear mode ends up as NONE.
 #define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
-/* 0.8.118 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+/* 0.8.119 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
    DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
    strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
    Used only when tear mode is NONE and enough internal RAM remains for
@@ -942,6 +942,12 @@ esp_err_t bsp_display_new(const bsp_display_config_t *config, esp_lcd_panel_hand
     esp_lcd_panel_set_gap(panel_handle, 0x06, 0);
     esp_lcd_panel_reset(panel_handle);
     esp_lcd_panel_init(panel_handle);
+    /* 0.8.119: switch the panel on dark. Its RAM holds random pixels until
+       the first black frame; at full brightness that was a white flash. */
+    {
+        uint8_t zero = 0;
+        esp_lcd_panel_io_tx_param(io_handle, (0x02u << 24) | (0x51u << 8), &zero, 1);
+    }
     esp_lcd_panel_disp_on_off(panel_handle, true);
 
     if (ret_panel)
@@ -1018,7 +1024,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         (size_t)BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT_INTERNAL_FAST * BSP_LCD_BITS_PER_PIXEL / 8;
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-    /* 0.8.118: disabled. Hardware logs showed panel flush waits under 1 ms
+    /* 0.8.119: disabled. Hardware logs showed panel flush waits under 1 ms
        (render, not transfer, is the bottleneck) while the 45 KB of internal
        SRAM starved song ID. Keep LVGL strips in PSRAM with DMA staging. */
     const bool internal_fast = BSP_LVGL_INTERNAL_FAST_ENABLE && !use_te_sync &&
@@ -1218,7 +1224,7 @@ esp_err_t bsp_display_rotation_set(bsp_display_rotation_t rotation)
 }
 
 /* ---------------------------------------------------------------------
- * 0.8.118: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
+ * 0.8.119: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
  * shape), replacing esp_lvgl_adapter for this panel. Hardware benchmarks
  * showed a blank full frame costing 47 ms through the adapter although the
  * panel accepts a full frame in 13.8 ms. Here LVGL renders 24-row strips
@@ -1232,12 +1238,12 @@ static SemaphoreHandle_t direct_lvgl_mux;
 static lv_display_t *direct_disp;
 static bool direct_mode;
 
-/* 0.8.118: ticketed transfer accounting shared by LVGL and the swipe
+/* 0.8.119: ticketed transfer accounting shared by LVGL and the swipe
    compositor. Every pixel transfer gets a ticket when submitted; the SPI
    "color done" ISR (flash-cache safe: no flash code) bumps the completed
    count and gives a wake-up semaphore. Waiters wait until completed reaches
    their ticket, so no completion can be lost or consumed by the wrong side
-   (0.8.116/0.8.118: one-shot semaphore handoffs caused 100-200 ms timeouts
+   (0.8.116/0.8.119: one-shot semaphore handoffs caused 100-200 ms timeouts
    and an apparent freeze). */
 static SemaphoreHandle_t direct_flush_done;
 static void *direct_buf[2];
@@ -1372,7 +1378,10 @@ lv_display_t *bsp_display_start_direct(void)
 
     direct_disp = disp;
     direct_mode = true;
-    (void)bsp_display_brightness_init();
+    /* LVGL's default screen is white: make it black, and leave the backlight
+       off; the UI sets the user's brightness once its first screen exists. */
+    lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(lv_screen_active(), LV_OPA_COVER, 0);
     if (xTaskCreatePinnedToCore(bsp_direct_lvgl_task, "lvgl", 10240, NULL, 4, NULL, 1) != pdPASS) {
         ESP_LOGE(TAG, "Direct LVGL: cannot start LVGL task");
         return NULL;
@@ -1381,7 +1390,7 @@ lv_display_t *bsp_display_start_direct(void)
     return disp;
 }
 
-/* 0.8.118: push a full frame straight to the panel, bypassing LVGL.
+/* 0.8.119: push a full frame straight to the panel, bypassing LVGL.
    The caller must hold the LVGL lock and have LVGL invalidation disabled,
    so LVGL is not flushing. Rows are produced into the two internal DMA
    strips in ping-pong: strip N+1 is filled while strip N transfers.
