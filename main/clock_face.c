@@ -620,6 +620,47 @@ void lf_clock_build(lv_obj_t *parent, uint8_t style, const lf_settings_t *settin
     clock_active = true;
     lf_clock_update();
 }
+/* 0.8.128: AM/PM sits just right of the digits, vertically centred on
+   them, whatever the font or time size. If that would leave the screen it
+   is centred under the time instead. */
+static int text_px_width(const char *t,const lv_font_t *f,int32_t letter_space)
+{
+    int w=0;
+    for(const char *c=t;*c;c++){
+        w+=lv_font_get_glyph_width(f,(uint32_t)(unsigned char)c[0],
+                                   (uint32_t)(unsigned char)c[1]);
+        if(c[1])w+=letter_space;
+    }
+    return w;
+}
+static void place_meridiem(const char *time_text)
+{
+    if(!meridiem_label||!clock_settings)return;
+    const lf_settings_t *p=clock_settings;
+    int half_w=0,half_h=0;
+    if(!lf_basic_clock_digits_half_extent(p,&half_w,&half_h)){
+        if(!time_label)return;
+        const lv_font_t *f=lv_obj_get_style_text_font(time_label,LV_PART_MAIN);
+        const int32_t ls=lv_obj_get_style_text_letter_space(time_label,LV_PART_MAIN);
+        half_w=text_px_width(time_text,f,ls)/2;
+        half_h=lv_font_get_line_height(f)/2;
+    }
+    const lv_font_t *mf=half_h>=40?&lv_font_montserrat_24:
+                        half_h>=26?&lv_font_montserrat_20:&lv_font_montserrat_16;
+    lv_obj_set_style_text_font(meridiem_label,mf,0);
+    const int mw=text_px_width("PM",mf,0);
+    const int gap=6+half_h/8;
+    int x=p->basic_time_x+half_w+gap+mw/2;
+    int y=p->basic_time_y;
+    /* Stay inside the round panel (radius 233) with a small margin. */
+    const int dy=y<0?-y:y;
+    const int edge=dy<220?(int)sqrtf((float)(225*225-dy*dy)):0;
+    if(x+mw/2>edge){
+        x=p->basic_time_x;
+        y=p->basic_time_y+half_h+gap+lv_font_get_line_height(mf)/2;
+    }
+    lv_obj_align(meridiem_label,LV_ALIGN_CENTER,x,y);
+}
 void lf_clock_update(void)
 {
     if (!clock_active) return;
@@ -704,8 +745,10 @@ void lf_clock_update(void)
         strftime(t, sizeof(t),
                  clock_settings->face_24h[current_style] ? "%H:%M" :
                  custom_time_font ? "%I:%M" : "%I:%M %p", &local);
+        const bool changed=strcmp(lv_label_get_text(time_label),t)!=0;
         update_label_if_changed(time_label, t);
         if(current_style==5)lf_basic_clock_update_time(t);
+        if(changed && current_style==5)place_meridiem(t);
     }
     if (sundial_time_label) {
         char t[20];

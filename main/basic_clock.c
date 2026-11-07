@@ -267,6 +267,30 @@ static void basic_digits_draw(lv_event_t *e)
     }
 }
 
+bool lf_basic_clock_digits_half_extent(const lf_settings_t *p,int *half_w,int *half_h)
+{
+    /* Same geometry as basic_digits_draw (five characters "HH:MM"). */
+    if(!p||!custom_time_layer)return false;
+    const int length=5;
+    int total,h;
+    if(p->basic_font_style==1 || p->basic_font_style==12){
+        h=(int)basic_digit_height(p->basic_font_size);
+        const int w=h*54/100,gap=5+(int)p->basic_font_size/12;
+        total=length*w+(length-1)*gap;
+    }else if(open_face_family(p->basic_font_style)>=0){
+        const int cell=p->basic_font_size<30?1:p->basic_font_size<75?2:
+                       p->basic_font_size<125?3:p->basic_font_size<175?4:5;
+        total=length*15*cell+(length-1)*cell;
+        h=21*cell;
+    }else{
+        const int cell=(int)basic_digit_cell(p->basic_font_size);
+        total=length*5*cell+(length-1)*2*cell;
+        h=7*cell;
+    }
+    if(half_w)*half_w=total/2;
+    if(half_h)*half_h=h/2;
+    return true;
+}
 lv_obj_t *lf_basic_clock_render(lv_obj_t *parent, const lf_settings_t *p)
 {
     /* 0.8.124: background colour option removed; pure black on AMOLED. */

@@ -10,7 +10,7 @@ brand=(p/"main/brand_icon.c").read_text()
 cm=(p/"main/CMakeLists.txt").read_text()
 version=(p/"main/version.h").read_text()
 part=(p/"partitions.csv").read_text()
-assert 'LF_VERSION "0.8.127-alpha"' in version
+assert 'LF_VERSION "0.8.128-alpha"' in version
 assert "0x100000" in part and "0x500000" in part
 assert '"song_cache.c"' in cm and '"brand_icon.c"' in cm
 assert 'LF_CACHE_NS "lf_songs"' in cache

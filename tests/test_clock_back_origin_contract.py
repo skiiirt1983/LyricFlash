@@ -10,7 +10,7 @@ assert "if(page==2)clock_settings_return_page=2;" in callbacks
 assert "else if(page==6)clock_settings_return_page=6;" in callbacks
 assert "if(clock_settings_return_page==6)build_clock();" in callbacks
 assert "else build_settings();" in callbacks
-clock=ui.split("static void build_clock_settings_now(void)",1)[1].split("static void on_basic_font(",1)[0]
+clock=ui.split("static void build_basic_settings_now(void)\n{",1)[1].split("static void refresh_debug(void)\n{",1)[0]
 assert "prefs->text_color, on_clock_settings_back, NULL" in clock
 nav=ui.split("static void nav_drain(void *arg)",1)[1].split("static void nav_schedule",1)[0]
 assert "if(screen && primary_pager && previous_page!=page && !asleep)" in nav

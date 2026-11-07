@@ -3296,6 +3296,7 @@ static uint64_t snap_dirty_not_before_ms;
 static uint64_t snap_last_full_mark_ms, snap_last_clock_mark_ms;
 static uint64_t snap_mode_since_ms;
 static bool snap_taking;
+static bool page_snapshot_take(int i);
 static atomic_uint snap_sync_retakes;
 static lv_timer_t *snap_refresh_timer, *snap_comp_timer;
 static atomic_uint snap_take_count, snap_take_last_ms, snap_take_max_ms, snap_swipe_count;
@@ -3655,25 +3656,11 @@ static void on_basic_settings(lv_event_t *e)
 {
     (void)e; activity(); build_basic_settings();
 }
+static void build_basic_settings_now(void);
 static void build_clock_settings_now(void)
 {
-    page = 7;
-    make_base();
-    label(screen, "CLOCK SETTINGS", 38, &lv_font_montserrat_24, prefs->text_color);
-    char value[65];
-    /* 0.8.124: single Basic face; no face picker. */
-    (void)on_cycle_face;
-    button(screen, "CUSTOMIZE CLOCK", 270, 55, 0, -70,
-           0xB2C6D3, on_basic_settings, NULL);
-    lf_weather_config_t cfg;
-    lf_weather_get_config(&cfg);
-    button(screen, "WEATHER LOCATION", 254, 51, 0, 40,
-           0xB2C6D3, on_weather_location, NULL);
-    snprintf(value, sizeof value, "Update: %u min", cfg.interval_minutes);
-    button(screen, value, 239, 50, 0, 106,
-           0xB2C6D3, on_weather_interval, NULL);
-    button(screen, "BACK", 144, 50, 0, 176,
-           prefs->text_color, on_clock_settings_back, NULL);
+    /* 0.8.128: one combined clock menu (no separate Customize screen). */
+    build_basic_settings_now();
 }
 static void on_basic_font(lv_event_t *e)
 {
@@ -3789,26 +3776,35 @@ static void build_basic_colour_now(void)
     add_slider(screen, 283, 210, 0, 359, on_basic_hue);
     button(screen, "BACK", 161, 51, 0, 169, 0xB2C6D3, on_basic_back, NULL);
 }
+static lv_obj_t *clock_menu_list;
+static int32_t clock_menu_scroll_y;
 static void build_basic_settings_now(void)
 {
+    /* Keep the list where it was when a toggle rebuilds the screen. */
+    if(clock_menu_list && lv_obj_is_valid(clock_menu_list))
+        clock_menu_scroll_y=lv_obj_get_scroll_y(clock_menu_list);
+    if(page!=7 && page!=12 && page!=13 && page!=8)clock_menu_scroll_y=0;
     page = 12;
     make_base();
-    label(screen, "BASIC CLOCK", 39, &lv_font_montserrat_24, prefs->text_color);
+    label(screen, "CLOCK SETTINGS", 38, &lv_font_montserrat_24, prefs->text_color);
     lv_obj_t *list = lv_obj_create(screen);
-    lv_obj_set_size(list, 322, 265);
-    lv_obj_align(list, LV_ALIGN_CENTER, 0, -2);
+    clock_menu_list = list;
+    lv_obj_set_size(list, 322, 285);
+    lv_obj_align(list, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_bg_color(list, lv_color_hex(0x0C1B2B), 0);
     lv_obj_set_style_border_width(list, 0, 0);
     lv_obj_set_style_radius(list, 18, 0);
-    lv_obj_set_style_pad_all(list, 7, 0);
-    lv_obj_set_style_pad_row(list, 8, 0);
+    lv_obj_set_style_pad_all(list, 8, 0);
+    lv_obj_set_style_pad_row(list, 10, 0);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
     lv_obj_remove_flag(list, LV_OBJ_FLAG_GESTURE_BUBBLE);
     char text[65];
-    snprintf(text, sizeof text, "Font preset %u / 20", prefs->basic_font_style + 1);
-    button(list, text, 256, 50, 0, 0, 0xB2C6D3, on_basic_font, NULL);
+    /* Time */
+    snprintf(text, sizeof text, "Font %u / 20", prefs->basic_font_style + 1);
+    button(list, text, 270, 50, 0, 0, 0xB2C6D3, on_basic_font, NULL);
     basic_font_size_label = lv_label_create(list);
     snprintf(text, sizeof text, "Time size: %u%%", prefs->basic_font_size);
     lv_label_set_text(basic_font_size_label, text);
@@ -3820,15 +3816,21 @@ static void build_basic_settings_now(void)
     lv_slider_set_value(slider, prefs->basic_font_size, LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_RELEASED, NULL);
-    /* The ring renderer is disabled for performance. Retain saved values for
-       backwards compatibility, but never expose controls that do nothing. */
-    /* 0.8.124: background colour removed (fixed black). */
-    button(list,"Time text color",256,50,0,0,0xB2C6D3,on_basic_colour,(void*)1);
-    button(list, prefs->basic_show_date?"Date: ON":"Date: OFF",256,50,0,0,
+    button(list,"Time color",270,50,0,0,0xB2C6D3,on_basic_colour,(void*)1);
+    button(list, prefs->basic_show_date?"Date: ON":"Date: OFF",270,50,0,0,
            0xB2C6D3,on_basic_date,NULL);
-    button(list, prefs->basic_weather?"Weather: ON":"Weather: OFF",256,50,0,0,
+    /* Weather */
+    button(list, prefs->basic_weather?"Weather: ON":"Weather: OFF",270,50,0,0,
            0xB2C6D3,on_basic_weather,NULL);
-    button(screen, "BACK", 150, 50, 0, 175, 0xB2C6D3, on_clock_options, NULL);
+    lf_weather_config_t cfg;
+    lf_weather_get_config(&cfg);
+    button(list, "Weather location", 270, 50, 0, 0,
+           0xB2C6D3, on_weather_location, NULL);
+    snprintf(text, sizeof text, "Weather update: %u min", cfg.interval_minutes);
+    button(list, text, 270, 50, 0, 0, 0xB2C6D3, on_weather_interval, NULL);
+    lv_obj_update_layout(list);
+    if(clock_menu_scroll_y>0)lv_obj_scroll_to_y(list, clock_menu_scroll_y, LV_ANIM_OFF);
+    button(screen, "BACK", 150, 50, 0, 175, prefs->text_color, on_clock_settings_back, NULL);
 }
 static void refresh_debug(void)
 {

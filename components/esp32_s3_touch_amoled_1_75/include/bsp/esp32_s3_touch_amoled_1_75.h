@@ -296,20 +296,20 @@ lv_display_t *bsp_display_start(void);
  */
 lv_display_t *bsp_display_start_with_config(bsp_display_cfg_t *cfg);
 
-/* 0.8.127: direct LVGL/esp_lcd port without esp_lvgl_adapter. Use
+/* 0.8.128: direct LVGL/esp_lcd port without esp_lvgl_adapter. Use
    bsp_display_lock()/bsp_display_unlock() around LVGL calls. */
 lv_display_t *bsp_display_start_direct(void);
-/* 0.8.127: compose and send a full frame directly (LVGL suspended). */
+/* 0.8.128: compose and send a full frame directly (LVGL suspended). */
 typedef void (*bsp_row_fill_cb_t)(uint16_t *dst, int y0, int rows, void *ctx);
 esp_err_t bsp_display_push_frame(bsp_row_fill_cb_t fill, void *ctx);
 uint32_t bsp_display_te_count(void);
-/* 0.8.127: touch sampler and LVGL task liveness. */
+/* 0.8.128: touch sampler and LVGL task liveness. */
 typedef struct {
     uint32_t touch_reads, touch_failures, touch_read_max_us;
     uint32_t touch_sample_age_ms, lvgl_loop_age_ms;
 } bsp_input_health_t;
 void bsp_display_input_health(bsp_input_health_t *out);
-/* 0.8.127: UI-task breadcrumbs (survive a software restart). Stages:
+/* 0.8.128: UI-task breadcrumbs (survive a software restart). Stages:
    0 idle, 1 LVGL timers, 2 waiting UI lock, 10 panel submit, 11 panel bus
    not completing, 12 waiting
    transfer, 13 waiting TE, 20 swipe compose, 21 swipe push, 30 snapshot,
@@ -317,7 +317,7 @@ void bsp_display_input_health(bsp_input_health_t *out);
 void bsp_ui_stage_set(uint32_t stage);
 uint32_t bsp_ui_stage_get(void);
 uint32_t bsp_ui_stage_prev_boot(void);
-/* 0.8.127: panel SPI health. */
+/* 0.8.128: panel SPI health. */
 bool bsp_display_spi_wedged(void);
 uint32_t bsp_display_lcd_wait_timeouts(void);
 

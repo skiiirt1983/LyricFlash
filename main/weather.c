@@ -1,3 +1,4 @@
+#include <time.h>
 #include "weather.h"
 #include "diagnostics.h"
 #include "network.h"
@@ -242,8 +243,10 @@ static bool valid_interval(uint16_t value)
 {
     return value == 15 || value == 30 || value == 60 || value == 120;
 }
+static volatile bool config_loaded;
 static void load_config(void)
 {
+    config_loaded = true;
     nvs_handle_t h;
     if (nvs_open("lf_weather", NVS_READONLY, &h) != ESP_OK) return;
     lf_weather_config_t loaded = {.enabled = false, .interval_minutes = 30, .city = ""};
@@ -270,6 +273,9 @@ static void load_config(void)
 void lf_weather_get_config(lf_weather_config_t *out)
 {
     if (!out) return;
+    /* 0.8.128: the clock face is built before the weather task starts; it
+       must see the saved settings, or it is built without its weather slot. */
+    if (!config_loaded) load_config();
     portENTER_CRITICAL(&weather_mux);
     *out = config;
     portEXIT_CRITICAL(&weather_mux);
@@ -354,7 +360,12 @@ static void worker(void *arg)
     uint32_t prior_generation = 0;
     TickType_t next_poll = 0;
     bool was_connected = false;
+    bool time_was_synced = false;
     for (;;) {
+        /* 0.8.128: fetch again as soon as the clock first gets real time. */
+        const bool time_synced = time(NULL) > 1700000000;
+        const bool time_just_synced = time_synced && !time_was_synced;
+        time_was_synced = time_synced;
         lf_weather_config_t c;
         uint32_t generation;
         portENTER_CRITICAL(&weather_mux);
@@ -369,7 +380,7 @@ static void worker(void *arg)
         } else if (!lf_network_is_connected()) {
             set_strip("WEATHER OFFLINE");
             was_connected=false;
-        } else if (!was_connected || generation != prior_generation ||
+        } else if (!was_connected || generation != prior_generation || time_just_synced ||
                    (int32_t)(xTaskGetTickCount() - next_poll) >= 0) {
             was_connected=true;
             set_strip("UPDATING WEATHER");
