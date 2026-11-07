@@ -8,7 +8,7 @@ Target hardware: Waveshare ESP32-S3 Touch AMOLED 1.75, 16 MB flash.
 - Song ID and lyrics working, including failed and cancelled searches.
 - Clock face with weather, date, battery and AM/PM. Clock settings menu. Correct local time on every screen, including right after start-up and wake.
 - Overnight standby: 9.5 hours of uptime with no restarts, display timeouts or errors. Battery drain about 1% per hour with the screen off.
-- Over-the-air updates from the watch's Firmware page.
+- Over-the-air updates from the device's Firmware page.
 
 ## Automated checks on every build
 

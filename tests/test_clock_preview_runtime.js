@@ -126,16 +126,16 @@ const runtime=new Function("document","fetch","setInterval",
  el("clock_face").value="2";el("clock_face").dispatch("change");
  /* Simulate a pointer dragging Classic Analog's battery 39 px right.
     Save must contain new face-local battery coordinates, not Basic's. */
- const watch=el("clock-preview");
- watch.getBoundingClientRect=()=>({width:466,height:466});
- watch.setPointerCapture=()=>{};
+ const previewBox=el("clock-preview");
+ previewBox.getBoundingClientRect=()=>({width:466,height:466});
+ previewBox.setPointerCapture=()=>{};
  const hit={getAttribute:id=>id==="data-part"?"battery":null,closest:()=>hit};
  const evt=(x,y)=>({target:hit,pointerId:41,clientX:x,clientY:y,preventDefault(){}});
- const first=watch.innerHTML;
- watch.listeners.pointerdown(evt(110,120));
- watch.listeners.pointermove(evt(149,120));
- watch.listeners.pointerup(evt(149,120));
- assert.notEqual(watch.innerHTML,first,
+ const first=previewBox.innerHTML;
+ previewBox.listeners.pointerdown(evt(110,120));
+ previewBox.listeners.pointermove(evt(149,120));
+ previewBox.listeners.pointerup(evt(149,120));
+ assert.notEqual(previewBox.innerHTML,first,
    "Dragging the Classic battery did not update its preview");
  el("face_background").value="#112233";el("face_background").dispatch("input");
  assert(el("clock-preview").innerHTML.includes('fill="#112233"'),

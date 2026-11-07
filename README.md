@@ -13,12 +13,12 @@ Third-party libraries, board support and fonts keep their own authors and licens
 - **Clock:** one customizable face with 20 fonts, adjustable size and color, date, battery and live weather. Press and hold the clock for its settings.
 - **Weather:** current conditions for a chosen city, refreshed on a set interval. Swipe up on the clock for details.
 - **Battery:** the CPU drops to 80 MHz with the screen off, touch and screen polling slow down, and the Wi-Fi radio sleeps during long idle periods. Standby drain is about 1% per hour.
-- **Web pages:** the watch serves settings, clock customization, weather, diagnostics and firmware updates at `http://<watch-ip>/`.
-- **Reliability:** a display watchdog restarts the UI if it ever stalls. Diagnostics are at `http://<watch-ip>/api/diagnostics`.
+- **Web pages:** the device serves settings, clock customization, weather, diagnostics and firmware updates at `http://<device-ip>/`.
+- **Reliability:** a display watchdog restarts the UI if it ever stalls. Diagnostics are at `http://<device-ip>/api/diagnostics`.
 
-## Updating a watch that already runs LyricFlash
+## Updating a device that already runs LyricFlash
 
-Open `http://<watch-ip>/`, go to **Firmware** and install the newest version. Saved Wi-Fi and settings are kept.
+Open `http://<device-ip>/`, go to **Firmware** and install the newest version. Saved Wi-Fi and settings are kept.
 
 ## New install over USB
 
