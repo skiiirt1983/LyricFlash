@@ -1,3 +1,5 @@
+#include <time.h>
+#include <stdlib.h>
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "bsp/esp-bsp.h"
@@ -100,6 +102,11 @@ static void lyricflash_display_recovery_watchdog(void *arg)
 
 void app_main(void)
 {
+    /* 0.8.130: time zone before anything draws the clock. The RTC keeps time
+       across software restarts, so the first Clock frame would otherwise show
+       UTC until Wi-Fi started. Same zone as start_time_sync(). */
+    setenv("TZ", "PCT7", 1);
+    tzset();
     // Preserve NVS on failure. NEVER auto-erase NVS: it will hold future Wi-Fi/API secrets.
     esp_err_t err = nvs_flash_init();
     if (err != ESP_OK) {

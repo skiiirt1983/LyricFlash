@@ -3354,6 +3354,7 @@ static void snap_enter(void)
     lv_display_enable_invalidation(disp,false);
     snap_mode=true;
     snap_last_x=-1;
+    if(snap_comp_timer)lv_timer_resume(snap_comp_timer);
     snap_mode_since_ms=now_ms();
     atomic_fetch_add(&snap_swipe_count,1);
     snap_push(abs(lv_obj_get_scroll_x(primary_pager)));
@@ -3363,6 +3364,7 @@ static void snap_exit(void)
     if(!snap_mode)return;
     bsp_ui_stage_set(32);
     snap_mode=false;
+    if(snap_comp_timer)lv_timer_pause(snap_comp_timer);
     lv_display_t *disp=lv_display_get_default();
     if(disp)lv_display_enable_invalidation(disp,true);
     if(screen)lv_obj_invalidate(screen);
@@ -3571,7 +3573,10 @@ static void primary_pager_create(int target_index)
                                 LV_EVENT_INVALIDATE_AREA,NULL);
         snap_inv_hooked=true;
     }
-    if(!snap_comp_timer)snap_comp_timer=lv_timer_create(snap_comp_tick,10,NULL);
+    if(!snap_comp_timer){
+        snap_comp_timer=lv_timer_create(snap_comp_tick,10,NULL);
+        if(snap_comp_timer && !snap_mode)lv_timer_pause(snap_comp_timer);
+    }
     lv_obj_update_layout(primary_pager);
     lv_obj_scroll_to_x(primary_pager,target_index*466,LV_ANIM_OFF);
     primary_pager_initializing=false;
@@ -3969,6 +3974,16 @@ static void wake_finish_async(void *arg)
         lv_timer_resume(clock_sweep_timer);
     }
 }
+/* 0.8.130: screen-off power saving. Touch and the LVGL loop slow to 40 ms
+   while the panel is dark; full 10 ms responsiveness returns on wake. */
+static void ui_low_power(bool low)
+{
+    bsp_display_set_low_power(low);
+    for(lv_indev_t *in=lv_indev_get_next(NULL);in;in=lv_indev_get_next(in)){
+        if(lv_indev_get_type(in)==LV_INDEV_TYPE_POINTER && lv_indev_get_read_timer(in))
+            lv_timer_set_period(lv_indev_get_read_timer(in),low?40:10);
+    }
+}
 static void on_wake(lv_event_t *e)
 {
     (void)e;
@@ -3985,6 +4000,7 @@ static void on_wake(lv_event_t *e)
     /* Prioritize the AMOLED and input task before creating the
        asynchronous Wi-Fi restart worker after prolonged radio-off. */
     lf_power_set_screen_awake(true);
+    ui_low_power(false);
     activity();
     /* 0.8.129: bring the clock up to date before the panel lights, so a
        wake never shows the time from when the screen went off. */
@@ -4082,6 +4098,7 @@ static void sleep_display(void)
     /* Screen is already dark with a live touch target. Lower idle CPU
        frequency but retain Wi-Fi, OTA and all wake processing. */
     lf_power_set_screen_awake(false);
+    ui_low_power(true);
 }
 /* Avoid repeated LVGL label allocation and invalidation for unchanged text. */
 static void ui_label_set_text_if_changed(lv_obj_t *obj,const char *text)
@@ -4809,7 +4826,9 @@ bool lf_ui_start(lf_settings_t *s)
     (void)ui_boot_benchmark_timer;
     lv_timer_create(on_tick, 50, NULL);
     /* 30 Hz sweep: visually smooth, half the redraw load of 60 Hz. */
-    clock_sweep_timer=lv_timer_create(on_clock_sweep, 33, NULL);
+    /* 0.8.130: only the retired Diver face animated a sweep hand; the
+       Basic face needs no 30 Hz timer. */
+    clock_sweep_timer=lv_timer_create(on_clock_sweep, 1000, NULL);
     bsp_display_unlock();
     return true;
 }

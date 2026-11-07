@@ -9,7 +9,7 @@ wake=ui.split("static void wake_finish_async(void *arg)\n{",1)[1].split("static 
 sleep=ui.split("static void sleep_display(void)\n{",1)[1].split("static void on_tick",1)[0]
 tick=ui.split("static void on_tick_body(lv_timer_t *timer)\n{",1)[1].split("/* Append title/artist",1)[0]
 assert "static lv_timer_t *clock_sweep_timer;" in ui
-assert "clock_sweep_timer=lv_timer_create(on_clock_sweep, 33, NULL);" in ui
+assert "clock_sweep_timer=lv_timer_create(on_clock_sweep, 1000, NULL);" in ui
 assert "if(clock_sweep_timer)lv_timer_pause(clock_sweep_timer);" in sleep
 assert sleep.index("asleep=true;") < sleep.index("lv_timer_pause(clock_sweep_timer)") < sleep.index("apply_brightness();")
 assert "lv_obj_add_event_cb(sleep_overlay,on_wake,LV_EVENT_PRESSED,NULL);" in sleep
