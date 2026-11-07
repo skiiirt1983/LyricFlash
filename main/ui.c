@@ -242,7 +242,58 @@ static atomic_uint pager_frame_gap_last_ms;
 static atomic_uint pager_frame_gap_max_ms;
 static atomic_uint pager_refresh_prev_ms;
 /* Profile the overlapping-center raster workload, separated by page pair. */
-/* 0.8.113: why did the screen turn off? */
+/* 0.8.114: swipe recorder (frames between pager movement start and commit). */
+static bool pager_scrolling; /* tentative definition; see later declaration */
+static lf_swipe_log_t swipe_log;
+static bool swipe_active;
+static uint8_t swipe_from;
+static uint32_t swipe_start_ms, swipe_last_ready_ms, swipe_frames;
+static uint64_t swipe_gap_sum, swipe_draw_sum_us, swipe_wait_sum_us;
+static uint32_t swipe_gap_max, swipe_draw_max_us;
+static uint16_t swipe_over50, swipe_over100;
+void lf_ui_swipe_log(lf_swipe_log_t *out){ if(out)*out=swipe_log; }
+static void swipe_frame(uint32_t now_ms_v, uint32_t draw_us, uint32_t wait_us, int from_index)
+{
+    if(!swipe_active){
+        swipe_active=true;
+        swipe_from=(uint8_t)from_index;
+        swipe_start_ms=now_ms_v;
+        swipe_last_ready_ms=now_ms_v;
+        swipe_frames=0; swipe_gap_sum=0; swipe_draw_sum_us=0; swipe_wait_sum_us=0;
+        swipe_gap_max=0; swipe_draw_max_us=0; swipe_over50=0; swipe_over100=0;
+    }
+    const uint32_t gap=now_ms_v-swipe_last_ready_ms;
+    swipe_last_ready_ms=now_ms_v;
+    swipe_frames++;
+    swipe_gap_sum+=gap;
+    if(gap>swipe_gap_max)swipe_gap_max=gap;
+    if(gap>50)swipe_over50++;
+    if(gap>100)swipe_over100++;
+    swipe_draw_sum_us+=draw_us;
+    if(draw_us>swipe_draw_max_us)swipe_draw_max_us=draw_us;
+    swipe_wait_sum_us+=wait_us;
+}
+static void swipe_finish(int to_index)
+{
+    if(!swipe_active)return;
+    swipe_active=false;
+    if(!swipe_frames)return;
+    lf_swipe_stat_t st={0};
+    st.from_page=swipe_from; st.to_page=(uint8_t)to_index;
+    st.frames=(uint16_t)(swipe_frames>65535?65535:swipe_frames);
+    st.duration_ms=swipe_last_ready_ms-swipe_start_ms;
+    st.avg_gap_ms=(uint32_t)(swipe_gap_sum/swipe_frames);
+    st.max_gap_ms=swipe_gap_max;
+    st.avg_draw_ms=(uint32_t)(swipe_draw_sum_us/swipe_frames/1000U);
+    st.max_draw_ms=swipe_draw_max_us/1000U;
+    st.avg_wait_ms=(uint32_t)(swipe_wait_sum_us/swipe_frames/1000U);
+    st.over50=swipe_over50; st.over100=swipe_over100;
+    memmove(&swipe_log.s[1],&swipe_log.s[0],sizeof(swipe_log.s[0])*(LF_SWIPE_LOG-1));
+    swipe_log.s[0]=st;
+    if(swipe_log.count<LF_SWIPE_LOG)swipe_log.count++;
+    swipe_log.total++;
+}
+/* 0.8.114: why did the screen turn off? */
 static lf_ui_sleep_info_t sleep_info;
 void lf_ui_sleep_info(lf_ui_sleep_info_t *out){ if(out)*out=sleep_info; }
 /* 0.8.104 benchmark: CPU clock sampled at every frame start. */
@@ -435,6 +486,8 @@ static void display_refresh_ready_event(lv_event_t *e)
     pager_render_scroll_x=-1;
     /* Measured completed-refresh cadence while the pager is snapping. */
     const uint32_t ready_now=(uint32_t)(esp_timer_get_time()/1000LL);
+    if(primary_pager && (pager_scrolling || primary_pager_snapping))
+        swipe_frame(ready_now,atomic_load(&render_draw_last_us),wait_us,primary_pager_current);
     if(primary_pager_snapping){
         const uint32_t prev=atomic_exchange(&pager_refresh_prev_ms,ready_now);
         if(prev){
@@ -2836,6 +2889,7 @@ static void render_clock(void)
    an incomplete visibility invalidation; render the real scene instead. */
 static void primary_pager_commit(int index)
 {
+    swipe_finish(index);
     if(index<0)index=0;
     if(index>2)index=2;
     if(primary_pager_snapping) {
@@ -3131,7 +3185,7 @@ static void primary_pager_create(int target_index)
        Keep bidirectional scrolling and non-elastic bounds unchanged. */
     lv_obj_set_style_bg_color(primary_pager,
                               lv_color_hex(prefs->background_color),0);
-    /* 0.8.113: transparent pager. The screen behind it has the same
+    /* 0.8.114: transparent pager. The screen behind it has the same
        colour, so edge overscroll still shows no white slice, and swipe
        midpoints (where no single page covers the screen) no longer paint
        an extra full-screen background layer. */
@@ -3249,7 +3303,7 @@ static void build_clock_settings_now(void)
     make_base();
     label(screen, "CLOCK SETTINGS", 38, &lv_font_montserrat_24, prefs->text_color);
     char value[65];
-    /* 0.8.113: single Basic face; no face picker. */
+    /* 0.8.114: single Basic face; no face picker. */
     (void)on_cycle_face;
     button(screen, "CUSTOMIZE CLOCK", 270, 55, 0, -70,
            0xB2C6D3, on_basic_settings, NULL);
@@ -3409,7 +3463,7 @@ static void build_basic_settings_now(void)
     lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_RELEASED, NULL);
     /* The ring renderer is disabled for performance. Retain saved values for
        backwards compatibility, but never expose controls that do nothing. */
-    /* 0.8.113: background colour removed (fixed black). */
+    /* 0.8.114: background colour removed (fixed black). */
     button(list,"Time text color",256,50,0,0,0xB2C6D3,on_basic_colour,(void*)1);
     button(list, prefs->basic_show_date?"Date: ON":"Date: OFF",256,50,0,0,
            0xB2C6D3,on_basic_date,NULL);
@@ -3595,7 +3649,7 @@ static void on_wake(lv_event_t *e)
    asserted low INT at sleep entry would immediately wake, so guard it.
    Timer wake is a recovery fallback in case the touch controller will not
    generate an interrupt while the SoC sleeps. Default remains OFF. */
-/* 0.8.113: on_tick samples `current` once, then helpers such as the pager
+/* 0.8.114: on_tick samples `current` once, then helpers such as the pager
    watchdog call activity() with a fresh, slightly later now_ms(). The old
    unsigned `current - last_activity_ms` then wrapped to ~2^64 and blanked
    the screen instantly while it was being touched (logged idle_ms = 0). */
@@ -3677,7 +3731,7 @@ static void on_tick_body(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
-    /* 0.8.113: LVGL stamps every input-device press itself. Use it so a
+    /* 0.8.114: LVGL stamps every input-device press itself. Use it so a
        touch that no widget callback or 50 ms pointer poll caught (common
        during slow frames) still counts as activity; the screen timeout was
        blanking the display while it was in use. */
@@ -4142,7 +4196,7 @@ __attribute__((unused)) static void nav_transition_tick(lv_timer_t *timer)
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
 {
-    /* 0.8.113: instant screen change. The 12-strip reveal waited for a
+    /* 0.8.114: instant screen change. The 12-strip reveal waited for a
        rendered frame ACK per strip and read as 1-2 fps stutter. One full
        redraw is faster and feels like a phone page switch. */
     (void)direction;
@@ -4265,7 +4319,7 @@ static void build_weather_details(void) { nav_schedule(build_weather_details_now
 static void build_weather_location(void) { nav_schedule(build_weather_location_now); }
 
 
-/* ---- 0.8.113 boot benchmark ------------------------------------------- */
+/* ---- 0.8.114 boot benchmark ------------------------------------------- */
 static lf_ui_bench_t ui_bench;
 void lf_ui_bench(lf_ui_bench_t *out)
 {
@@ -4363,9 +4417,9 @@ bool lf_ui_start(lf_settings_t *s)
         }
         touch=lv_indev_get_next(touch);
     }
-    /* 0.8.113: run the benchmark once on the LVGL task (large stack), never
+    /* 0.8.114: run the benchmark once on the LVGL task (large stack), never
        from app_main: a full lv_refr_now() overflowed app_main's stack in
-       0.8.113, crashed at boot and the OTA rollback restored 0.8.103. */
+       0.8.114, crashed at boot and the OTA rollback restored 0.8.103. */
     lv_timer_t *bench_timer=lv_timer_create(ui_boot_benchmark_timer,1500,NULL);
     if(bench_timer)lv_timer_set_repeat_count(bench_timer,1);
     lv_timer_create(on_tick, 50, NULL);

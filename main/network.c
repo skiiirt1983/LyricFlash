@@ -746,7 +746,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         return ESP_FAIL;
     }
     (void)face;
-    current.clock_face = 5; /* 0.8.113: single Basic face */
+    current.clock_face = 5; /* 0.8.114: single Basic face */
     current.basic_font_style = (uint8_t)font_style;
     current.basic_font_size = (uint8_t)font_size;
     current.basic_time_x=(int32_t)element[0];
@@ -1275,6 +1275,29 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
         cJSON_AddNumberToObject(root, "screen_off_lvgl_idle_ms", sl.lvgl_idle_ms);
         cJSON_AddNumberToObject(root, "screen_off_page", sl.page);
         cJSON_AddNumberToObject(root, "screen_off_at_uptime_s", sl.uptime_s);
+        lf_swipe_log_t sw;
+        lf_ui_swipe_log(&sw);
+        cJSON_AddNumberToObject(root, "swipes_total", sw.total);
+        cJSON *arr=cJSON_AddArrayToObject(root, "swipes_recent");
+        static const char *names[3]={"clock","home","settings"};
+        for(unsigned i=0;arr && i<sw.count;i++){
+            const lf_swipe_stat_t *x=&sw.s[i];
+            cJSON *o=cJSON_CreateObject();
+            if(!o)break;
+            cJSON_AddStringToObject(o,"from",x->from_page<3?names[x->from_page]:"?");
+            cJSON_AddStringToObject(o,"to",x->to_page<3?names[x->to_page]:"?");
+            cJSON_AddNumberToObject(o,"ms",x->duration_ms);
+            cJSON_AddNumberToObject(o,"frames",x->frames);
+            cJSON_AddNumberToObject(o,"fps",x->duration_ms?(x->frames*1000U)/x->duration_ms:0);
+            cJSON_AddNumberToObject(o,"avg_frame_ms",x->avg_gap_ms);
+            cJSON_AddNumberToObject(o,"worst_frame_ms",x->max_gap_ms);
+            cJSON_AddNumberToObject(o,"avg_draw_ms",x->avg_draw_ms);
+            cJSON_AddNumberToObject(o,"worst_draw_ms",x->max_draw_ms);
+            cJSON_AddNumberToObject(o,"avg_wait_ms",x->avg_wait_ms);
+            cJSON_AddNumberToObject(o,"frames_over_50ms",x->over50);
+            cJSON_AddNumberToObject(o,"frames_over_100ms",x->over100);
+            cJSON_AddItemToArray(arr,o);
+        }
     }
     lf_weather_config_t weather;
     lf_weather_get_config(&weather);
