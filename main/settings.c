@@ -22,7 +22,7 @@ void lf_settings_defaults(lf_settings_t *s)
         .accent_color = 0x86E3AE,
         .timing_offset_ms = 0, /* neutral baseline; manual tuning saved separately */
         .line_spacing_px = 5,
-        .clock_face = 0,
+        .clock_face = 5,
         .basic_font_style = 0,
         .basic_font_size = 60,
         .basic_time_x = 0, .basic_time_y = -6,
@@ -205,7 +205,9 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     s->line_spacing_px = in_range(s->line_spacing_px, 0, 24, 5);
     s->show_progress = in_range(s->show_progress, 0, 1, 1);
     s->charging_color &= 0xFFFFFF;
-    s->clock_face = in_range(s->clock_face, 0, 5, 0);
+    s->clock_face = 5; /* 0.8.112: Basic is the only face */
+    s->face_background[5] = 0x000000;
+    s->basic_background = 0x000000;
     s->basic_font_style = in_range(s->basic_font_style, 0, 39, 0);
     s->basic_font_size = in_range(s->basic_font_size, 0, 200, 60);
     /* Per-element offsets remain bounded inside the AMOLED circle. */

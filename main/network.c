@@ -745,7 +745,8 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid clock settings");
         return ESP_FAIL;
     }
-    current.clock_face = (uint8_t)face;
+    (void)face;
+    current.clock_face = 5; /* 0.8.112: single Basic face */
     current.basic_font_style = (uint8_t)font_style;
     current.basic_font_size = (uint8_t)font_size;
     current.basic_time_x=(int32_t)element[0];
@@ -803,7 +804,8 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
     current.basic_weather_y=current.face_weather_y[5];
     current.basic_weather_size=current.face_weather_size[5];
     /* Basic face keeps existing ring/font controls as well. */
-    current.basic_background=current.face_background[5];
+    current.face_background[5]=0x000000;
+    current.basic_background=0x000000;
     current.basic_foreground=current.face_foreground[5];
     current.basic_show_date=current.face_show_date[5];
     /* Weather is independently managed at /weather. Clock Studio may

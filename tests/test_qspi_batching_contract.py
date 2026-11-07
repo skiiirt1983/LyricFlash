@@ -24,4 +24,4 @@ assert "CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1" in cfg
 assert ".tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE" in (root/"main/main.c").read_text()
 assert "LF_PAGER_STALL_GUARD_MS 1600U" in ui
 assert "lf_network_set_idle(true);" in ui and "lf_network_set_idle(false);" in ui
-print("PASS: 0.8.111 TE-synchronized QSPI / 8-row DMA batching, 4-row fallback, unchanged safety/power")
+print("PASS: 0.8.112 TE-synchronized QSPI / 8-row DMA batching, 4-row fallback, unchanged safety/power")

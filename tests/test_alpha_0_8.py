@@ -72,7 +72,7 @@ header=(p/'main/version.h').read_text()
 match=re.search(r'^#define LF_VERSION "([^"]+)"',header,re.MULTILINE)
 assert match, "Missing LF_VERSION"
 version=match.group(1)
-assert version in ("0.8.41-alpha","0.8.42-alpha","0.8.43-alpha","0.8.44-alpha","0.8.45-alpha","0.8.46-alpha","0.8.47-alpha","0.8.48-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha","0.8.67-alpha","0.8.68-alpha","0.8.69-alpha","0.8.71-alpha","0.8.72-alpha","0.8.73-alpha","0.8.74-alpha","0.8.75-alpha","0.8.76-alpha","0.8.77-alpha","0.8.78-alpha","0.8.79-alpha","0.8.80-alpha","0.8.81-alpha","0.8.82-alpha","0.8.83-alpha","0.8.84-alpha","0.8.85-alpha","0.8.86-alpha","0.8.87-alpha","0.8.88-alpha","0.8.89-alpha","0.8.90-alpha","0.8.91-alpha","0.8.92-alpha","0.8.93-alpha","0.8.94-alpha","0.8.95-alpha","0.8.111-alpha"), version
+assert version in ("0.8.41-alpha","0.8.42-alpha","0.8.43-alpha","0.8.44-alpha","0.8.45-alpha","0.8.46-alpha","0.8.47-alpha","0.8.48-alpha","0.8.49-alpha","0.8.50-alpha","0.8.51-alpha","0.8.52-alpha","0.8.53-alpha","0.8.61-alpha","0.8.63-alpha","0.8.64-alpha","0.8.65-alpha","0.8.66-alpha","0.8.67-alpha","0.8.68-alpha","0.8.69-alpha","0.8.71-alpha","0.8.72-alpha","0.8.73-alpha","0.8.74-alpha","0.8.75-alpha","0.8.76-alpha","0.8.77-alpha","0.8.78-alpha","0.8.79-alpha","0.8.80-alpha","0.8.81-alpha","0.8.82-alpha","0.8.83-alpha","0.8.84-alpha","0.8.85-alpha","0.8.86-alpha","0.8.87-alpha","0.8.88-alpha","0.8.89-alpha","0.8.90-alpha","0.8.91-alpha","0.8.92-alpha","0.8.93-alpha","0.8.94-alpha","0.8.95-alpha","0.8.112-alpha"), version
 assert f'set(PROJECT_VER "{version}")' in (p/'CMakeLists.txt').read_text(), (
     "ESP-IDF app descriptor PROJECT_VER must agree with LF_VERSION"
 )
@@ -82,4 +82,4 @@ print('PASS: Alpha 0.8 diagnostics, PIN-free Web UI and navigation gates')
 
 assert 'clock_face' in net and 'weather_enabled' in net
 assert 'clock_face' in web and 'weather_enabled' in web
-assert 'prefs->clock_face = basic->clock_face' in ui
+assert 'prefs->clock_face = 5;' in ui
