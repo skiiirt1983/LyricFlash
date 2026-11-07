@@ -28,7 +28,7 @@ for strip in range(4):
     samples=sum(((360*ms//10000)//90 if ms<10000 else 3)==strip
                 for ms in range(140,10001,140))
     assert samples+1<=26, (strip,samples)
-assert "lv_anim_set_duration(anim,185U+(uint32_t)(105U*remaining/466U));" in ui # native easing
+assert "lv_anim_set_duration(anim,240U+(uint32_t)(120U*remaining/466U));" in ui # native easing
 assert "primary_pager_frame_pending" in ui
 assert "LF_PAGER_MAX_FRAME_STEP_PX" not in ui
 assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in ui

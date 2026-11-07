@@ -298,7 +298,7 @@ require('lf_ui_display_stats_t' in read('main/ui.h') and
         "Thread-safe display metrics contract missing")
 
 # Hardware display recovery: local independently licensed BSP has PSRAM -> DMA
-# staging and a one-slot SPI transfer queue. 0.8.115: tear mode NONE (partial
+# staging and a one-slot SPI transfer queue. 0.8.116: tear mode NONE (partial
 # render) with double-buffered internal-SRAM strips; TE_SYNC full-frame retired.
 bsp=read('components/esp32_s3_touch_amoled_1_75/esp32_s3_touch_amoled_1_75.c')
 display_header=read('components/esp32_s3_touch_amoled_1_75/include/bsp/display.h')
@@ -434,7 +434,7 @@ require('primary_pager_snap_started_ms' in ui and
 # No snapshot image, no off-screen proxy, no dynamic hiding of real clock.
 # Repaint on Clock settle *without requiring an additional touch*.
 commit=ui.split('static void primary_pager_commit(int index)\n{',1)[1].split('static void primary_pager_start_snap',1)[0]
-# 0.8.115: page snapshots are used during swipes only; the commit must
+# 0.8.116: page snapshots are used during swipes only; the commit must
 # restore live widgets AND explicitly repaint the settled page.
 require('snap_exit();' in commit and
         'lv_obj_invalidate(primary_pager_pages[index]);' in commit and
@@ -457,7 +457,7 @@ require('const bool settled_move=primary_pager_snapping || pager_scrolling ||' i
 
 # 0.8.26: controlled short snaps must not remove hardware regression safety.
 require('lv_event_get_scroll_anim(e)' in ui and
-        'lv_anim_set_duration(anim,185U+' in ui and
+        'lv_anim_set_duration(anim,240U+' in ui and
         'lv_anim_set_path_cb(anim,lv_anim_path_ease_out)' in ui and
         'lv_obj_remove_flag(primary_pager,LV_OBJ_FLAG_SCROLL_MOMENTUM);' in ui and
         '"pager_snap_last_ms"' in network and

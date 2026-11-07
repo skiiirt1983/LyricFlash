@@ -773,7 +773,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // fallback path when tear mode ends up as NONE.
 #define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
-/* 0.8.115 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+/* 0.8.116 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
    DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
    strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
    Used only when tear mode is NONE and enough internal RAM remains for
@@ -1018,7 +1018,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         (size_t)BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT_INTERNAL_FAST * BSP_LCD_BITS_PER_PIXEL / 8;
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-    /* 0.8.115: disabled. Hardware logs showed panel flush waits under 1 ms
+    /* 0.8.116: disabled. Hardware logs showed panel flush waits under 1 ms
        (render, not transfer, is the bottleneck) while the 45 KB of internal
        SRAM starved song ID. Keep LVGL strips in PSRAM with DMA staging. */
     const bool internal_fast = BSP_LVGL_INTERNAL_FAST_ENABLE && !use_te_sync &&
@@ -1218,7 +1218,7 @@ esp_err_t bsp_display_rotation_set(bsp_display_rotation_t rotation)
 }
 
 /* ---------------------------------------------------------------------
- * 0.8.115: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
+ * 0.8.116: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
  * shape), replacing esp_lvgl_adapter for this panel. Hardware benchmarks
  * showed a blank full frame costing 47 ms through the adapter although the
  * panel accepts a full frame in 13.8 ms. Here LVGL renders 24-row strips
@@ -1235,6 +1235,7 @@ static bool direct_mode;
 /* The SPI ISR may run while flash cache is disabled (NVS/OTA writes), so it
    only gives a semaphore; LVGL waits on it through flush_wait_cb. */
 static SemaphoreHandle_t direct_flush_done;
+static void *direct_buf[2];
 static bool IRAM_ATTR bsp_direct_color_done(esp_lcd_panel_io_handle_t io,
                                             esp_lcd_panel_io_event_data_t *edata,
                                             void *user_ctx)
@@ -1307,6 +1308,8 @@ lv_display_t *bsp_display_start_direct(void)
 
     void *buf1 = heap_caps_malloc(strip_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     void *buf2 = heap_caps_malloc(strip_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    direct_buf[0] = buf1;
+    direct_buf[1] = buf2;
     if (!buf1 || !buf2) {
         ESP_LOGE(TAG, "Direct LVGL: cannot allocate 2 x %u byte DMA strips", (unsigned)strip_bytes);
         free(buf1); free(buf2);
@@ -1349,6 +1352,37 @@ lv_display_t *bsp_display_start_direct(void)
     }
     ESP_LOGI(TAG, "Direct LVGL port: 2 x %d-row internal DMA strips, no adapter", BSP_DIRECT_ROWS);
     return disp;
+}
+
+/* 0.8.116: push a full frame straight to the panel, bypassing LVGL.
+   The caller must hold the LVGL lock and have LVGL invalidation disabled,
+   so LVGL is not flushing. Rows are produced into the two internal DMA
+   strips in ping-pong: strip N+1 is filled while strip N transfers.
+   Pixels must already be panel byte order (big-endian RGB565). */
+esp_err_t bsp_display_push_frame(bsp_row_fill_cb_t fill, void *ctx)
+{
+    if (!direct_mode || !fill || !direct_buf[0] || !direct_buf[1]) return ESP_ERR_INVALID_STATE;
+    /* Let any in-flight LVGL transfer finish, then drop its completion. */
+    uint8_t caset[4] = {0, 0, (uint8_t)((BSP_LCD_H_RES - 1) >> 8), (uint8_t)((BSP_LCD_H_RES - 1) & 0xFF)};
+    esp_lcd_panel_io_tx_param(io_handle, (0x02u << 24) | (0x2Au << 8), caset, 4);
+    (void)xSemaphoreTake(direct_flush_done, 0);
+    bool pending = false;
+    int slot = 0;
+    for (int y = 0; y < BSP_LCD_V_RES; y += BSP_DIRECT_ROWS) {
+        const int rows = (BSP_LCD_V_RES - y) < BSP_DIRECT_ROWS ? (BSP_LCD_V_RES - y) : BSP_DIRECT_ROWS;
+        uint16_t *dst = (uint16_t *)direct_buf[slot];
+        fill(dst, y, rows, ctx);
+        if (pending && xSemaphoreTake(direct_flush_done, pdMS_TO_TICKS(100)) != pdTRUE) {
+            return ESP_ERR_TIMEOUT;
+        }
+        if (esp_lcd_panel_draw_bitmap(panel_handle, 0, y, BSP_LCD_H_RES, y + rows, dst) != ESP_OK) {
+            return ESP_FAIL;
+        }
+        pending = true;
+        slot ^= 1;
+    }
+    if (pending) (void)xSemaphoreTake(direct_flush_done, pdMS_TO_TICKS(100));
+    return ESP_OK;
 }
 
 esp_err_t bsp_display_lock(uint32_t timeout_ms)

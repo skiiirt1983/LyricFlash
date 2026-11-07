@@ -242,7 +242,7 @@ static atomic_uint pager_frame_gap_last_ms;
 static atomic_uint pager_frame_gap_max_ms;
 static atomic_uint pager_refresh_prev_ms;
 /* Profile the overlapping-center raster workload, separated by page pair. */
-/* 0.8.115: swipe recorder (frames between pager movement start and commit). */
+/* 0.8.116: swipe recorder (frames between pager movement start and commit). */
 static bool pager_scrolling; /* tentative definition; see later declaration */
 static lf_swipe_log_t swipe_log;
 static bool swipe_active;
@@ -299,7 +299,7 @@ static void swipe_finish(int to_index)
     if(swipe_log.count<LF_SWIPE_LOG)swipe_log.count++;
     swipe_log.total++;
 }
-/* 0.8.115: why did the screen turn off? */
+/* 0.8.116: why did the screen turn off? */
 static lf_ui_sleep_info_t sleep_info;
 void lf_ui_sleep_info(lf_ui_sleep_info_t *out){ if(out)*out=sleep_info; }
 /* 0.8.104 benchmark: CPU clock sampled at every frame start. */
@@ -3092,7 +3092,8 @@ static void primary_pager_scroll_event(lv_event_t *e)
             int32_t remaining=abs(primary_pager_snap_to*466-abs(lv_obj_get_scroll_x(primary_pager)));
             if(remaining>466)remaining=466;
             /* PrintSphere-style ease-out timing with our own touch guard. */
-            lv_anim_set_duration(anim,185U+(uint32_t)(105U*remaining/466U));
+            /* 0.8.116: deliberate ease-out glide into place (240-360 ms). */
+            lv_anim_set_duration(anim,240U+(uint32_t)(120U*remaining/466U));
             lv_anim_set_path_cb(anim,lv_anim_path_ease_out);
         }
         pager_scrolling=true;
@@ -3132,22 +3133,24 @@ static void primary_pager_scroll_event(lv_event_t *e)
     primary_pager_last_move_ms=now_ms();
     activity();
 }
-/* ---- 0.8.115 swipe snapshots ------------------------------------------
-   Hardware logs: a swipe midpoint draws both pages' full widget content
-   (150 ms Home/Settings) and every swipe frame is draw-bound. While idle,
-   each pager page is rendered once into an RGB565 PSRAM image. During a
-   swipe the images are shown and the live widgets hidden, so each frame is
-   two opaque image blits regardless of page complexity. Live widgets return
-   at the snap commit. */
-static lv_obj_t *page_snap_img[3];
+/* ---- 0.8.116 swipe compositor ------------------------------------------
+   0.8.116 hardware log: LVGL blitting two PSRAM page images still cost
+   ~70 ms per swipe frame. Now, while idle, each pager page is rendered once
+   into a panel-byte-order RGB565 PSRAM snapshot. During pager motion LVGL
+   keeps handling touch and the scroll/snap animation but its invalidation is
+   disabled; a 10 ms timer composes each frame row-by-row from the two
+   visible snapshots and pushes it straight to the panel (ping-pong internal
+   DMA strips). At the commit LVGL invalidation returns and the settled live
+   page is repainted. */
 static lv_draw_buf_t *page_snap_buf[3];
 static bool page_snap_valid[3];
 static uint8_t page_snap_dirty=0x07;
 static bool snap_mode;
+static int32_t snap_last_x=-1;
 static uint64_t snap_dirty_not_before_ms;
 static uint64_t snap_last_full_mark_ms, snap_last_clock_mark_ms;
 static uint64_t snap_mode_since_ms;
-static lv_timer_t *snap_refresh_timer;
+static lv_timer_t *snap_refresh_timer, *snap_comp_timer;
 static atomic_uint snap_take_count, snap_take_last_ms, snap_take_max_ms, snap_swipe_count;
 void lf_ui_snapshot_stats(uint32_t *taken,uint32_t *last_ms,uint32_t *max_ms,uint32_t *swipes)
 {
@@ -3156,59 +3159,67 @@ void lf_ui_snapshot_stats(uint32_t *taken,uint32_t *last_ms,uint32_t *max_ms,uin
     if(max_ms)*max_ms=atomic_load(&snap_take_max_ms);
     if(swipes)*swipes=atomic_load(&snap_swipe_count);
 }
-static void snap_children_hidden(lv_obj_t *page,lv_obj_t *img,bool hide)
+typedef struct { int32_t x; } snap_comp_ctx_t;
+static void snap_fill_rows(uint16_t *dst,int y0,int rows,void *vctx)
 {
-    const uint32_t n=lv_obj_get_child_count(page);
-    for(uint32_t i=0;i<n;i++){
-        lv_obj_t *c=lv_obj_get_child(page,(int32_t)i);
-        if(!c||c==img)continue;
-        if(hide){
-            if(!lv_obj_has_flag(c,LV_OBJ_FLAG_HIDDEN)){
-                lv_obj_add_flag(c,LV_OBJ_FLAG_HIDDEN);
-                lv_obj_add_flag(c,LV_OBJ_FLAG_USER_1);
-            }
-        }else if(lv_obj_has_flag(c,LV_OBJ_FLAG_USER_1)){
-            lv_obj_remove_flag(c,LV_OBJ_FLAG_USER_1);
-            lv_obj_remove_flag(c,LV_OBJ_FLAG_HIDDEN);
-        }
+    const snap_comp_ctx_t *ctx=(const snap_comp_ctx_t *)vctx;
+    const int idx=ctx->x/466;
+    const int off=ctx->x%466;
+    const lv_draw_buf_t *a=page_snap_buf[idx];
+    const lv_draw_buf_t *b=(off && idx<2)?page_snap_buf[idx+1]:NULL;
+    for(int r=0;r<rows;r++){
+        const int y=y0+r;
+        uint16_t *row=dst+(size_t)r*466;
+        memcpy(row,a->data+(size_t)y*a->header.stride+(size_t)off*2,(size_t)(466-off)*2);
+        if(b)memcpy(row+(466-off),b->data+(size_t)y*b->header.stride,(size_t)off*2);
+    }
+}
+static void snap_push(int32_t x)
+{
+    snap_comp_ctx_t ctx={ .x=x<0?0:(x>932?932:x) };
+    const int64_t t0=esp_timer_get_time();
+    if(bsp_display_push_frame(snap_fill_rows,&ctx)!=ESP_OK)return;
+    snap_last_x=ctx.x;
+    const uint32_t now_v=(uint32_t)(esp_timer_get_time()/1000LL);
+    swipe_frame(now_v,(uint32_t)(esp_timer_get_time()-t0),0,primary_pager_current);
+    /* A pushed frame at the snap target IS the presented destination frame. */
+    if(primary_pager_snapping && abs(ctx.x-primary_pager_snap_to*466)<=2){
+        if(!pager_final_frame_ready)atomic_fetch_add(&pager_final_frame_acks,1);
+        pager_final_frame_ready=true;
     }
 }
 static void snap_enter(void)
 {
     if(snap_mode||!primary_pager)return;
-    for(int i=0;i<3;i++)
-        if(!primary_pager_pages[i]||!page_snap_valid[i]||!page_snap_img[i])return;
-    for(int i=0;i<3;i++){
-        lv_obj_remove_flag(page_snap_img[i],LV_OBJ_FLAG_HIDDEN);
-        snap_children_hidden(primary_pager_pages[i],page_snap_img[i],true);
-    }
+    for(int i=0;i<3;i++)if(!page_snap_valid[i]||!page_snap_buf[i])return;
+    lv_display_t *disp=lv_display_get_default();
+    if(!disp)return;
+    lv_display_enable_invalidation(disp,false);
     snap_mode=true;
+    snap_last_x=-1;
     snap_mode_since_ms=now_ms();
     atomic_fetch_add(&snap_swipe_count,1);
+    snap_push(abs(lv_obj_get_scroll_x(primary_pager)));
 }
 static void snap_exit(void)
 {
     if(!snap_mode)return;
     snap_mode=false;
-    for(int i=0;i<3;i++){
-        if(!primary_pager_pages[i])continue;
-        snap_children_hidden(primary_pager_pages[i],page_snap_img[i],false);
-        if(page_snap_img[i])lv_obj_add_flag(page_snap_img[i],LV_OBJ_FLAG_HIDDEN);
-    }
+    lv_display_t *disp=lv_display_get_default();
+    if(disp)lv_display_enable_invalidation(disp,true);
+    if(screen)lv_obj_invalidate(screen);
 }
-static void snap_img_deleted(lv_event_t *e)
+static void snap_comp_tick(lv_timer_t *t)
 {
-    const int i=(int)(intptr_t)lv_event_get_user_data(e);
-    if(i>=0 && i<3 && page_snap_img[i]==lv_event_get_target(e)){
-        page_snap_img[i]=NULL;
-        page_snap_valid[i]=false;
-    }
+    (void)t;
+    if(!snap_mode||!primary_pager)return;
+    const int32_t x=abs(lv_obj_get_scroll_x(primary_pager));
+    if(x!=snap_last_x)snap_push(x);
 }
 static bool page_snapshot_take(int i)
 {
     lv_obj_t *page=primary_pager_pages[i];
     if(!page||snap_mode)return false;
-    if(page_snap_img[i])lv_obj_add_flag(page_snap_img[i],LV_OBJ_FLAG_HIDDEN);
     const int64_t t0=esp_timer_get_time();
     if(!page_snap_buf[i]){
         page_snap_buf[i]=lv_snapshot_take(page,LV_COLOR_FORMAT_RGB565);
@@ -3217,20 +3228,13 @@ static bool page_snapshot_take(int i)
         page_snap_valid[i]=false;
         return false;
     }
-    if(!page_snap_img[i]){
-        lv_obj_t *img=lv_image_create(page);
-        lv_obj_remove_flag(img,LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_remove_flag(img,LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(img,LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(img,LV_OBJ_FLAG_EVENT_BUBBLE);
-        lv_obj_add_flag(img,LV_OBJ_FLAG_GESTURE_BUBBLE);
-        lv_obj_set_pos(img,0,0);
-        lv_obj_add_event_cb(img,snap_img_deleted,LV_EVENT_DELETE,(void *)(intptr_t)i);
-        page_snap_img[i]=img;
+    lv_draw_buf_t *b=page_snap_buf[i];
+    if(b->header.w!=466||b->header.h!=466||b->header.stride<466*2){
+        page_snap_valid[i]=false;
+        return false;
     }
-    /* Re-point the image so LVGL re-reads the refreshed pixels. */
-    lv_image_set_src(page_snap_img[i],NULL);
-    lv_image_set_src(page_snap_img[i],page_snap_buf[i]);
+    /* Convert once to the panel's big-endian byte order. */
+    for(uint32_t y=0;y<466;y++)lv_draw_sw_rgb565_swap(b->data+(size_t)y*b->header.stride,466);
     page_snap_valid[i]=true;
     const uint32_t ms=(uint32_t)((esp_timer_get_time()-t0)/1000);
     atomic_store(&snap_take_last_ms,ms);
@@ -3249,18 +3253,16 @@ static void snap_refresh_tick(lv_timer_t *t)
     (void)t;
     if(!primary_pager||asleep)return;
     const uint64_t current=now_ms();
-    /* Safety: never leave live widgets hidden if a swipe ended without a
+    /* Safety: never leave LVGL drawing suspended if a swipe ended without a
        commit (e.g. an interrupted animation). */
     if(snap_mode && !pager_scrolling && !primary_pager_snapping &&
        !ui_pointer_is_down() && current-snap_mode_since_ms>1500){
         snap_exit();
-        if(screen)lv_obj_invalidate(screen);
     }
     if(snap_mode||pager_scrolling||primary_pager_snapping||ui_pointer_is_down())return;
     if(current-snap_last_clock_mark_ms>=10000){snap_last_clock_mark_ms=current;page_snap_dirty|=0x01;}
     if(current-snap_last_full_mark_ms>=30000){snap_last_full_mark_ms=current;page_snap_dirty|=0x07;}
     if(!page_snap_dirty||current<snap_dirty_not_before_ms)return;
-    /* One page per tick keeps each idle hiccup to a single page render. */
     for(int i=0;i<3;i++){
         const int idx=(primary_pager_current+i)%3;
         if(page_snap_dirty&(1U<<idx)){
@@ -3272,9 +3274,8 @@ static void snap_refresh_tick(lv_timer_t *t)
 }
 static void snap_reset(void)
 {
-    snap_mode=false;
+    snap_exit();
     for(int i=0;i<3;i++){
-        if(page_snap_img[i]){lv_image_set_src(page_snap_img[i],NULL);page_snap_img[i]=NULL;}
         if(page_snap_buf[i]){lv_draw_buf_destroy(page_snap_buf[i]);page_snap_buf[i]=NULL;}
         page_snap_valid[i]=false;
     }
@@ -3349,7 +3350,7 @@ static void primary_pager_create(int target_index)
        Keep bidirectional scrolling and non-elastic bounds unchanged. */
     lv_obj_set_style_bg_color(primary_pager,
                               lv_color_hex(prefs->background_color),0);
-    /* 0.8.115: transparent pager. The screen behind it has the same
+    /* 0.8.116: transparent pager. The screen behind it has the same
        colour, so edge overscroll still shows no white slice, and swipe
        midpoints (where no single page covers the screen) no longer paint
        an extra full-screen background layer. */
@@ -3378,6 +3379,7 @@ static void primary_pager_create(int target_index)
     snap_reset();
     snap_mark_all_dirty(800);
     if(!snap_refresh_timer)snap_refresh_timer=lv_timer_create(snap_refresh_tick,200,NULL);
+    if(!snap_comp_timer)snap_comp_timer=lv_timer_create(snap_comp_tick,10,NULL);
     lv_obj_update_layout(primary_pager);
     lv_obj_scroll_to_x(primary_pager,target_index*466,LV_ANIM_OFF);
     primary_pager_initializing=false;
@@ -3470,7 +3472,7 @@ static void build_clock_settings_now(void)
     make_base();
     label(screen, "CLOCK SETTINGS", 38, &lv_font_montserrat_24, prefs->text_color);
     char value[65];
-    /* 0.8.115: single Basic face; no face picker. */
+    /* 0.8.116: single Basic face; no face picker. */
     (void)on_cycle_face;
     button(screen, "CUSTOMIZE CLOCK", 270, 55, 0, -70,
            0xB2C6D3, on_basic_settings, NULL);
@@ -3630,7 +3632,7 @@ static void build_basic_settings_now(void)
     lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_RELEASED, NULL);
     /* The ring renderer is disabled for performance. Retain saved values for
        backwards compatibility, but never expose controls that do nothing. */
-    /* 0.8.115: background colour removed (fixed black). */
+    /* 0.8.116: background colour removed (fixed black). */
     button(list,"Time text color",256,50,0,0,0xB2C6D3,on_basic_colour,(void*)1);
     button(list, prefs->basic_show_date?"Date: ON":"Date: OFF",256,50,0,0,
            0xB2C6D3,on_basic_date,NULL);
@@ -3816,7 +3818,7 @@ static void on_wake(lv_event_t *e)
    asserted low INT at sleep entry would immediately wake, so guard it.
    Timer wake is a recovery fallback in case the touch controller will not
    generate an interrupt while the SoC sleeps. Default remains OFF. */
-/* 0.8.115: on_tick samples `current` once, then helpers such as the pager
+/* 0.8.116: on_tick samples `current` once, then helpers such as the pager
    watchdog call activity() with a fresh, slightly later now_ms(). The old
    unsigned `current - last_activity_ms` then wrapped to ~2^64 and blanked
    the screen instantly while it was being touched (logged idle_ms = 0). */
@@ -3898,7 +3900,7 @@ static void on_tick_body(lv_timer_t *timer)
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;
     }
     last_ui_tick_ms = current;
-    /* 0.8.115: LVGL stamps every input-device press itself. Use it so a
+    /* 0.8.116: LVGL stamps every input-device press itself. Use it so a
        touch that no widget callback or 50 ms pointer poll caught (common
        during slow frames) still counts as activity; the screen timeout was
        blanking the display while it was in use. */
@@ -4363,7 +4365,7 @@ __attribute__((unused)) static void nav_transition_tick(lv_timer_t *timer)
 }
 static void nav_transition_begin(lv_screen_load_anim_t direction)
 {
-    /* 0.8.115: instant screen change. The 12-strip reveal waited for a
+    /* 0.8.116: instant screen change. The 12-strip reveal waited for a
        rendered frame ACK per strip and read as 1-2 fps stutter. One full
        redraw is faster and feels like a phone page switch. */
     (void)direction;
@@ -4486,7 +4488,7 @@ static void build_weather_details(void) { nav_schedule(build_weather_details_now
 static void build_weather_location(void) { nav_schedule(build_weather_location_now); }
 
 
-/* ---- 0.8.115 boot benchmark ------------------------------------------- */
+/* ---- 0.8.116 boot benchmark ------------------------------------------- */
 static lf_ui_bench_t ui_bench;
 void lf_ui_bench(lf_ui_bench_t *out)
 {
@@ -4584,9 +4586,9 @@ bool lf_ui_start(lf_settings_t *s)
         }
         touch=lv_indev_get_next(touch);
     }
-    /* 0.8.115: run the benchmark once on the LVGL task (large stack), never
+    /* 0.8.116: run the benchmark once on the LVGL task (large stack), never
        from app_main: a full lv_refr_now() overflowed app_main's stack in
-       0.8.115, crashed at boot and the OTA rollback restored 0.8.103. */
+       0.8.116, crashed at boot and the OTA rollback restored 0.8.103. */
     lv_timer_t *bench_timer=lv_timer_create(ui_boot_benchmark_timer,1500,NULL);
     if(bench_timer)lv_timer_set_repeat_count(bench_timer,1);
     lv_timer_create(on_tick, 50, NULL);

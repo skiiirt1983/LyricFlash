@@ -746,7 +746,7 @@ static esp_err_t handle_basic_post(httpd_req_t *req)
         return ESP_FAIL;
     }
     (void)face;
-    current.clock_face = 5; /* 0.8.115: single Basic face */
+    current.clock_face = 5; /* 0.8.116: single Basic face */
     current.basic_font_style = (uint8_t)font_style;
     current.basic_font_size = (uint8_t)font_size;
     current.basic_time_x=(int32_t)element[0];

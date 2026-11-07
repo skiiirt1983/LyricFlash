@@ -27,7 +27,7 @@ assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_ON);" in start
 assert "lv_timer_resume(primary_pager_frame_timer);" in start
 assert "primary_pager_snapping=true;" in start
 assert "lv_anim_set_path_cb(anim,lv_anim_path_ease_out)" in gesture
-assert "lv_anim_set_duration(anim,185U+(uint32_t)(105U*remaining/466U));" in gesture
+assert "lv_anim_set_duration(anim,240U+(uint32_t)(120U*remaining/466U));" in gesture
 assert "current-primary_pager_snap_started_ms>LF_PAGER_STALL_GUARD_MS" in watchdog
 assert "lv_obj_scroll_to_x(primary_pager,target*466,LV_ANIM_OFF);" in watchdog
 assert "lv_indev_get_state(indev)==LV_INDEV_STATE_PRESSED)return;" in watchdog
