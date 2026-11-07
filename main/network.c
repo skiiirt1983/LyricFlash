@@ -1264,6 +1264,7 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
         cJSON_AddNumberToObject(root, "lcd_selftest_kbps", lcd.selftest_kbytes_per_s);
         cJSON_AddNumberToObject(root, "lcd_selftest_frame_us", lcd.selftest_frame_us);
         cJSON_AddNumberToObject(root, "free_internal_bytes", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+        cJSON_AddNumberToObject(root, "min_free_internal_bytes", heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
         lf_ui_sleep_info_t sl={0};
         lf_ui_sleep_info(&sl);
         cJSON_AddNumberToObject(root, "screen_off_count", sl.count);
