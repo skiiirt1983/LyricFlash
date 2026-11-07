@@ -2,15 +2,16 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-#define LF_CONFIG_SCHEMA 5U
+#define LF_CONFIG_SCHEMA 16U
 #define LF_CONFIG_NS "lyric_ui"
 
 typedef struct {
     uint8_t brightness;       // 5...100 %
-    uint8_t scroll_speed;     // 10...100 % (demo speed)
+    uint8_t scroll_speed;     // 0...100%; 0% ~= 0.5 px/s, 100% ~= 63.5 px/s
     uint8_t font_size;        // lyric size: 0 small, 1 medium, 2 large
     uint8_t system_font_size; // device UI size: 0 18pt, 1 20pt, 2 24pt
-    uint8_t sleep_seconds;    // 0 disables timeout; otherwise 15, 30, or 60
+    uint8_t sleep_seconds;    // Screen-off timeout: 0/15/30/60 s
+    uint8_t deep_sleep_minutes; // 0=disabled; optional 5/15/30/60 minute deep sleep
     uint32_t text_color;      // 24-bit RRGGBB
     uint32_t background_color; // 24-bit RRGGBB
     uint32_t accent_color;     // 24-bit RRGGBB
@@ -18,8 +19,14 @@ typedef struct {
     uint8_t line_spacing_px;  // 0 .. 24
     uint8_t clock_face;       // 0 diver, 1 midnight, 2 classic, 3 retro LCD, 4 sundial, 5 basic
     /* Basic face is an additional independent, persistently styled option. */
-    uint8_t basic_font_style;    // 0 .. 4 typographic presets
-    uint8_t basic_font_size;     // 0 .. 100 slider
+    uint8_t basic_font_style;    // 0 .. 19 original numeral styles
+    uint8_t basic_font_size;     // 0 .. 200 extended scale
+    /* Custom Basic dial element geometry, relative to its 466px center. */
+    int32_t basic_time_x, basic_time_y;
+    int32_t basic_battery_x, basic_battery_y;
+    int32_t basic_date_x, basic_date_y;
+    int32_t basic_weather_x, basic_weather_y;
+    uint8_t basic_battery_size, basic_date_size, basic_weather_size; // 0..200
     uint8_t basic_ring_mode;     // 0 solid, 1 two-tone, 2 three-tone
     uint8_t basic_show_date;     // 0 .. 1
     uint8_t basic_weather;       // 0 .. 1
@@ -28,6 +35,33 @@ typedef struct {
     uint32_t basic_ring_a;
     uint32_t basic_ring_b;
     uint32_t basic_ring_c;
+    /* Independent editable appearance for all six faces. */
+    uint32_t face_background[6];
+    uint32_t face_foreground[6];
+    uint32_t face_accent[6];
+    /* Independently customizable per-face text colours. Time and AM/PM share
+       one colour; Battery icon/% and Weather each have their own. */
+    uint32_t face_time_color[6];
+    uint32_t face_battery_color[6];
+    uint32_t face_weather_color[6];
+    uint32_t face_date_color[6];
+    uint8_t face_show_date[6];
+    uint8_t face_show_seconds[6];
+    uint8_t face_show_battery[6];
+    /* Face-local draggable battery placement, centered in 466px dial. */
+    int32_t face_battery_x[6];
+    int32_t face_battery_y[6];
+    uint8_t face_battery_size[6]; /* 0..200; independent for all faces */
+    uint8_t face_show_percent[6]; /* independent percentage visibility */
+    uint8_t face_show_icon[6]; /* independent battery symbol visibility */
+    uint8_t face_date_format[6]; /* 0 face default, 1 weekday, 2 short, 3 D/M/Y, 4 ISO, 5 long */
+    int32_t face_date_x[6], face_date_y[6]; /* per-face date location */
+    uint8_t face_date_size[6]; /* 0..200 */
+    uint8_t face_show_weather[6];
+    int32_t face_weather_x[6], face_weather_y[6];
+    uint8_t face_weather_size[6];
+    uint8_t face_24h[6];
+    uint32_t charging_color;  // customizable when USB connected
     uint8_t show_progress;    // 0 .. 1
 } lf_settings_t;
 

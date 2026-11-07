@@ -1,0 +1,1602 @@
+#include <stdatomic.h>
+#include <stdio.h>
+#include <inttypes.h>
+#include <stdlib.h>
+#include <string.h>
+#include "esp_lcd_panel_ops.h"
+#include "esp_lcd_panel_interface.h"
+#include "esp_lcd_panel_io.h"
+#include "esp_lcd_panel_io_additions.h"
+
+#include "esp_err.h"
+#include "esp_log.h"
+#include "esp_check.h"
+#include "esp_heap_caps.h"
+#include "esp_timer.h"
+#include "esp_memory_utils.h"
+#include "esp_vfs_fat.h"
+#include "esp_spiffs.h"
+#include "driver/gpio.h"
+#include "driver/ledc.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#include "esp_lcd_co5300.h"
+#include "esp_lcd_touch_cst9217.h"
+
+#include "esp_codec_dev_defaults.h"
+#include "driver/i2s_tdm.h"
+#include "bsp/esp32_s3_touch_amoled_1_75.h"
+#include "bsp_err_check.h"
+#include "bsp/display.h"
+#include "bsp/touch.h"
+
+static const char *TAG = "ESP32-S3-Touch-AMOLED-1.75";
+
+#define BSP_LCD_DMA_STAGING_ROWS (8)
+#define BSP_LCD_DMA_FALLBACK_ROWS (4)
+/* Return to 0.8.86 hardware-tested 8-row batching; retain safe 4-row fallback. */
+static i2c_master_bus_handle_t i2c_handle = NULL; // I2C Handle
+static bool i2c_initialized = false;
+static esp_io_expander_handle_t io_expander = NULL; // IO expander tca9554 handle
+static lv_indev_t *disp_indev = NULL;
+sdmmc_card_t *bsp_sdcard = NULL; // Global uSD card handler
+static esp_lcd_touch_handle_t tp = NULL;
+static esp_lcd_panel_handle_t panel_handle = NULL; // LCD panel handle
+static esp_lcd_panel_handle_t adapter_panel_handle = NULL; // Rotation-aware panel handle for LVGL
+static esp_lcd_panel_io_handle_t io_handle = NULL;
+uint8_t brightness;
+static i2s_chan_handle_t i2s_tx_chan = NULL;
+static i2s_chan_handle_t i2s_rx_chan = NULL;
+static const audio_codec_data_if_t *i2s_data_if = NULL; /* Codec data interface */
+/* Reuse the ES7210 codec handle across manual tests: no per-scan allocation. */
+static esp_codec_dev_handle_t microphone_codec_dev = NULL;
+
+#define BSP_ES7210_CODEC_ADDR ES7210_CODEC_DEFAULT_ADDR
+#define BSP_I2S_GPIO_CFG       \
+    {                          \
+        .mclk = BSP_I2S_MCLK,  \
+        .bclk = BSP_I2S_SCLK,  \
+        .ws = BSP_I2S_LCLK,    \
+        .dout = BSP_I2S_DOUT,  \
+        .din = BSP_I2S_DSIN,   \
+        .invert_flags = {      \
+            .mclk_inv = false, \
+            .bclk_inv = false, \
+            .ws_inv = false,   \
+        },                     \
+    }
+
+static const co5300_lcd_init_cmd_t lcd_init_cmds[] = {
+    {0xFE, (uint8_t[]){0x20}, 1, 0},
+    {0x19, (uint8_t[]){0x10}, 1, 0},
+    {0x1C, (uint8_t[]){0xA0}, 1, 0},
+
+    {0xFE, (uint8_t[]){0x00}, 1, 0},
+    {0xC4, (uint8_t[]){0x80}, 1, 0},
+    {0x3A, (uint8_t[]){0x55}, 1, 0},
+    {0x35, (uint8_t[]){0x00}, 1, 0},
+    {0x53, (uint8_t[]){0x20}, 1, 0},
+    {0x51, (uint8_t[]){0xFF}, 1, 0},
+    {0x63, (uint8_t[]){0xFF}, 1, 0},
+    {0x2A, (uint8_t[]){0x00, 0x06, 0x01, 0xD7}, 4, 0},
+    {0x2B, (uint8_t[]){0x00, 0x00, 0x01, 0xD1}, 4, 600},
+    {0x11, NULL, 0, 600},
+    {0x29, NULL, 0, 0},
+};
+
+typedef struct {
+    esp_lcd_panel_t base;
+    esp_lcd_panel_handle_t target;
+    bsp_display_rotation_t rotation;
+    // Small DMA-capable internal-RAM buffer used as a staging area when the
+    // source bitmap lives in PSRAM (or when rotation produces an output too
+    // large to fit in internal heap as a single chunk). Sized for two slots
+    // of `BSP_LCD_DMA_STAGING_ROWS` rows each so DMA can ping-pong while the
+    // CPU prepares the next slot.
+    uint16_t *rotation_buffer;
+    size_t rotation_buffer_pixels;
+    // Large rotation scratch placed in PSRAM. Holds the rotated full-screen
+    // bitmap for 90/270 deg rendering. Internal heap is too small for the
+    // 466*466*2 byte working set at full-screen flush. Output is then pushed
+    // out to the panel in DMA-sized chunks via `rotation_buffer`.
+    uint16_t *rotated_buffer;
+    size_t rotated_buffer_pixels;
+    bool te_sync_mode;
+    uint8_t staging_slot;
+} bsp_rotation_panel_t;
+
+static bsp_rotation_panel_t rotation_panel = {0};
+/* Read-only statistics: the Web UI never acquires the LVGL lock. */
+static atomic_uint stage_chunk_rows;
+static atomic_uint stage_chunk_submissions;
+static atomic_uint stage_call_last_us;
+static atomic_uint stage_call_max_us;
+/* Monotonic elapsed CPU time for staging, sampled at LVGL render boundaries. */
+static atomic_uint stage_cumulative_us;
+
+void bsp_display_transfer_stats(bsp_display_transfer_stats_t *out)
+{
+    if(!out)return;
+    out->stage_rows=atomic_load(&stage_chunk_rows);
+    out->chunk_submissions=atomic_load(&stage_chunk_submissions);
+    out->stage_call_last_us=atomic_load(&stage_call_last_us);
+    out->stage_call_max_us=atomic_load(&stage_call_max_us);
+    out->stage_cumulative_us=atomic_load(&stage_cumulative_us);
+}
+
+
+static bsp_rotation_panel_t *bsp_rotation_panel_from_base(esp_lcd_panel_t *panel)
+{
+    return panel ? (bsp_rotation_panel_t *)panel->user_data : NULL;
+}
+
+static esp_err_t bsp_rotation_panel_reset(esp_lcd_panel_t *panel)
+{
+    bsp_rotation_panel_t *ctx = bsp_rotation_panel_from_base(panel);
+    return ctx && ctx->target ? esp_lcd_panel_reset(ctx->target) : ESP_ERR_INVALID_STATE;
+}
+
+static esp_err_t bsp_rotation_panel_init(esp_lcd_panel_t *panel)
+{
+    bsp_rotation_panel_t *ctx = bsp_rotation_panel_from_base(panel);
+    return ctx && ctx->target ? esp_lcd_panel_init(ctx->target) : ESP_ERR_INVALID_STATE;
+}
+
+static esp_err_t bsp_rotation_panel_del(esp_lcd_panel_t *panel)
+{
+    bsp_rotation_panel_t *ctx = bsp_rotation_panel_from_base(panel);
+    if (!ctx || !ctx->target)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    free(ctx->rotation_buffer);
+    ctx->rotation_buffer = NULL;
+    ctx->rotation_buffer_pixels = 0;
+    free(ctx->rotated_buffer);
+    ctx->rotated_buffer = NULL;
+    ctx->rotated_buffer_pixels = 0;
+    ctx->te_sync_mode = false;
+    ctx->staging_slot = 0;
+    return esp_lcd_panel_del(ctx->target);
+}
+
+static bool bsp_rotation_panel_ensure_buffer(bsp_rotation_panel_t *ctx, size_t pixels)
+{
+    if (ctx->rotation_buffer_pixels >= pixels && ctx->rotation_buffer != NULL)
+    {
+        return true;
+    }
+
+    /* Allocate first: if an 8-row staging buffer cannot be reserved, retain
+       the existing 4-row DMA-safe allocation for fallback. */
+    uint16_t *new_buffer = heap_caps_malloc(pixels * sizeof(uint16_t),
+                                            MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+    if(!new_buffer)return false;
+    free(ctx->rotation_buffer);
+    ctx->rotation_buffer=new_buffer;
+    ctx->rotation_buffer_pixels=pixels;
+    return true;
+}
+
+// Ensure the large PSRAM scratch used for the rotated frame is sized to fit
+// `pixels` (RGB565). PSRAM is plentiful (8 MB on this board) and cheaper than
+// the internal-RAM scratch which can't hold a full-screen rotated bitmap.
+static bool bsp_rotation_panel_ensure_rotated_buffer(bsp_rotation_panel_t *ctx, size_t pixels)
+{
+    if (ctx->rotated_buffer_pixels >= pixels && ctx->rotated_buffer != NULL)
+    {
+        return true;
+    }
+
+    free(ctx->rotated_buffer);
+    ctx->rotated_buffer = heap_caps_malloc(pixels * sizeof(uint16_t),
+                                           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (ctx->rotated_buffer == NULL)
+    {
+        // Last-ditch fallback to internal heap (small displays / low-PSRAM
+        // configurations). Will silently fail for full-screen flushes on this
+        // board, but keeps small partial-flush rotations working.
+        ctx->rotated_buffer = heap_caps_malloc(pixels * sizeof(uint16_t), MALLOC_CAP_8BIT);
+    }
+    ctx->rotated_buffer_pixels = ctx->rotated_buffer ? pixels : 0;
+    return ctx->rotated_buffer != NULL;
+}
+
+static void bsp_rotation_panel_rotate_region_90(const uint16_t *src, uint16_t *dst,
+                                                int src_w, int src_h)
+{
+    // Write the rotated output row-contiguously. On PSRAM this is much cheaper
+    // than the naive source-row loop, which writes one pixel every destination row.
+    for (int dst_y = 0; dst_y < src_w; ++dst_y)
+    {
+        const uint16_t *src_col = src + dst_y;
+        uint16_t *dst_row = dst + ((size_t)dst_y * src_h);
+        for (int dst_x = 0; dst_x < src_h; ++dst_x)
+        {
+            dst_row[dst_x] = src_col[(size_t)(src_h - 1 - dst_x) * src_w];
+        }
+    }
+}
+
+static void bsp_rotation_panel_rotate_region_270(const uint16_t *src, uint16_t *dst,
+                                                 int src_w, int src_h)
+{
+    // Same layout strategy as 90 deg: contiguous writes into the rotated buffer.
+    for (int dst_y = 0; dst_y < src_w; ++dst_y)
+    {
+        const int src_x = src_w - 1 - dst_y;
+        uint16_t *dst_row = dst + ((size_t)dst_y * src_h);
+        for (int dst_x = 0; dst_x < src_h; ++dst_x)
+        {
+            dst_row[dst_x] = src[((size_t)dst_x * src_w) + src_x];
+        }
+    }
+}
+
+static esp_err_t bsp_rotation_panel_draw_staged(bsp_rotation_panel_t *ctx, int x_start, int y_start,
+                                                int x_end, int y_end, const uint16_t *src)
+{
+    const int width = x_end - x_start;
+    const int height = y_end - y_start;
+    if (width <= 0 || height <= 0)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const size_t pixels = (size_t)width * height;
+    // Use the chunked DMA staging path whenever:
+    //   * TE-sync mode is active (need ping-pong slots to overlap CPU/DMA), OR
+    //   * The source bitmap lives in PSRAM (cannot be DMA'd directly, and a
+    //     full-frame rotated buffer is far too large for internal heap).
+    const bool src_in_psram = src != NULL && esp_ptr_external_ram(src);
+    const bool use_chunked =
+        (ctx->te_sync_mode || src_in_psram) && height > BSP_LCD_DMA_STAGING_ROWS;
+    if (use_chunked)
+    {
+        const int64_t stage_started_us=esp_timer_get_time();
+        int max_rows=BSP_LCD_DMA_STAGING_ROWS;
+        size_t max_pixels=(size_t)width*max_rows;
+        if(!bsp_rotation_panel_ensure_buffer(ctx,max_pixels*2)){
+            max_rows=BSP_LCD_DMA_FALLBACK_ROWS;
+            max_pixels=(size_t)width*max_rows;
+            if(!bsp_rotation_panel_ensure_buffer(ctx,max_pixels*2)){
+                ESP_LOGE(TAG,"Unable to allocate DMA staging for %d rows",max_rows);
+                return ESP_ERR_NO_MEM;
+            }
+        }
+        atomic_store(&stage_chunk_rows,(unsigned)max_rows);
+
+        for (int y = 0; y < height;)
+        {
+            const int rows = (height - y) > max_rows ? max_rows : (height - y);
+            const size_t chunk_pixels = (size_t)width * rows;
+            uint16_t *staging = ctx->rotation_buffer + ((size_t)ctx->staging_slot * max_pixels);
+            ctx->staging_slot ^= 1;
+            memcpy(staging, src + ((size_t)y * width),
+                   chunk_pixels * sizeof(uint16_t));
+            atomic_fetch_add(&stage_chunk_submissions,1);
+            esp_err_t err = esp_lcd_panel_draw_bitmap(ctx->target,
+                                                      x_start,
+                                                      y_start + y,
+                                                      x_end,
+                                                      y_start + y + rows,
+                                                      staging);
+            if (err != ESP_OK)
+            {
+                return err;
+            }
+            y += rows;
+        }
+        const int64_t elapsed_us=esp_timer_get_time()-stage_started_us;
+        const uint32_t duration=(uint32_t)(elapsed_us>0?elapsed_us:0);
+        atomic_store(&stage_call_last_us,duration);
+        atomic_fetch_add(&stage_cumulative_us,duration);
+        if(duration>atomic_load(&stage_call_max_us))
+            atomic_store(&stage_call_max_us,duration);
+        return ESP_OK;
+    }
+
+    if (!bsp_rotation_panel_ensure_buffer(ctx, pixels))
+    {
+        ESP_LOGE(TAG, "Unable to allocate %" PRIu32 " px DMA staging buffer",
+                 (uint32_t)pixels);
+        return ESP_ERR_NO_MEM;
+    }
+
+    memcpy(ctx->rotation_buffer, src, pixels * sizeof(uint16_t));
+    return esp_lcd_panel_draw_bitmap(ctx->target, x_start, y_start, x_end, y_end,
+                                     ctx->rotation_buffer);
+}
+
+static esp_err_t bsp_rotation_panel_draw_bitmap(esp_lcd_panel_t *panel, int x_start, int y_start,
+                                                int x_end, int y_end, const void *color_data)
+{
+    bsp_rotation_panel_t *ctx = bsp_rotation_panel_from_base(panel);
+    if (!ctx || !ctx->target)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (ctx->rotation != BSP_DISPLAY_ROTATE_90 && ctx->rotation != BSP_DISPLAY_ROTATE_270)
+    {
+        if (color_data && esp_ptr_external_ram(color_data))
+        {
+            return bsp_rotation_panel_draw_staged(ctx, x_start, y_start, x_end, y_end,
+                                                 (const uint16_t *)color_data);
+        }
+        return esp_lcd_panel_draw_bitmap(ctx->target, x_start, y_start, x_end, y_end, color_data);
+    }
+
+    const int src_w = x_end - x_start;
+    const int src_h = y_end - y_start;
+    if (src_w <= 0 || src_h <= 0)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const size_t pixels = (size_t)src_w * src_h;
+    if (!bsp_rotation_panel_ensure_rotated_buffer(ctx, pixels))
+    {
+        ESP_LOGE(TAG, "Unable to allocate %" PRIu32 " px rotation buffer", (uint32_t)pixels);
+        return ESP_ERR_NO_MEM;
+    }
+
+    const uint16_t *src = (const uint16_t *)color_data;
+    int dst_x_start = 0;
+    int dst_y_start = 0;
+    int dst_x_end = 0;
+    int dst_y_end = 0;
+    if (ctx->rotation == BSP_DISPLAY_ROTATE_90)
+    {
+        bsp_rotation_panel_rotate_region_90(src, ctx->rotated_buffer, src_w, src_h);
+        dst_x_start = BSP_LCD_H_RES - y_end;
+        dst_x_end = BSP_LCD_H_RES - y_start;
+        dst_y_start = x_start;
+        dst_y_end = x_end;
+    }
+    else
+    {
+        bsp_rotation_panel_rotate_region_270(src, ctx->rotated_buffer, src_w, src_h);
+        dst_x_start = y_start;
+        dst_x_end = y_end;
+        dst_y_start = BSP_LCD_V_RES - x_end;
+        dst_y_end = BSP_LCD_V_RES - x_start;
+    }
+
+    // The rotated buffer lives in PSRAM, so it cannot be handed to the SPI DMA
+    // engine directly. Re-use the staged draw path which copies row-chunks
+    // through the small internal-DMA `rotation_buffer`. Output dimensions
+    // after rotation are width=src_h, height=src_w.
+    return bsp_rotation_panel_draw_staged(ctx, dst_x_start, dst_y_start, dst_x_end, dst_y_end,
+                                          ctx->rotated_buffer);
+}
+
+static esp_err_t bsp_rotation_panel_mirror(esp_lcd_panel_t *panel, bool x_axis, bool y_axis)
+{
+    bsp_rotation_panel_t *ctx = bsp_rotation_panel_from_base(panel);
+    return ctx && ctx->target ? esp_lcd_panel_mirror(ctx->target, x_axis, y_axis)
+                              : ESP_ERR_INVALID_STATE;
+}
+
+static esp_err_t bsp_rotation_panel_swap_xy(esp_lcd_panel_t *panel, bool swap_axes)
+{
+    bsp_rotation_panel_t *ctx = bsp_rotation_panel_from_base(panel);
+    return ctx && ctx->target ? esp_lcd_panel_swap_xy(ctx->target, swap_axes)
+                              : ESP_ERR_INVALID_STATE;
+}
+
+static esp_err_t bsp_rotation_panel_set_gap(esp_lcd_panel_t *panel, int x_gap, int y_gap)
+{
+    bsp_rotation_panel_t *ctx = bsp_rotation_panel_from_base(panel);
+    return ctx && ctx->target ? esp_lcd_panel_set_gap(ctx->target, x_gap, y_gap)
+                              : ESP_ERR_INVALID_STATE;
+}
+
+static esp_err_t bsp_rotation_panel_invert_color(esp_lcd_panel_t *panel, bool invert_color_data)
+{
+    bsp_rotation_panel_t *ctx = bsp_rotation_panel_from_base(panel);
+    return ctx && ctx->target ? esp_lcd_panel_invert_color(ctx->target, invert_color_data)
+                              : ESP_ERR_INVALID_STATE;
+}
+
+static esp_err_t bsp_rotation_panel_disp_on_off(esp_lcd_panel_t *panel, bool on_off)
+{
+    bsp_rotation_panel_t *ctx = bsp_rotation_panel_from_base(panel);
+    return ctx && ctx->target ? esp_lcd_panel_disp_on_off(ctx->target, on_off)
+                              : ESP_ERR_INVALID_STATE;
+}
+
+static esp_err_t bsp_rotation_panel_disp_sleep(esp_lcd_panel_t *panel, bool sleep)
+{
+    bsp_rotation_panel_t *ctx = bsp_rotation_panel_from_base(panel);
+    return ctx && ctx->target ? esp_lcd_panel_disp_sleep(ctx->target, sleep)
+                              : ESP_ERR_INVALID_STATE;
+}
+
+static esp_lcd_panel_handle_t bsp_rotation_panel_wrap(esp_lcd_panel_handle_t target)
+{
+    rotation_panel.base.reset = bsp_rotation_panel_reset;
+    rotation_panel.base.init = bsp_rotation_panel_init;
+    rotation_panel.base.del = bsp_rotation_panel_del;
+    rotation_panel.base.draw_bitmap = bsp_rotation_panel_draw_bitmap;
+    rotation_panel.base.mirror = bsp_rotation_panel_mirror;
+    rotation_panel.base.swap_xy = bsp_rotation_panel_swap_xy;
+    rotation_panel.base.set_gap = bsp_rotation_panel_set_gap;
+    rotation_panel.base.invert_color = bsp_rotation_panel_invert_color;
+    rotation_panel.base.disp_on_off = bsp_rotation_panel_disp_on_off;
+    rotation_panel.base.disp_sleep = bsp_rotation_panel_disp_sleep;
+    rotation_panel.base.user_data = &rotation_panel;
+    rotation_panel.target = target;
+    rotation_panel.rotation = BSP_DISPLAY_ROTATE_0;
+    rotation_panel.te_sync_mode = false;
+    rotation_panel.staging_slot = 0;
+    return &rotation_panel.base;
+}
+
+#define BSP_I2S_DUPLEX_MONO_CFG(_sample_rate)                                                         \
+    {                                                                                                 \
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(_sample_rate),                                          \
+        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO), \
+        .gpio_cfg = BSP_I2S_GPIO_CFG,                                                                 \
+    }
+
+/**************************************************************************************************
+ *
+ * I2C Function
+ *
+ **************************************************************************************************/
+esp_err_t bsp_i2c_init(void)
+{
+    /* I2C was initialized before */
+    if (i2c_initialized)
+    {
+        return ESP_OK;
+    }
+
+    i2c_master_bus_config_t i2c_bus_conf = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .sda_io_num = BSP_I2C_SDA,
+        .scl_io_num = BSP_I2C_SCL,
+        .i2c_port = BSP_I2C_NUM,
+    };
+    BSP_ERROR_CHECK_RETURN_ERR(i2c_new_master_bus(&i2c_bus_conf, &i2c_handle));
+
+    i2c_initialized = true;
+
+    return ESP_OK;
+}
+
+esp_err_t bsp_i2c_deinit(void)
+{
+    BSP_ERROR_CHECK_RETURN_ERR(i2c_del_master_bus(i2c_handle));
+    i2c_initialized = false;
+    return ESP_OK;
+}
+
+i2c_master_bus_handle_t bsp_i2c_get_handle(void)
+{
+    bsp_i2c_init();
+    return i2c_handle;
+}
+
+esp_err_t bsp_spiffs_mount(void)
+{
+    esp_vfs_spiffs_conf_t conf = {
+        .base_path = CONFIG_BSP_SPIFFS_MOUNT_POINT,
+        .partition_label = CONFIG_BSP_SPIFFS_PARTITION_LABEL,
+        .max_files = CONFIG_BSP_SPIFFS_MAX_FILES,
+#ifdef CONFIG_BSP_SPIFFS_FORMAT_ON_MOUNT_FAIL
+        .format_if_mount_failed = true,
+#else
+        .format_if_mount_failed = false,
+#endif
+    };
+
+    esp_err_t ret_val = esp_vfs_spiffs_register(&conf);
+
+    BSP_ERROR_CHECK_RETURN_ERR(ret_val);
+
+    size_t total = 0, used = 0;
+    ret_val = esp_spiffs_info(conf.partition_label, &total, &used);
+    if (ret_val != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s)", esp_err_to_name(ret_val));
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
+    }
+
+    return ret_val;
+}
+
+esp_err_t bsp_spiffs_unmount(void)
+{
+    return esp_vfs_spiffs_unregister(CONFIG_BSP_SPIFFS_PARTITION_LABEL);
+}
+
+esp_err_t bsp_sdcard_mount(void)
+{
+    const esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+#ifdef CONFIG_BSP_SD_FORMAT_ON_MOUNT_FAIL
+        .format_if_mount_failed = true,
+#else
+        .format_if_mount_failed = false,
+#endif
+        .max_files = 5,
+        .allocation_unit_size = 16 * 1024};
+
+    const sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    const sdmmc_slot_config_t slot_config = {
+        .clk = BSP_SD_CLK,
+        .cmd = BSP_SD_CMD,
+        .d0 = BSP_SD_D0,
+        .d1 = GPIO_NUM_NC,
+        .d2 = GPIO_NUM_NC,
+        .d3 = GPIO_NUM_NC,
+        .d4 = GPIO_NUM_NC,
+        .d5 = GPIO_NUM_NC,
+        .d6 = GPIO_NUM_NC,
+        .d7 = GPIO_NUM_NC,
+        .cd = SDMMC_SLOT_NO_CD,
+        .wp = SDMMC_SLOT_NO_WP,
+        .width = 1,
+        .flags = 0,
+    };
+
+#if !CONFIG_FATFS_LONG_FILENAMES
+    ESP_LOGW(TAG, "Warning: Long filenames on SD card are disabled in menuconfig!");
+#endif
+
+    return esp_vfs_fat_sdmmc_mount(BSP_SD_MOUNT_POINT, &host, &slot_config, &mount_config, &bsp_sdcard);
+}
+
+esp_err_t bsp_sdcard_unmount(void)
+{
+    return esp_vfs_fat_sdcard_unmount(BSP_SD_MOUNT_POINT, bsp_sdcard);
+}
+
+/**************************************************************************************************
+ *
+ * I2S Audio Function
+ *
+ **************************************************************************************************/
+esp_err_t bsp_audio_init(const i2s_std_config_t *i2s_config)
+{
+    esp_err_t ret = ESP_FAIL;
+    if (i2s_tx_chan && i2s_rx_chan) {
+        /* Audio was initialized before */
+        return ESP_OK;
+    }
+
+    /* Setup I2S peripheral */
+    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(CONFIG_BSP_I2S_NUM, I2S_ROLE_MASTER);
+    chan_cfg.auto_clear = true; // Auto clear the legacy data in the DMA buffer
+    BSP_ERROR_CHECK_RETURN_ERR(i2s_new_channel(&chan_cfg, &i2s_tx_chan, &i2s_rx_chan));
+
+    /* Setup I2S channels */
+    const i2s_std_config_t std_cfg_default = BSP_I2S_DUPLEX_MONO_CFG(22050);
+    const i2s_std_config_t *p_i2s_cfg = &std_cfg_default;
+    if (i2s_config != NULL) {
+        p_i2s_cfg = i2s_config;
+    }
+
+    if (i2s_tx_chan != NULL) {
+        ESP_GOTO_ON_ERROR(i2s_channel_init_std_mode(i2s_tx_chan, p_i2s_cfg), err, TAG, "I2S channel initialization failed");
+        ESP_GOTO_ON_ERROR(i2s_channel_enable(i2s_tx_chan), err, TAG, "I2S enabling failed");
+    }
+    if (i2s_rx_chan != NULL) {
+        ESP_GOTO_ON_ERROR(i2s_channel_init_std_mode(i2s_rx_chan, p_i2s_cfg), err, TAG, "I2S channel initialization failed");
+        ESP_GOTO_ON_ERROR(i2s_channel_enable(i2s_rx_chan), err, TAG, "I2S enabling failed");
+    }
+
+    audio_codec_i2s_cfg_t i2s_cfg = {
+        .port = CONFIG_BSP_I2S_NUM,
+        .rx_handle = i2s_rx_chan,
+        .tx_handle = i2s_tx_chan,
+    };
+    i2s_data_if = audio_codec_new_i2s_data(&i2s_cfg);
+    BSP_NULL_CHECK_GOTO(i2s_data_if, err);
+
+    return ESP_OK;
+
+err:
+    if (i2s_tx_chan) {
+        i2s_del_channel(i2s_tx_chan);
+    }
+    if (i2s_rx_chan) {
+        i2s_del_channel(i2s_rx_chan);
+    }
+
+    return ret;
+}
+
+/* Board-verified ES7210 voice receive mode: 24 kHz, four 16-bit TDM
+ * slots ordered MIC1, MIC3(reference), MIC2, MIC4. Keep TX on standard I2S.
+ * Waveshare board reference uses the same clocks, pins and TDM timing.
+ * This is audio-only. The known-good QSPI/LVGL display path is unchanged. */
+esp_err_t bsp_audio_init_voice_24k(void)
+{
+    if (i2s_data_if != NULL) return ESP_OK;
+    if (i2s_tx_chan || i2s_rx_chan) return ESP_ERR_INVALID_STATE;
+    esp_err_t ret = ESP_OK;
+    bool tx_enabled = false, rx_enabled = false;
+    i2s_chan_config_t channels = I2S_CHANNEL_DEFAULT_CONFIG(CONFIG_BSP_I2S_NUM, I2S_ROLE_MASTER);
+    channels.auto_clear = true;
+    ret = i2s_new_channel(&channels, &i2s_tx_chan, &i2s_rx_chan);
+    if (ret != ESP_OK) goto fail;
+
+    i2s_std_config_t tx_cfg = {
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(24000),
+        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(
+            I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+        .gpio_cfg = BSP_I2S_GPIO_CFG,
+    };
+    i2s_tdm_config_t rx_cfg = {
+        .clk_cfg = I2S_TDM_CLK_DEFAULT_CONFIG(24000),
+        .slot_cfg = I2S_TDM_PHILIP_SLOT_DEFAULT_CONFIG(
+            I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO,
+            I2S_TDM_SLOT0 | I2S_TDM_SLOT1 | I2S_TDM_SLOT2 | I2S_TDM_SLOT3),
+        .gpio_cfg = BSP_I2S_GPIO_CFG,
+    };
+    tx_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
+    tx_cfg.gpio_cfg.din = I2S_GPIO_UNUSED;
+    rx_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
+    rx_cfg.clk_cfg.bclk_div = 8;
+    rx_cfg.slot_cfg.total_slot = 4;
+    rx_cfg.gpio_cfg.dout = I2S_GPIO_UNUSED;
+
+    ret = i2s_channel_init_std_mode(i2s_tx_chan, &tx_cfg);
+    if (ret != ESP_OK) goto fail;
+    ret = i2s_channel_init_tdm_mode(i2s_rx_chan, &rx_cfg);
+    if (ret != ESP_OK) goto fail;
+    ret = i2s_channel_enable(i2s_tx_chan);
+    if (ret != ESP_OK) goto fail;
+    tx_enabled = true;
+    ret = i2s_channel_enable(i2s_rx_chan);
+    if (ret != ESP_OK) goto fail;
+    rx_enabled = true;
+
+    audio_codec_i2s_cfg_t codec_data = {
+        .port = CONFIG_BSP_I2S_NUM,
+        .rx_handle = i2s_rx_chan,
+        .tx_handle = i2s_tx_chan,
+    };
+    i2s_data_if = audio_codec_new_i2s_data(&codec_data);
+    if (!i2s_data_if) { ret = ESP_ERR_NO_MEM; goto fail; }
+    return ESP_OK;
+
+fail:
+    if (rx_enabled) (void)i2s_channel_disable(i2s_rx_chan);
+    if (tx_enabled) (void)i2s_channel_disable(i2s_tx_chan);
+    if (i2s_rx_chan) { (void)i2s_del_channel(i2s_rx_chan); i2s_rx_chan=NULL; }
+    if (i2s_tx_chan) { (void)i2s_del_channel(i2s_tx_chan); i2s_tx_chan=NULL; }
+    return ret;
+}
+
+esp_codec_dev_handle_t bsp_audio_codec_speaker_init(void)
+{
+    if (i2s_data_if == NULL) {
+        /* Initilize I2C */
+        BSP_ERROR_CHECK_RETURN_NULL(bsp_i2c_init());
+        /* Configure I2S peripheral and Power Amplifier */
+        BSP_ERROR_CHECK_RETURN_NULL(bsp_audio_init(NULL));
+    }
+    assert(i2s_data_if);
+
+    const audio_codec_gpio_if_t *gpio_if = audio_codec_new_gpio();
+
+    audio_codec_i2c_cfg_t i2c_cfg = {
+        .port = BSP_I2C_NUM,
+        .addr = ES8311_CODEC_DEFAULT_ADDR,
+        .bus_handle = i2c_handle,
+    };
+    const audio_codec_ctrl_if_t *i2c_ctrl_if = audio_codec_new_i2c_ctrl(&i2c_cfg);
+    BSP_NULL_CHECK(i2c_ctrl_if, NULL);
+
+    esp_codec_dev_hw_gain_t gain = {
+        .pa_voltage = 5.0,
+        .codec_dac_voltage = 3.3,
+    };
+
+    es8311_codec_cfg_t es8311_cfg = {
+        .ctrl_if = i2c_ctrl_if,
+        .gpio_if = gpio_if,
+        .codec_mode = ESP_CODEC_DEV_WORK_MODE_DAC,
+        .pa_pin = BSP_POWER_AMP_IO,
+        .pa_reverted = false,
+        .master_mode = false,
+        .use_mclk = true,
+        .digital_mic = false,
+        .invert_mclk = false,
+        .invert_sclk = false,
+        .hw_gain = gain,
+    };
+    const audio_codec_if_t *es8311_dev = es8311_codec_new(&es8311_cfg);
+    BSP_NULL_CHECK(es8311_dev, NULL);
+
+    esp_codec_dev_cfg_t codec_dev_cfg = {
+        .dev_type = ESP_CODEC_DEV_TYPE_OUT,
+        .codec_if = es8311_dev,
+        .data_if = i2s_data_if,
+    };
+    return esp_codec_dev_new(&codec_dev_cfg);
+}
+
+esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
+{
+    if (microphone_codec_dev != NULL) return microphone_codec_dev;
+    if (i2s_data_if == NULL) {
+        BSP_ERROR_CHECK_RETURN_NULL(bsp_i2c_init());
+        /* Four-slot TDM input is required by ES7210 on this board. */
+        BSP_ERROR_CHECK_RETURN_NULL(bsp_audio_init_voice_24k());
+    }
+    assert(i2s_data_if);
+
+    audio_codec_i2c_cfg_t i2c_cfg = {
+        .port = BSP_I2C_NUM,
+        .addr = BSP_ES7210_CODEC_ADDR,
+        .bus_handle = i2c_handle,
+    };
+    const audio_codec_ctrl_if_t *i2c_ctrl_if = audio_codec_new_i2c_ctrl(&i2c_cfg);
+    BSP_NULL_CHECK(i2c_ctrl_if, NULL);
+
+    es7210_codec_cfg_t es7210_cfg = {
+        .ctrl_if = i2c_ctrl_if,
+        /* Physical ES7210 microphone enable bits: MIC1, MIC2, MIC3 reference. */
+        .mic_selected = (1U << 0) | (1U << 1) | (1U << 2),
+    };
+    const audio_codec_if_t *es7210_dev = es7210_codec_new(&es7210_cfg);
+    BSP_NULL_CHECK(es7210_dev, NULL);
+
+    esp_codec_dev_cfg_t codec_es7210_dev_cfg = {
+        .dev_type = ESP_CODEC_DEV_TYPE_IN,
+        .codec_if = es7210_dev,
+        .data_if = i2s_data_if,
+    };
+    microphone_codec_dev = esp_codec_dev_new(&codec_es7210_dev_cfg);
+    return microphone_codec_dev;
+}
+
+#define LCD_CMD_BITS (8)
+#define LCD_PARAM_BITS (8)
+#define LCD_LEDC_CH (CONFIG_BSP_DISPLAY_BRIGHTNESS_LEDC_CH)
+#define LVGL_TICK_PERIOD_MS (CONFIG_BSP_DISPLAY_LVGL_TICK)
+#define LVGL_MAX_SLEEP_MS (CONFIG_BSP_DISPLAY_LVGL_MAX_SLEEP)
+#define BSP_LCD_QSPI_PCLK_HZ (80 * 1000 * 1000)
+// NOTE: under TE_SYNC the adapter forces LV_DISPLAY_RENDER_MODE_FULL and
+// allocates a full-frame draw buffer regardless of buffer_height (see
+// display_manager_pick_render_mode / display_manager_default_buffer_pixels).
+// These heights therefore only size max_transfer_sz and the partial-buffer
+// fallback path when tear mode ends up as NONE.
+#define LVGL_BUFFER_HEIGHT_PSRAM (32)
+#define LVGL_BUFFER_HEIGHT_INTERNAL (12)
+/* 1.0.0 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+   DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
+   strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
+   Used only when tear mode is NONE and enough internal RAM remains for
+   Wi-Fi/TLS; otherwise the 0.8.99 PSRAM + DMA-staging path is kept. */
+#define LVGL_BUFFER_HEIGHT_INTERNAL_FAST (24)
+#define LVGL_INTERNAL_FAST_HEADROOM_BYTES (110 * 1024)
+#define BSP_LVGL_INTERNAL_FAST_ENABLE 1
+
+static bsp_display_profile_t display_profile;
+void bsp_display_profile(bsp_display_profile_t *out)
+{
+    if(out) *out = display_profile;
+}
+/* Send one full black frame in 24-row strips from internal DMA RAM and time
+   it end to end. The panel is still black at this point of boot. The final
+   brightness write is a polled command, so it returns only after every
+   queued pixel transaction has completed. */
+static void bsp_display_qspi_selftest(void)
+{
+    const int rows = 24;
+    const size_t bytes = (size_t)BSP_LCD_H_RES * rows * 2;
+    uint16_t *buf = heap_caps_calloc(1, bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    if (!buf) return;
+    const int64_t t0 = esp_timer_get_time();
+    for (int y = 0; y < BSP_LCD_V_RES; y += rows) {
+        const int h = (BSP_LCD_V_RES - y) < rows ? (BSP_LCD_V_RES - y) : rows;
+        if (esp_lcd_panel_draw_bitmap(panel_handle, 0, y, BSP_LCD_H_RES, y + h, buf) != ESP_OK) {
+            free(buf);
+            return;
+        }
+    }
+    uint32_t lcd_cmd = (0x02u << 24) | (0x51u << 8);
+    uint8_t param = 0;
+    esp_lcd_panel_io_tx_param(io_handle, lcd_cmd, &param, 1);
+    const int64_t dt = esp_timer_get_time() - t0;
+    free(buf);
+    if (dt <= 0) return;
+    const uint64_t frame_bytes = (uint64_t)BSP_LCD_H_RES * BSP_LCD_V_RES * 2;
+    display_profile.selftest_frame_us = (uint32_t)dt;
+    display_profile.selftest_kbytes_per_s = (uint32_t)(frame_bytes * 1000000ULL / 1024ULL / (uint64_t)dt);
+    ESP_LOGI(TAG, "QSPI self-test: full frame %u us, %u KB/s",
+             (unsigned)display_profile.selftest_frame_us,
+             (unsigned)display_profile.selftest_kbytes_per_s);
+}
+
+esp_err_t bsp_display_brightness_init(void)
+{
+    bsp_display_brightness_set(100);
+    return ESP_OK;
+}
+
+esp_err_t bsp_display_brightness_set(int brightness_percent)
+{
+    if (panel_handle == NULL)
+    {
+        ESP_LOGE(TAG, "Panel handle is not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (brightness_percent < 0 || brightness_percent > 100)
+    {
+        ESP_LOGE(TAG, "Invalid brightness percentage. Should be between 0 and 100.");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    brightness = (uint8_t)(brightness_percent * 255 / 100);
+
+    uint32_t lcd_cmd = 0x51;
+    lcd_cmd &= 0xff;
+    lcd_cmd <<= 8;
+    lcd_cmd |= 0x02 << 24;
+    uint8_t param = brightness;
+    esp_lcd_panel_io_tx_param(io_handle, lcd_cmd, &param, 1);
+
+    return ESP_OK;
+}
+
+int bsp_display_brightness_get(void)
+{
+    if (panel_handle == NULL)
+    {
+        ESP_LOGE(TAG, "Panel handle is not initialized");
+        return -1;
+    }
+
+    return brightness * 100 / 255;
+}
+
+esp_err_t bsp_display_backlight_off(void)
+{
+    ESP_LOGI(TAG, "Backlight off");
+    return bsp_display_brightness_set(0);
+}
+
+esp_err_t bsp_display_backlight_on(void)
+{
+    ESP_LOGI(TAG, "Backlight on");
+    return bsp_display_brightness_set(100);
+}
+#if LVGL_VERSION_MAJOR >= 9
+static void rounder_event_cb(lv_event_t *e)
+{
+    lv_area_t *area = (lv_area_t *)lv_event_get_param(e);
+    uint16_t x1 = area->x1;
+    uint16_t x2 = area->x2;
+
+    uint16_t y1 = area->y1;
+    uint16_t y2 = area->y2;
+
+    // round the start of coordinate down to the nearest 2M number
+    area->x1 = (x1 >> 1) << 1;
+    area->y1 = (y1 >> 1) << 1;
+    // round the end of coordinate up to the nearest 2N+1 number
+    area->x2 = ((x2 >> 1) << 1) + 1;
+    area->y2 = ((y2 >> 1) << 1) + 1;
+}
+#else
+static void bsp_lvgl_rounder_cb(lv_disp_drv_t *disp_drv, lv_area_t *area)
+{
+    uint16_t x1 = area->x1;
+    uint16_t x2 = area->x2;
+
+    uint16_t y1 = area->y1;
+    uint16_t y2 = area->y2;
+
+    // round the start of coordinate down to the nearest 2M number
+    area->x1 = (x1 >> 1) << 1;
+    area->y1 = (y1 >> 1) << 1;
+    // round the end of coordinate up to the nearest 2N+1 number
+    area->x2 = ((x2 >> 1) << 1) + 1;
+    area->y2 = ((y2 >> 1) << 1) + 1;
+}
+#endif
+esp_err_t bsp_display_new(const bsp_display_config_t *config, esp_lcd_panel_handle_t *ret_panel, esp_lcd_panel_io_handle_t *ret_io)
+{
+    esp_err_t ret = ESP_OK;
+    assert(config != NULL && config->max_transfer_sz > 0);
+
+    ESP_LOGI(TAG, "Initialize SPI bus");
+    spi_bus_config_t buscfg = CO5300_PANEL_BUS_QSPI_CONFIG(BSP_LCD_PCLK,
+                                                                 BSP_LCD_DATA0,
+                                                                 BSP_LCD_DATA1,
+                                                                 BSP_LCD_DATA2,
+                                                                 BSP_LCD_DATA3,
+                                                                 config->max_transfer_sz);
+    /* 1.0.0: service the panel's SPI interrupt on core 1 (the LVGL core),
+       away from Wi-Fi, the touch I2C bus and the TE GPIO interrupt on core 0. */
+    buscfg.isr_cpu_id = ESP_INTR_CPU_AFFINITY_1;
+    ESP_ERROR_CHECK(spi_bus_initialize(BSP_LCD_SPI_NUM, &buscfg, SPI_DMA_CH_AUTO));
+
+    esp_lcd_panel_io_spi_config_t io_config = CO5300_PANEL_IO_QSPI_CONFIG(BSP_LCD_CS, NULL, NULL);
+    io_config.pclk_hz = BSP_LCD_QSPI_PCLK_HZ;
+    io_config.trans_queue_depth = CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH;
+    co5300_vendor_config_t vendor_config = {
+        .init_cmds = lcd_init_cmds,
+        .init_cmds_size = sizeof(lcd_init_cmds) / sizeof(lcd_init_cmds[0]),
+        .flags = {
+            .use_qspi_interface = 1,
+        },
+    };
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)BSP_LCD_SPI_NUM, &io_config, &io_handle));
+    const esp_lcd_panel_dev_config_t panel_config = {
+        .reset_gpio_num = BSP_LCD_RST,
+        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
+        .bits_per_pixel = BSP_LCD_BITS_PER_PIXEL,
+        .vendor_config = &vendor_config,
+    };
+    ESP_ERROR_CHECK(esp_lcd_new_panel_co5300(io_handle, &panel_config, &panel_handle));
+    esp_lcd_panel_set_gap(panel_handle, 0x06, 0);
+    esp_lcd_panel_reset(panel_handle);
+    esp_lcd_panel_init(panel_handle);
+    /* 1.0.0: switch the panel on dark. Its RAM holds random pixels until
+       the first black frame; at full brightness that was a white flash. */
+    {
+        uint8_t zero = 0;
+        esp_lcd_panel_io_tx_param(io_handle, (0x02u << 24) | (0x51u << 8), &zero, 1);
+    }
+    esp_lcd_panel_disp_on_off(panel_handle, true);
+
+    if (ret_panel)
+    {
+        *ret_panel = panel_handle;
+    }
+    if (ret_io)
+    {
+        *ret_io = io_handle;
+    }
+    return ret;
+}
+
+esp_err_t bsp_touch_new(const bsp_display_cfg_t *cfg, esp_lcd_touch_handle_t *ret_touch)
+{
+    assert(cfg != NULL);
+    /* Initilize I2C */
+    BSP_ERROR_CHECK_RETURN_ERR(bsp_i2c_init());
+
+    /* Initialize touch */
+    const esp_lcd_touch_config_t tp_cfg = {
+        .x_max = BSP_LCD_H_RES,
+        .y_max = BSP_LCD_V_RES,
+        .rst_gpio_num = BSP_LCD_TOUCH_RST, // Shared with LCD reset
+        .int_gpio_num = BSP_LCD_TOUCH_INT,
+        .levels = {
+            .reset = 0,
+            .interrupt = 0,
+        },
+        .flags = {
+            .swap_xy = cfg->touch_flags.swap_xy,
+            .mirror_x = cfg->touch_flags.mirror_x,
+            .mirror_y = cfg->touch_flags.mirror_y,
+        },
+    };
+    esp_lcd_panel_io_handle_t tp_io_handle = NULL;
+    esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_CST9217_CONFIG();
+    tp_io_config.scl_speed_hz = CONFIG_BSP_I2C_CLK_SPEED_HZ;
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_io_i2c(i2c_handle, &tp_io_config, &tp_io_handle), TAG, "");
+    return esp_lcd_touch_new_i2c_cst9217(tp_io_handle, &tp_cfg, ret_touch);
+}
+
+/**************************************************************************************************
+ *
+ * IO Expander Function
+ *
+ **************************************************************************************************/
+esp_io_expander_handle_t bsp_io_expander_init(void)
+{
+    BSP_ERROR_CHECK_RETURN_ERR(bsp_i2c_init());
+    if (!io_expander)
+    {
+        BSP_ERROR_CHECK_RETURN_NULL(esp_io_expander_new_i2c_tca9554(i2c_handle, BSP_IO_EXPANDER_I2C_ADDRESS, &io_expander));
+    }
+    return io_expander;
+}
+
+static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
+{
+    assert(cfg != NULL);
+    const size_t psram_total = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+    const bool psram_available = psram_total > 0;
+    const esp_lv_adapter_tear_avoid_mode_t requested_tear_mode = cfg->tear_avoid_mode;
+    esp_lv_adapter_tear_avoid_mode_t tear_mode = cfg->tear_avoid_mode;
+    if (tear_mode != ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE &&
+        tear_mode != ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC) {
+        ESP_LOGW(TAG, "SPI/QSPI display mode %d is not supported by this panel path; using NONE",
+                 tear_mode);
+        tear_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE;
+    }
+
+    const bool use_te_sync = (tear_mode == ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC);
+    const size_t fast_strip_bytes =
+        (size_t)BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT_INTERNAL_FAST * BSP_LCD_BITS_PER_PIXEL / 8;
+    const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    /* 1.0.0: disabled. Hardware logs showed panel flush waits under 1 ms
+       (render, not transfer, is the bottleneck) while the 45 KB of internal
+       SRAM starved song ID. Keep LVGL strips in PSRAM with DMA staging. */
+    const bool internal_fast = BSP_LVGL_INTERNAL_FAST_ENABLE && !use_te_sync &&
+        internal_largest >= fast_strip_bytes &&
+        internal_free >= (2 * fast_strip_bytes) + LVGL_INTERNAL_FAST_HEADROOM_BYTES;
+    const bool use_psram = psram_available && !internal_fast;
+    ESP_LOGI(TAG, "LVGL buffer placement: internal_fast=%s internal_free=%u largest=%u",
+             internal_fast ? "yes" : "no", (unsigned)internal_free, (unsigned)internal_largest);
+
+    const uint32_t buffer_height = internal_fast ? LVGL_BUFFER_HEIGHT_INTERNAL_FAST :
+                                   use_psram ? LVGL_BUFFER_HEIGHT_PSRAM : LVGL_BUFFER_HEIGHT_INTERNAL;
+    const size_t max_transfer_sz = BSP_LCD_H_RES * buffer_height * BSP_LCD_BITS_PER_PIXEL / 8;
+    const bsp_display_config_t disp_config = {
+        .max_transfer_sz = max_transfer_sz,
+    };
+
+    BSP_ERROR_CHECK_RETURN_NULL(bsp_display_new(&disp_config, &panel_handle, &io_handle));
+    display_profile.lvgl_buffers_internal = internal_fast;
+    display_profile.lvgl_buffer_rows = buffer_height;
+    display_profile.internal_free_at_init = (uint32_t)internal_free;
+    bsp_display_qspi_selftest();
+    adapter_panel_handle = bsp_rotation_panel_wrap(panel_handle);
+    rotation_panel.te_sync_mode = use_te_sync;
+
+    ESP_LOGI(TAG, "LVGL display buffers: psram=%s lvgl_psram=%s height=%" PRIu32 " max_transfer=%u qspi=%uMHz queue_depth=%d tear_mode=%d requested_tear_mode=%d double_buffer=%s dma_stage_rows=%d",
+             psram_available ? "yes" : "no",
+             use_psram ? "yes" : "no",
+             buffer_height,
+             (unsigned int)max_transfer_sz,
+             (unsigned int)(BSP_LCD_QSPI_PCLK_HZ / 1000000),
+             CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH,
+             tear_mode,
+             requested_tear_mode,
+             (!use_te_sync && (use_psram || internal_fast)) ? "yes" : "no",
+             BSP_LCD_DMA_STAGING_ROWS);
+
+    ESP_LOGD(TAG, "Add LCD screen");
+    esp_lv_adapter_display_config_t disp_cfg = {
+        .panel = adapter_panel_handle,
+        .panel_io = io_handle,
+        .profile = {
+            .interface = ESP_LV_ADAPTER_PANEL_IF_OTHER,
+            .rotation = cfg->rotation,
+            .hor_res = BSP_LCD_H_RES,
+            .ver_res = BSP_LCD_V_RES,
+            .buffer_height = buffer_height,
+            .use_psram = use_psram,
+            .enable_ppa_accel = false,
+            .require_double_buffer = !use_te_sync && (use_psram || internal_fast),
+        },
+        .tear_avoid_mode = tear_mode,
+        .te_sync = use_te_sync
+            ? (esp_lv_adapter_te_sync_config_t){
+                .gpio_num = BSP_LCD_TE_GPIO,
+                .time_tvdl_ms = 0,
+                .time_tvdh_ms = 0,
+                .bus_freq_hz = BSP_LCD_QSPI_PCLK_HZ,
+                .data_lines = 4,
+                .bits_per_pixel = BSP_LCD_BITS_PER_PIXEL,
+                .intr_type = GPIO_INTR_DISABLE,
+                .refresh_window_percent = 0,
+            }
+            : ESP_LV_ADAPTER_TE_SYNC_DISABLED(),
+    };
+
+    if (use_psram) {
+        ESP_LOGI(TAG, "Using PSRAM LVGL draw buffers with internal SPI DMA staging");
+    } else {
+        ESP_LOGW(TAG, "PSRAM not available, using single internal LVGL buffer");
+    }
+
+    lv_display_t *disp = esp_lv_adapter_register_display(&disp_cfg);
+    if (!disp)
+    {
+        return NULL;
+    }
+
+#if LVGL_VERSION_MAJOR >= 9
+    lv_display_add_event_cb(disp, rounder_event_cb, LV_EVENT_INVALIDATE_AREA, NULL);
+#else
+    lv_disp_t *disp_v8 = (lv_disp_t *)disp;
+    if (disp_v8 && disp_v8->driver)
+    {
+        disp_v8->driver->rounder_cb = bsp_lvgl_rounder_cb;
+    }
+#endif
+
+    return disp;
+}
+
+static lv_indev_t *bsp_display_indev_init(const bsp_display_cfg_t *cfg, lv_display_t *disp)
+{
+    assert(cfg != NULL);
+    BSP_ERROR_CHECK_RETURN_NULL(bsp_touch_new(cfg, &tp));
+    assert(tp);
+
+    const esp_lv_adapter_touch_config_t touch_cfg = ESP_LV_ADAPTER_TOUCH_DEFAULT_CONFIG(disp, tp);
+
+    return esp_lv_adapter_register_touch(&touch_cfg);
+}
+/**********************************************************************************************************
+ *
+ * Display Function
+ *
+ **********************************************************************************************************/
+lv_display_t *bsp_display_start(void)
+{
+    bsp_display_cfg_t cfg = {
+        .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
+        .rotation = ESP_LV_ADAPTER_ROTATE_0,
+        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE,
+        .touch_flags = {
+            .swap_xy = 0,
+            .mirror_x = 1,
+            .mirror_y = 1}};
+    return bsp_display_start_with_config(&cfg);
+}
+
+
+lv_display_t *bsp_display_start_with_config(bsp_display_cfg_t *cfg)
+{
+    lv_display_t *disp;
+
+    assert(cfg != NULL);
+    BSP_ERROR_CHECK_RETURN_NULL(esp_lv_adapter_init(&cfg->lv_adapter_cfg));
+
+    BSP_NULL_CHECK(disp = bsp_display_lcd_init(cfg), NULL);
+
+    BSP_NULL_CHECK(disp_indev = bsp_display_indev_init(cfg, disp), NULL);
+
+    BSP_ERROR_CHECK_RETURN_NULL(bsp_display_brightness_init());
+
+    ESP_ERROR_CHECK(esp_lv_adapter_start());
+
+    return disp;
+}
+
+lv_indev_t *bsp_display_get_input_dev(void)
+{
+    return disp_indev;
+}
+
+esp_err_t bsp_display_rotation_set(bsp_display_rotation_t rotation)
+{
+    if (panel_handle == NULL || io_handle == NULL)
+    {
+        ESP_LOGE(TAG, "Panel or IO handle is not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uint8_t madctl = 0x00;
+    int x_gap = 0;
+    int y_gap = 0;
+
+    switch (rotation)
+    {
+    case BSP_DISPLAY_ROTATE_0:
+        madctl = 0x00;
+        // Panel active area starts at native column 6; no row offset.
+        x_gap = 6; y_gap = 0;
+        break;
+    case BSP_DISPLAY_ROTATE_90:
+        // 90 deg is handled by the BSP panel wrapper. Keep the real panel in
+        // its native active window to avoid exposing guard columns.
+        madctl = 0x00;
+        x_gap = 6; y_gap = 0;
+        break;
+    case BSP_DISPLAY_ROTATE_180:
+        madctl = 0xC0;
+        // Hardware 180 deg is clean on this panel with the measured column gap.
+        x_gap = 8; y_gap = 0;
+        break;
+    case BSP_DISPLAY_ROTATE_270:
+        // 270 deg is handled by the BSP panel wrapper.
+        madctl = 0x00;
+        x_gap = 6; y_gap = 0;
+        break;
+    default:
+        ESP_LOGE(TAG, "Invalid rotation value: %d", rotation);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    rotation_panel.rotation = rotation;
+
+    // Re-apply the draw offset expected by the current panel orientation.
+    esp_lcd_panel_set_gap(panel_handle, x_gap, y_gap);
+
+    uint32_t lcd_cmd = 0x36;
+    lcd_cmd &= 0xff;
+    lcd_cmd <<= 8;
+    lcd_cmd |= 0x02 << 24;
+
+    ESP_LOGI(TAG, "Set display rotation: %d (MADCTL=0x%02X gap=%d,%d)",
+             rotation, madctl, x_gap, y_gap);
+
+    return esp_lcd_panel_io_tx_param(io_handle, lcd_cmd, &madctl, 1);
+}
+
+/* ---------------------------------------------------------------------
+ * 1.0.0: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
+ * shape), replacing esp_lvgl_adapter for this panel. Hardware benchmarks
+ * showed a blank full frame costing 47 ms through the adapter although the
+ * panel accepts a full frame in 13.8 ms. Here LVGL renders 24-row strips
+ * into two internal DMA buffers that are sent straight to the CO5300; the
+ * SPI "color transfer done" ISR releases the buffer, so rendering of the
+ * next strip overlaps the transfer of the previous one.
+ * ------------------------------------------------------------------- */
+#include "freertos/semphr.h"
+#define BSP_DIRECT_ROWS (24)
+static SemaphoreHandle_t direct_lvgl_mux;
+static lv_display_t *direct_disp;
+static bool direct_mode;
+
+/* 1.0.0: ticketed transfer accounting shared by LVGL and the swipe
+   compositor. Every pixel transfer gets a ticket when submitted; the SPI
+   "color done" ISR (flash-cache safe: no flash code) bumps the completed
+   count and gives a wake-up semaphore. Waiters wait until completed reaches
+   their ticket, so no completion can be lost or consumed by the wrong side
+   (0.8.116/1.0.0: one-shot semaphore handoffs caused 100-200 ms timeouts
+   and an apparent freeze). */
+static SemaphoreHandle_t direct_flush_done;
+static void *direct_buf[2];
+static volatile uint32_t lcd_submitted;
+static volatile uint32_t lcd_completed;
+/* 1.0.0: completions counted ONLY by the ISR (never resynchronised), so we
+   know whether esp_lcd itself would block waiting for an in-flight transfer. */
+static volatile uint32_t lcd_isr_done;
+static volatile uint32_t lcd_wait_timeouts;
+static volatile bool lcd_wedged;
+static uint32_t lvgl_last_ticket;
+/* 1.0.0: UI-task breadcrumbs. Kept in RTC memory so the step the LVGL
+   task was stuck in survives the stall-guard restart. */
+#include "esp_attr.h"
+RTC_NOINIT_ATTR static uint32_t rtc_ui_stage;
+RTC_NOINIT_ATTR static uint32_t rtc_ui_stage_magic;
+static volatile uint32_t ui_stage;
+static uint32_t ui_stage_prev_boot = UINT32_MAX;
+void bsp_ui_stage_set(uint32_t stage)
+{
+    ui_stage = stage;
+    rtc_ui_stage = stage;
+    rtc_ui_stage_magic = 0x5A6E7A11u;
+}
+uint32_t bsp_ui_stage_get(void) { return ui_stage; }
+uint32_t bsp_ui_stage_prev_boot(void) { return ui_stage_prev_boot; }
+static void bsp_ui_stage_boot(void)
+{
+    if (rtc_ui_stage_magic == 0x5A6E7A11u) ui_stage_prev_boot = rtc_ui_stage;
+    rtc_ui_stage_magic = 0;
+}
+/* 1.0.0: panel TE (tearing-effect) pulse, used to start compositor frames
+   right as the CO5300 begins a new scan so the 14 ms write stays ahead of
+   the ~16.7 ms scan (no torn/doubled swipe frames). */
+static SemaphoreHandle_t te_sem;
+static volatile uint32_t te_count;
+static void IRAM_ATTR bsp_te_isr(void *arg)
+{
+    (void)arg;
+    te_count = te_count + 1;
+    BaseType_t woken = pdFALSE;
+    if (te_sem) xSemaphoreGiveFromISR(te_sem, &woken);
+    if (woken == pdTRUE) portYIELD_FROM_ISR();
+}
+static void bsp_te_init(void)
+{
+    te_sem = xSemaphoreCreateBinary();
+    if (!te_sem) return;
+    const gpio_config_t io = {
+        .pin_bit_mask = 1ULL << BSP_LCD_TE_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_POSEDGE,
+    };
+    if (gpio_config(&io) != ESP_OK) return;
+    esp_err_t err = gpio_install_isr_service(0);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) return;
+    (void)gpio_isr_handler_add(BSP_LCD_TE_GPIO, bsp_te_isr, NULL);
+}
+uint32_t bsp_display_te_count(void) { return te_count; }
+static bool IRAM_ATTR bsp_direct_color_done(esp_lcd_panel_io_handle_t io,
+                                            esp_lcd_panel_io_event_data_t *edata,
+                                            void *user_ctx)
+{
+    (void)io; (void)edata; (void)user_ctx;
+    lcd_isr_done = lcd_isr_done + 1;
+    lcd_completed = lcd_completed + 1;
+    BaseType_t woken = pdFALSE;
+    xSemaphoreGiveFromISR(direct_flush_done, &woken);
+    return woken == pdTRUE;
+}
+/* Wait until transfer `ticket` has completed; bounded so a lost interrupt
+   can never freeze the UI. */
+static void bsp_lcd_wait_ticket(uint32_t ticket)
+{
+    const uint32_t prev_stage = ui_stage;
+    bsp_ui_stage_set(12);
+    const int64_t deadline = esp_timer_get_time() + 150000;
+    while ((int32_t)(lcd_completed - ticket) < 0) {
+        if (esp_timer_get_time() > deadline) {
+            lcd_wait_timeouts = lcd_wait_timeouts + 1;
+            lcd_completed = ticket; /* resynchronise after a lost IRQ */
+            break;
+        }
+        (void)xSemaphoreTake(direct_flush_done, pdMS_TO_TICKS(10));
+    }
+    bsp_ui_stage_set(prev_stage);
+}
+static uint32_t bsp_lcd_submit(int x1, int y1, int x2, int y2, const void *px)
+{
+    const uint32_t prev_stage = ui_stage;
+    /* esp_lcd waits forever for an in-flight transfer before sending the next
+       command. Never enter it while the previous transfer's interrupt is still
+       outstanding: wait here with a bound instead, and if the bus is wedged,
+       skip the transfer and flag it so the stall guard restarts at once. */
+    if (lcd_isr_done != lcd_submitted) {
+        bsp_ui_stage_set(11);
+        const int64_t deadline = esp_timer_get_time() + 100000;
+        while (lcd_isr_done != lcd_submitted && esp_timer_get_time() < deadline) {
+            (void)xSemaphoreTake(direct_flush_done, pdMS_TO_TICKS(5));
+        }
+    }
+    const uint32_t ticket = lcd_submitted + 1;
+    if (lcd_isr_done != lcd_submitted) {
+        lcd_wedged = true;
+        bsp_ui_stage_set(11);
+        lcd_completed = ticket;
+        return ticket; /* not submitted: the panel bus is not completing */
+    }
+    lcd_submitted = ticket;
+    bsp_ui_stage_set(10);
+    if (esp_lcd_panel_draw_bitmap(panel_handle, x1, y1, x2, y2, px) != ESP_OK) {
+        lcd_isr_done = lcd_isr_done + 1;
+        lcd_completed = lcd_completed + 1; /* nothing in flight for this ticket */
+    }
+    bsp_ui_stage_set(prev_stage);
+    return ticket;
+}
+static void bsp_direct_flush_wait(lv_display_t *disp)
+{
+    (void)disp;
+    bsp_lcd_wait_ticket(lvgl_last_ticket);
+}
+static void bsp_direct_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px)
+{
+    (void)disp;
+    lv_draw_sw_rgb565_swap(px, lv_area_get_size(area));
+    lvgl_last_ticket = bsp_lcd_submit(area->x1, area->y1, area->x2 + 1, area->y2 + 1, px);
+}
+/* 1.0.0: touch is sampled by its own task. A hardware log captured a
+   freeze with LVGL believing the finger was still down and no touch read
+   for 16 s: the CST9217 shares I2C with the PMIC and esp_lcd's I2C I/O waits
+   without a timeout, so a stalled read blocked the whole LVGL task. LVGL now
+   only reads a cached sample and treats a stale sample as released. */
+static portMUX_TYPE touch_mux = portMUX_INITIALIZER_UNLOCKED;
+static uint16_t touch_x, touch_y;
+static bool touch_pressed;
+static int64_t touch_sample_us;
+static volatile uint32_t touch_reads, touch_fail, touch_read_max_us;
+/* 1.0.0: screen-off low-power mode. Touch is sampled every 40 ms instead
+   of 10 ms and the LVGL loop may sleep up to 40 ms between passes; a tap
+   still wakes the screen well inside the 150 ms stale-sample window. */
+static volatile bool direct_low_power;
+void bsp_display_set_low_power(bool low)
+{
+    direct_low_power = low;
+}
+static volatile int64_t lvgl_loop_us;
+static void bsp_touch_task(void *arg)
+{
+    esp_lcd_touch_handle_t t = (esp_lcd_touch_handle_t)arg;
+    for (;;) {
+        const int64_t t0 = esp_timer_get_time();
+        uint16_t x[1] = {0}, y[1] = {0};
+        uint8_t cnt = 0;
+        bool ok = esp_lcd_touch_read_data(t) == ESP_OK;
+        bool down = ok && esp_lcd_touch_get_coordinates(t, x, y, NULL, &cnt, 1) && cnt > 0;
+        const int64_t t1 = esp_timer_get_time();
+        const uint32_t dur = (uint32_t)(t1 - t0);
+        touch_reads = touch_reads + 1;
+        if (!ok) touch_fail = touch_fail + 1;
+        if (dur > touch_read_max_us) touch_read_max_us = dur;
+        portENTER_CRITICAL(&touch_mux);
+        touch_pressed = down;
+        if (down) { touch_x = x[0]; touch_y = y[0]; }
+        touch_sample_us = t1;
+        portEXIT_CRITICAL(&touch_mux);
+        vTaskDelay(pdMS_TO_TICKS(direct_low_power ? 40 : 10));
+    }
+}
+static void bsp_direct_touch_read(lv_indev_t *indev, lv_indev_data_t *data)
+{
+    (void)indev;
+    portENTER_CRITICAL(&touch_mux);
+    const bool down = touch_pressed;
+    const uint16_t x = touch_x, y = touch_y;
+    const int64_t at = touch_sample_us;
+    portEXIT_CRITICAL(&touch_mux);
+    /* A sample older than 150 ms (stalled I2C) never holds a finger down. */
+    if (down && esp_timer_get_time() - at < 150000) {
+        data->point.x = x;
+        data->point.y = y;
+        data->state = LV_INDEV_STATE_PRESSED;
+    } else {
+        data->state = LV_INDEV_STATE_RELEASED;
+    }
+}
+bool bsp_display_spi_wedged(void) { return lcd_wedged; }
+uint32_t bsp_display_lcd_wait_timeouts(void) { return lcd_wait_timeouts; }
+void bsp_display_input_health(bsp_input_health_t *out)
+{
+    if (!out) return;
+    const int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&touch_mux);
+    const int64_t at = touch_sample_us;
+    portEXIT_CRITICAL(&touch_mux);
+    out->touch_reads = touch_reads;
+    out->touch_failures = touch_fail;
+    out->touch_read_max_us = touch_read_max_us;
+    out->touch_sample_age_ms = at ? (uint32_t)((now - at) / 1000) : UINT32_MAX;
+    out->lvgl_loop_age_ms = lvgl_loop_us ? (uint32_t)((now - lvgl_loop_us) / 1000) : UINT32_MAX;
+}
+static uint32_t bsp_direct_tick(void)
+{
+    return (uint32_t)(esp_timer_get_time() / 1000ULL);
+}
+static void bsp_direct_lvgl_task(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        uint32_t wait_ms = 5;
+        lvgl_loop_us = esp_timer_get_time();
+        bsp_ui_stage_set(2);
+        if (xSemaphoreTakeRecursive(direct_lvgl_mux, portMAX_DELAY) == pdTRUE) {
+            bsp_ui_stage_set(1);
+            wait_ms = lv_timer_handler();
+            bsp_ui_stage_set(0);
+            xSemaphoreGiveRecursive(direct_lvgl_mux);
+        }
+        const uint32_t cap = direct_low_power ? 40 : 10;
+        if (wait_ms > cap) wait_ms = cap;
+        TickType_t ticks = pdMS_TO_TICKS(wait_ms);
+        vTaskDelay(ticks ? ticks : 1);
+    }
+}
+lv_display_t *bsp_display_start_direct(void)
+{
+    if (direct_disp) return direct_disp;
+    bsp_ui_stage_boot();
+    direct_lvgl_mux = xSemaphoreCreateRecursiveMutex();
+    direct_flush_done = xSemaphoreCreateBinary();
+    if (!direct_lvgl_mux || !direct_flush_done) return NULL;
+
+    const size_t strip_bytes = (size_t)BSP_LCD_H_RES * BSP_DIRECT_ROWS * BSP_LCD_BITS_PER_PIXEL / 8;
+    const bsp_display_config_t disp_config = { .max_transfer_sz = (int)strip_bytes };
+    BSP_ERROR_CHECK_RETURN_NULL(bsp_display_new(&disp_config, &panel_handle, &io_handle));
+    display_profile.lvgl_buffers_internal = true;
+    display_profile.lvgl_buffer_rows = BSP_DIRECT_ROWS;
+    display_profile.internal_free_at_init = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    bsp_display_qspi_selftest();
+
+    void *buf1 = heap_caps_malloc(strip_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    void *buf2 = heap_caps_malloc(strip_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    direct_buf[0] = buf1;
+    direct_buf[1] = buf2;
+    if (!buf1 || !buf2) {
+        ESP_LOGE(TAG, "Direct LVGL: cannot allocate 2 x %u byte DMA strips", (unsigned)strip_bytes);
+        free(buf1); free(buf2);
+        return NULL;
+    }
+
+    lv_init();
+    lv_tick_set_cb(bsp_direct_tick);
+    lv_display_t *disp = lv_display_create(BSP_LCD_H_RES, BSP_LCD_V_RES);
+    if (!disp) return NULL;
+    lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
+    lv_display_set_buffers(disp, buf1, buf2, strip_bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_set_flush_cb(disp, bsp_direct_flush);
+    lv_display_set_flush_wait_cb(disp, bsp_direct_flush_wait);
+    lv_display_add_event_cb(disp, rounder_event_cb, LV_EVENT_INVALIDATE_AREA, NULL);
+
+    const esp_lcd_panel_io_callbacks_t cbs = { .on_color_trans_done = bsp_direct_color_done };
+    BSP_ERROR_CHECK_RETURN_NULL(esp_lcd_panel_io_register_event_callbacks(io_handle, &cbs, disp));
+
+    bsp_display_cfg_t touch_cfg = {
+        .touch_flags = { .swap_xy = 0, .mirror_x = 1, .mirror_y = 1 },
+    };
+    if (bsp_touch_new(&touch_cfg, &tp) == ESP_OK && tp) {
+        lv_indev_t *indev = lv_indev_create();
+        lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_read_cb(indev, bsp_direct_touch_read);
+        lv_indev_set_user_data(indev, tp);
+        lv_indev_set_display(indev, disp);
+        disp_indev = indev;
+        if (xTaskCreatePinnedToCore(bsp_touch_task, "touch", 4096, tp, 5, NULL, 0) != pdPASS) {
+            ESP_LOGE(TAG, "Direct LVGL: cannot start touch task");
+        }
+    } else {
+        ESP_LOGE(TAG, "Direct LVGL: touch init failed");
+    }
+
+    bsp_te_init();
+    direct_disp = disp;
+    direct_mode = true;
+    /* LVGL's default screen is white: make it black, and leave the backlight
+       off; the UI sets the user's brightness once its first screen exists. */
+    lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(lv_screen_active(), LV_OPA_COVER, 0);
+    if (xTaskCreatePinnedToCore(bsp_direct_lvgl_task, "lvgl", 10240, NULL, 4, NULL, 1) != pdPASS) {
+        ESP_LOGE(TAG, "Direct LVGL: cannot start LVGL task");
+        return NULL;
+    }
+    ESP_LOGI(TAG, "Direct LVGL port: 2 x %d-row internal DMA strips, no adapter", BSP_DIRECT_ROWS);
+    return disp;
+}
+
+/* 1.0.0: push a full frame straight to the panel, bypassing LVGL.
+   The caller must hold the LVGL lock and have LVGL invalidation disabled,
+   so LVGL is not flushing. Rows are produced into the two internal DMA
+   strips in ping-pong: strip N+1 is filled while strip N transfers.
+   Pixels must already be panel byte order (big-endian RGB565). */
+esp_err_t bsp_display_push_frame(bsp_row_fill_cb_t fill, void *ctx)
+{
+    if (!direct_mode || !fill || !direct_buf[0] || !direct_buf[1]) return ESP_ERR_INVALID_STATE;
+    bsp_ui_stage_set(21);
+    /* LVGL's buffers are about to be overwritten: let every outstanding
+       transfer (including LVGL's last strip) finish first. LVGL's own later
+       wait for its ticket then returns immediately. */
+    bsp_lcd_wait_ticket(lcd_submitted);
+    uint32_t ticket[2] = {lcd_submitted, lcd_submitted};
+    int slot = 0;
+    for (int y = 0; y < BSP_LCD_V_RES; y += BSP_DIRECT_ROWS) {
+        const int rows = (BSP_LCD_V_RES - y) < BSP_DIRECT_ROWS ? (BSP_LCD_V_RES - y) : BSP_DIRECT_ROWS;
+        /* This slot's previous transfer (two strips ago) must be done. */
+        bsp_lcd_wait_ticket(ticket[slot]);
+        uint16_t *dst = (uint16_t *)direct_buf[slot];
+        bsp_ui_stage_set(20);
+        fill(dst, y, rows, ctx);
+        bsp_ui_stage_set(21);
+        if (y == 0 && te_sem) {
+            /* Start the frame on a fresh TE pulse; never stall a swipe if the
+               panel's TE line is silent. */
+            bsp_ui_stage_set(13);
+            (void)xSemaphoreTake(te_sem, 0);
+            (void)xSemaphoreTake(te_sem, pdMS_TO_TICKS(25));
+            bsp_ui_stage_set(21);
+        }
+        ticket[slot] = bsp_lcd_submit(0, y, BSP_LCD_H_RES, y + rows, dst);
+        slot ^= 1;
+    }
+    bsp_lcd_wait_ticket(lcd_submitted);
+    bsp_ui_stage_set(1);
+    return ESP_OK;
+}
+
+esp_err_t bsp_display_lock(uint32_t timeout_ms)
+{
+    if (direct_mode) {
+        const TickType_t ticks = (timeout_ms == UINT32_MAX) ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms);
+        return xSemaphoreTakeRecursive(direct_lvgl_mux, ticks) == pdTRUE ? ESP_OK : ESP_ERR_TIMEOUT;
+    }
+    return esp_lv_adapter_lock(timeout_ms);
+}
+
+void bsp_display_unlock(void)
+{
+    if (direct_mode) {
+        xSemaphoreGiveRecursive(direct_lvgl_mux);
+        return;
+    }
+    esp_lv_adapter_unlock();
+}

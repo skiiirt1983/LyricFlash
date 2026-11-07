@@ -3,15 +3,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Local device web manager + PIN-armed OTA. The ESP32 also supports
-   touchscreen Wi-Fi scanning/provisioning without joining its setup AP. */
+/* Local device Web UI and OTA. Wi-Fi setup supports browser and touch.
+   No PIN or on-device OTA arming is required. */
 bool lf_network_start(void);
 const char *lf_network_address(void);
 const char *lf_network_ap_ssid(void);
 const char *lf_network_ap_password(void);
-const char *lf_network_ota_pin(void);
-void lf_network_arm_ota(void);
-bool lf_network_ota_armed(void);
 
 #define LF_WIFI_MAX_RESULTS 12
 typedef struct {
@@ -32,3 +29,13 @@ bool lf_network_connected_ssid(char *out, size_t size);
 const char *lf_network_ota_result(void);
 uint32_t lf_network_ota_received(void);
 uint32_t lf_network_ota_total(void);
+
+/* Request Wi-Fi radio state without blocking the LVGL rendering task.
+   Sleep suspension is ignored during OTA and setup AP provisioning. */
+void lf_network_set_idle(bool idle);
+
+/* Read-only power state and radio-off count for on-device diagnostics. */
+const char *lf_network_wifi_power_state(void);
+uint32_t lf_network_radio_sleep_cycles(void);
+/* Background flash operation guard for independent UI recovery monitor. */
+bool lf_network_ota_in_progress(void);

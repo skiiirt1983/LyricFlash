@@ -1,43 +1,163 @@
-
-name: LyricFlash Alpha 0.3 - ESP32-S3 Build
+name: LyricFlash 1.0.0 - ESP32-S3 Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/firmware.yml'
+      - 'main/**'
+      - 'tests/**'
+      - 'tools/**'
+      - 'CMakeLists.txt'
+      - 'sdkconfig.defaults'
+      - 'partitions.csv'
 
 permissions:
   contents: read
 
 jobs:
-  esp32s3:
+  preflight:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-
+    timeout-minutes: 10
     steps:
       - name: Check out firmware source
         uses: actions/checkout@v5
-
-      - name: Run host tests before compiling
+      - name: Run all host and native source tests before compiling
         run: bash tests/run_tests.sh
 
+  esp32s3:
+    # main holds releases only, so every firmware change pushed to main is
+    # compiled and published. Manual runs are also allowed.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: preflight
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out verified source
+        uses: actions/checkout@v5
+      - name: Configure pinned LVGL font generator
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned font converter
+        run: npm install --global lv_font_conv@1.5.3
+      - name: Generate all 16 open-source embedded fonts before ESP-IDF compilation
+        run: python3 tools/generate_clock_fonts.py
+      - name: Verify complete generated font manifest
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path("main/generated_clock_fonts/manifest.json").read_text())
+          assert len(m)==16, f"Only {len(m)} of 16 font families generated"
+          assert all(1000 < x["size_bytes"] < 2000000 for x in m)
+          print("PASS: all 16 embedded font families validated")
+          PY
       - name: Compile LyricFlash for ESP32-S3
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.5.4
           target: esp32s3
-
-      - name: Verify generated application image
-        run: python3 tools/check_build.py build/lyricflash.bin
-
-      - name: Package firmware
+          command: idf.py build && python3 tools/apply_adapter_patch.py && idf.py build
+      - name: Merge complete USB recovery image
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.4
+          target: esp32s3
+          command: idf.py merge-bin -o lyricflash-full.bin -f raw
+      - name: Validate OTA app and merged USB image
         run: |
-          mkdir -p dist
-          cp build/lyricflash.bin dist/LyricFlash_Alpha_0.3_ESP32S3_OTA.bin
+          python3 tools/check_build.py build/lyricflash.bin
+          python3 tools/validate_full_image.py build/lyricflash-full.bin build/lyricflash.bin
+      - name: Package and verify mandatory USB, OTA and checksummed ZIP
+        run: |
+          mkdir -p _site/beta/firmware dist
+          cp -a docs/. _site/
+          cp build/lyricflash-full.bin _site/beta/firmware/lyricflash-full.bin
+          cp build/lyricflash.bin _site/beta/firmware/lyricflash-ota.bin
+          python3 tools/prepare_site.py _site
+          python3 tools/create_preserve_usb.py _site
+          python3 tools/package_release.py _site
+          python3 tools/package_release.py --verify _site
+          cp _site/beta/firmware/LyricFlash-1.0.0-USB-and-OTA.zip dist/
+          cp build/lyricflash.bin dist/LyricFlash_1.0.0_ESP32S3_OTA.bin
+          cp build/lyricflash-full.bin dist/LyricFlash_1.0.0_ESP32S3_FULL_USB.bin
+          cp _site/beta/firmware/SHA256SUMS.txt dist/
+          cp main/generated_clock_fonts/manifest.json dist/clock-fonts-manifest.json
           python3 tools/check_build.py build/lyricflash.bin --json > dist/build-checks.json
-          sha256sum dist/*.bin > dist/SHA256SUMS.txt
-
-      - name: Upload firmware artifact
+          python3 tools/package_release.py --verify _site
+      - name: Upload complete validated firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: LyricFlash-Alpha-0.3-ESP32S3-UNTESTED
+          name: LyricFlash-1.0.0-ESP32S3
           path: dist/
           if-no-files-found: error
+      - name: Publish and verify direct HTTPS OTA image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 tools/package_release.py --verify _site
+          python3 tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin
+      - name: Publish the build for on-device updates
+        # Every build is listed as an alpha-build-<sha> prerelease with a direct
+        # OTA image: that is the format every LyricFlash updater (including
+        # 0.8.x) can find and install.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 tools/package_release.py --verify _site
+          VERSION=$(awk '/^#define LF_VERSION /{gsub(/"/,"",$3);print $3}' main/version.h)
+          test "$VERSION" = "1.0.0"
+          TAG="alpha-build-${GITHUB_SHA:0:12}"
+          {
+            echo "LyricFlash-OTA-Version: $VERSION"
+            echo "LyricFlash-OTA-Direct: https://raw.githubusercontent.com/skiiirt1983/LyricFlash/alpha-ota/releases/$TAG/lyricflash-ota.bin"
+            echo "LyricFlash creator and maintainer: skiiirt1983."
+            echo "Over-the-air update image for LyricFlash $VERSION on the Waveshare ESP32-S3 Touch AMOLED 1.75."
+            echo "Install from the device's Firmware page; saved Wi-Fi and settings are kept."
+          } > "$RUNNER_TEMP/lyricflash-ota-notes.txt"
+          gh release create "$TAG" \
+            _site/beta/firmware/lyricflash-ota.bin \
+            _site/beta/firmware/LyricFlash-1.0.0-USB-and-OTA.zip \
+            --target "$GITHUB_SHA" \
+            --title "LyricFlash $VERSION (update build ${GITHUB_SHA:0:8})" \
+            --notes-file "$RUNNER_TEMP/lyricflash-ota-notes.txt" \
+            --prerelease --latest=false
+          gh release view "$TAG" --json tagName,isPrerelease,assets | \
+            python3 -c 'import json,sys; p=json.load(sys.stdin); names={a["name"] for a in p["assets"]}; assert p["isPrerelease"]; assert "lyricflash-ota.bin" in names; assert "LyricFlash-1.0.0-USB-and-OTA.zip" in names; print("PASS: OTA update build published with OTA and full USB ZIP")'
+      - name: Publish the stable release
+        # A version without a -alpha/-beta/-rc suffix also gets a normal
+        # vX.Y.Z release, marked Latest. Skipped if that release already exists.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(awk '/^#define LF_VERSION /{gsub(/"/,"",$3);print $3}' main/version.h)
+          case "$VERSION" in *-*) echo "Test build $VERSION: no stable release"; exit 0;; esac
+          if gh release view "v$VERSION" >/dev/null 2>&1; then echo "v$VERSION already released"; exit 0; fi
+          cp build/lyricflash-full.bin "$RUNNER_TEMP/LyricFlash-$VERSION-FULL-USB.bin"
+          {
+            echo "LyricFlash $VERSION for the Waveshare ESP32-S3 Touch AMOLED 1.75."
+            echo
+            echo "Creator and maintainer: skiiirt1983."
+            echo
+            echo "Updating a watch that already runs LyricFlash: open the watch's web page, go to Firmware and install $VERSION. Saved Wi-Fi and settings are kept."
+            echo
+            echo "New install over USB: use LyricFlash-$VERSION-USB-and-OTA.zip (see USB-INSTALL.txt inside). The full USB image erases saved settings."
+          } > "$RUNNER_TEMP/lyricflash-stable-notes.txt"
+          gh release create "v$VERSION" \
+            _site/beta/firmware/lyricflash-ota.bin \
+            _site/beta/firmware/LyricFlash-$VERSION-USB-and-OTA.zip \
+            "$RUNNER_TEMP/LyricFlash-$VERSION-FULL-USB.bin" \
+            --target "$GITHUB_SHA" \
+            --title "LyricFlash $VERSION" \
+            --notes-file "$RUNNER_TEMP/lyricflash-stable-notes.txt" \
+            --latest
+          gh release view "v$VERSION" --json isPrerelease,assets | \
+            python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["isPrerelease"]; assert len(p["assets"])==3; print("PASS: stable release published")'

@@ -6,10 +6,18 @@ CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+# Screen-off CPU DFS, no automatic light sleep.
+CONFIG_PM_ENABLE=y
+CONFIG_PM_DFS_INIT_AUTO=n
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_USE_CLIB_STRING=y
 CONFIG_LV_USE_CLIB_SPRINTF=y
-CONFIG_LV_OS_FREERTOS=y
+# 0.8.124: LVGL renders synchronously in the esp_lvgl_adapter task (no
+# separate draw thread). Benchmarks showed a fixed ~3.4 ms per 24/32-row
+# strip even for a blank frame, regardless of buffer memory, consistent with
+# draw-thread handoffs. All UI access is already serialized by
+# esp_lv_adapter_lock().
+CONFIG_LV_OS_NONE=y
 CONFIG_LV_FONT_MONTSERRAT_12=y
 CONFIG_LV_FONT_MONTSERRAT_16=y
 CONFIG_LV_FONT_MONTSERRAT_18=y
@@ -31,3 +39,44 @@ CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
 CONFIG_LV_FONT_MONTSERRAT_28=y
 CONFIG_LV_FONT_MONTSERRAT_30=y
 CONFIG_LV_FONT_MONTSERRAT_32=y
+
+# CO5300 AMOLED SPI stability baseline from tested hardware configuration.
+# The BSP default queues ten transactions; limit outstanding DMA to one.
+CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=98304
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_SPI_MASTER_IN_IRAM=y
+CONFIG_LV_DEF_REFR_PERIOD=16
+# LVGL 9.5 style lookups on complex static page trees; add only 8 bytes/object.
+# CONFIG_LV_OBJ_STYLE_CACHE is not set
+
+# 0.8.124 performance profile
+# Build with -O2 instead of the default -Og debug optimization (LVGL software
+# rendering is several times faster).
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+# 0.8.124: default 32 KB data cache. The 64 KB cache took 32 KB of internal
+# SRAM and, with internal LVGL buffers, left ~28 KB free: song ID (14 KB task
+# stack, I2S DMA, TLS) could no longer start.
+# TLS buffers in PSRAM: GitHub OTA download failed with SSL_ALLOC_FAILED
+# (-0x7F00) when internal RAM was exhausted.
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+# On-screen FPS / CPU meter off (tuning finished; swipe stats live in diagnostics).
+# CONFIG_LV_USE_SYSMON is not set
+# CONFIG_LV_USE_PERF_MONITOR is not set
+# 0.8.124: smaller peak TLS memory for the on-device GitHub OTA download.
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+# 0.8.124: app_main builds the whole LVGL UI; give it headroom.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+# 0.8.124: the UI uses far more than LVGL's default 4 circle radii (round
+# buttons, rings, dial panels, markers). Each cache miss recomputes the
+# anti-aliased circle mask for every 32-row strip of every frame.
+CONFIG_LV_DRAW_SW_CIRCLE_CACHE_SIZE=32
+# 0.8.124: free ~30-40 KB of internal SRAM for double-buffered internal LVGL
+# strips while keeping song ID (task stacks, I2S DMA) working. Wi-Fi code
+# runs from flash cache instead of IRAM: slightly lower Wi-Fi throughput,
+# irrelevant for weather/lyrics/AudD uploads.
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+# 0.8.124: page snapshots for swipes.
+CONFIG_LV_USE_SNAPSHOT=y

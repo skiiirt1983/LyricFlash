@@ -19,8 +19,14 @@ typedef struct {
     bool battery_valid;
     lf_power_state_t battery;
     char errors[3][100];
+    uint32_t wake_recovery_count;
+    uint8_t wake_recovery_last_reason; /* 1 UI heartbeat, 2 wake cover */
+    uint32_t wake_recovery_last_age_ms;
+    uint32_t wake_recovery_last_tick_age_ms;
 } lf_diag_snapshot_t;
 
 /* Bounded, application-owned event log; never includes credentials or tokens. */
 void lf_diag_error(const char *component, const char *detail);
 void lf_diag_snapshot(lf_diag_snapshot_t *out);
+/* Persist only verified wake watchdog restarts, never every wake/tick. */
+void lf_diag_wake_recovery(uint8_t reason,uint32_t age_ms,uint32_t tick_age_ms);

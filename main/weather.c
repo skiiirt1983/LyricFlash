@@ -1,3 +1,4 @@
+#include <time.h>
 #include "weather.h"
 #include "diagnostics.h"
 #include "network.h"
@@ -17,6 +18,10 @@
 static portMUX_TYPE weather_mux = portMUX_INITIALIZER_UNLOCKED;
 static lf_weather_config_t config = {.enabled = false, .interval_minutes = 30, .city = ""};
 static char weather_strip[68];
+/* 0.8.124: last HTTPS attempt, for /api/diagnostics. */
+static volatile int weather_last_err, weather_last_http, weather_last_bytes;
+static volatile bool weather_last_overflow;
+static volatile uint32_t weather_fetches, weather_fetch_ok;
 static char weather_details[256];
 static int weather_temperature;
 static int weather_code;
@@ -67,6 +72,10 @@ static cJSON *https_json(const char *url)
     esp_err_t err = esp_http_client_perform(client);
     int status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
+    weather_last_err = (int)err;
+    weather_last_http = status;
+    weather_last_bytes = (int)out.length;
+    weather_last_overflow = out.overflow;
     cJSON *result = NULL;
     if (err == ESP_OK && !out.overflow && status == 200 && out.length > 0)
         result = cJSON_Parse(out.data);
@@ -104,32 +113,40 @@ static const char *condition(int code)
     if (code >= 95) return "STORM";
     return "WEATHER";
 }
-static bool fetch_weather(const char *city, char *result, size_t cap,
+static bool fetch_weather(const lf_weather_config_t *selected, char *result, size_t cap,
                           char *details, size_t details_cap, int *out_temp, int *out_code,
                           lf_weather_view_t *view)
 {
-    char encoded[3 * (LF_WEATHER_CITY_MAX + 1)] = {0};
-    if (!encode_city(city, encoded, sizeof encoded)) return false;
-    char url[512];
-    snprintf(url, sizeof url,
-             "https://geocoding-api.open-meteo.com/v1/search?name=%s&count=1&language=en&format=json",
-             encoded);
-    cJSON *geo = https_json(url);
-    if (!geo) return false;
-    cJSON *matches = cJSON_GetObjectItemCaseSensitive(geo, "results");
-    cJSON *first = cJSON_IsArray(matches) ? cJSON_GetArrayItem(matches, 0) : NULL;
-    cJSON *latitude = cJSON_GetObjectItemCaseSensitive(first, "latitude");
-    cJSON *longitude = cJSON_GetObjectItemCaseSensitive(first, "longitude");
-    cJSON *resolved_name = cJSON_GetObjectItemCaseSensitive(first, "name");
-    bool valid = cJSON_IsNumber(latitude) && cJSON_IsNumber(longitude);
-    double lat = valid ? latitude->valuedouble : 0;
-    double lon = valid ? longitude->valuedouble : 0;
-    char short_name[19] = {0};
-    if (cJSON_IsString(resolved_name) && resolved_name->valuestring)
-        snprintf(short_name, sizeof short_name, "%.18s", resolved_name->valuestring);
-    else snprintf(short_name, sizeof short_name, "%.18s", city);
-    cJSON_Delete(geo);
-    if (!valid) return false;
+    char url[512], short_name[19]={0};
+    double lat=0,lon=0;
+    bool valid=false;
+    if(selected->has_coordinates) {
+        lat=(double)selected->latitude_e5/100000.0;
+        lon=(double)selected->longitude_e5/100000.0;
+        valid=true;
+        snprintf(short_name,sizeof short_name,"%.18s",selected->city);
+    } else {
+        char encoded[3*(LF_WEATHER_CITY_MAX+1)]={0};
+        if(!encode_city(selected->city,encoded,sizeof encoded))return false;
+        snprintf(url,sizeof url,
+                 "https://geocoding-api.open-meteo.com/v1/search?name=%s&count=1&language=en&format=json",
+                 encoded);
+        cJSON *geo=https_json(url);
+        if(!geo)return false;
+        cJSON *matches=cJSON_GetObjectItemCaseSensitive(geo,"results");
+        cJSON *first=cJSON_IsArray(matches)?cJSON_GetArrayItem(matches,0):NULL;
+        cJSON *latitude=cJSON_GetObjectItemCaseSensitive(first,"latitude");
+        cJSON *longitude=cJSON_GetObjectItemCaseSensitive(first,"longitude");
+        cJSON *resolved_name=cJSON_GetObjectItemCaseSensitive(first,"name");
+        valid=cJSON_IsNumber(latitude)&&cJSON_IsNumber(longitude);
+        lat=valid?latitude->valuedouble:0;
+        lon=valid?longitude->valuedouble:0;
+        if(cJSON_IsString(resolved_name)&&resolved_name->valuestring)
+            snprintf(short_name,sizeof short_name,"%.18s",resolved_name->valuestring);
+        else snprintf(short_name,sizeof short_name,"%.18s",selected->city);
+        cJSON_Delete(geo);
+    }
+    if(!valid)return false;
 
     snprintf(url, sizeof url,
              "https://api.open-meteo.com/v1/forecast?latitude=%.5f&longitude=%.5f"
@@ -226,8 +243,10 @@ static bool valid_interval(uint16_t value)
 {
     return value == 15 || value == 30 || value == 60 || value == 120;
 }
+static volatile bool config_loaded;
 static void load_config(void)
 {
+    config_loaded = true;
     nvs_handle_t h;
     if (nvs_open("lf_weather", NVS_READONLY, &h) != ESP_OK) return;
     lf_weather_config_t loaded = {.enabled = false, .interval_minutes = 30, .city = ""};
@@ -237,6 +256,13 @@ static void load_config(void)
     (void)nvs_get_u16(h, "interval", &loaded.interval_minutes);
     size_t cap = sizeof loaded.city;
     (void)nvs_get_str(h, "city", loaded.city, &cap);
+    uint8_t exact=0;
+    (void)nvs_get_u8(h,"geofixed",&exact);
+    (void)nvs_get_i32(h,"lat_e5",&loaded.latitude_e5);
+    (void)nvs_get_i32(h,"lon_e5",&loaded.longitude_e5);
+    loaded.has_coordinates=exact==1 &&
+        loaded.latitude_e5>=-9000000 && loaded.latitude_e5<=9000000 &&
+        loaded.longitude_e5>=-18000000 && loaded.longitude_e5<=18000000;
     nvs_close(h);
     if (!valid_interval(loaded.interval_minutes)) loaded.interval_minutes = 30;
     portENTER_CRITICAL(&weather_mux);
@@ -247,13 +273,19 @@ static void load_config(void)
 void lf_weather_get_config(lf_weather_config_t *out)
 {
     if (!out) return;
+    /* 0.8.128: the clock face is built before the weather task starts; it
+       must see the saved settings, or it is built without its weather slot. */
+    if (!config_loaded) load_config();
     portENTER_CRITICAL(&weather_mux);
     *out = config;
     portEXIT_CRITICAL(&weather_mux);
 }
 bool lf_weather_save_config(const lf_weather_config_t *next)
 {
-    if (!next || !valid_interval(next->interval_minutes)) return false;
+    if (!next || !valid_interval(next->interval_minutes) ||
+        (next->has_coordinates &&
+        (next->latitude_e5 < -9000000 || next->latitude_e5 > 9000000 ||
+         next->longitude_e5 < -18000000 || next->longitude_e5 > 18000000))) return false;
     size_t length = strnlen(next->city, LF_WEATHER_CITY_MAX + 1);
     if (length > LF_WEATHER_CITY_MAX) return false;
     nvs_handle_t h;
@@ -261,19 +293,33 @@ bool lf_weather_save_config(const lf_weather_config_t *next)
     esp_err_t e = nvs_set_u8(h, "enabled", next->enabled ? 1 : 0);
     if (e == ESP_OK) e = nvs_set_u16(h, "interval", next->interval_minutes);
     if (e == ESP_OK) e = nvs_set_str(h, "city", next->city);
+    if (e == ESP_OK) e = nvs_set_i32(h,"lat_e5",next->latitude_e5);
+    if (e == ESP_OK) e = nvs_set_i32(h,"lon_e5",next->longitude_e5);
+    if (e == ESP_OK) e = nvs_set_u8(h,"geofixed",next->has_coordinates?1:0);
     if (e == ESP_OK) e = nvs_commit(h);
     nvs_close(h);
     if (e != ESP_OK) return false;
     portENTER_CRITICAL(&weather_mux);
-    config = *next;
-    config_generation++;
+    bool changed = config.enabled != next->enabled ||
+                   config.interval_minutes != next->interval_minutes ||
+                   strcmp(config.city,next->city) != 0 ||
+                   config.has_coordinates != next->has_coordinates ||
+                   config.latitude_e5 != next->latitude_e5 ||
+                   config.longitude_e5 != next->longitude_e5;
+    if(changed) {
+        config=*next;
+        config_generation++;
+        weather_details[0]=0;
+        weather_numeric_valid=false;
+        view_cache.valid=false;
+    }
     portEXIT_CRITICAL(&weather_mux);
-    set_strip("");
-    portENTER_CRITICAL(&weather_mux);
-    weather_details[0] = 0;
-    weather_numeric_valid = false;
-    view_cache.valid = false;
-    portEXIT_CRITICAL(&weather_mux);
+    /* The Web UI saves all controls together. Do not erase valid weather
+       when a clock-only setting is saved; refresh only on weather changes. */
+    if(changed) {
+        set_strip(next->enabled ? "UPDATING WEATHER" : "");
+        if(weather_task) xTaskNotifyGive(weather_task);
+    }
     return true;
 }
 bool lf_weather_get_current(int *temp_c, int *wmo_code)
@@ -313,7 +359,13 @@ static void worker(void *arg)
     (void)arg;
     uint32_t prior_generation = 0;
     TickType_t next_poll = 0;
+    bool was_connected = false;
+    bool time_was_synced = false;
     for (;;) {
+        /* 0.8.128: fetch again as soon as the clock first gets real time. */
+        const bool time_synced = time(NULL) > 1700000000;
+        const bool time_just_synced = time_synced && !time_was_synced;
+        time_was_synced = time_synced;
         lf_weather_config_t c;
         uint32_t generation;
         portENTER_CRITICAL(&weather_mux);
@@ -327,14 +379,19 @@ static void worker(void *arg)
             set_strip("SET WEATHER CITY");
         } else if (!lf_network_is_connected()) {
             set_strip("WEATHER OFFLINE");
-        } else if (generation != prior_generation ||
+            was_connected=false;
+        } else if (!was_connected || generation != prior_generation || time_just_synced ||
                    (int32_t)(xTaskGetTickCount() - next_poll) >= 0) {
+            was_connected=true;
+            set_strip("UPDATING WEATHER");
             char reading[68] = {0};
             char detailed[256] = {0};
             int t=0, code=0;
             lf_weather_view_t updated_view = {0};
-            bool ok = fetch_weather(c.city, reading, sizeof reading,
+            bool ok = fetch_weather(&c, reading, sizeof reading,
                                     detailed, sizeof detailed, &t, &code, &updated_view);
+            weather_fetches++;
+            if(ok)weather_fetch_ok++;
             /* A changed configuration must not display a stale result. */
             portENTER_CRITICAL(&weather_mux);
             bool unchanged = config_generation == generation;
@@ -350,6 +407,10 @@ static void worker(void *arg)
                     weather_code = code;
                     weather_numeric_valid = true;
                     view_cache = updated_view;
+                } else {
+                    /* Do not keep displaying a stale reading after errors. */
+                    weather_numeric_valid = false;
+                    view_cache.valid = false;
                 }
                 portEXIT_CRITICAL(&weather_mux);
             }
@@ -357,7 +418,9 @@ static void worker(void *arg)
             next_poll = xTaskGetTickCount() + pdMS_TO_TICKS(delay_ms);
         }
         prior_generation = generation;
-        vTaskDelay(pdMS_TO_TICKS(3000));
+        /* Notification from Save wakes the worker immediately. Normal
+           polling still happens every 3 seconds without blocking LVGL. */
+        ulTaskNotifyTake(pdTRUE,pdMS_TO_TICKS(3000));
     }
 }
 bool lf_weather_start(void)
@@ -366,4 +429,23 @@ bool lf_weather_start(void)
     load_config();
     return xTaskCreate(worker, "lf_weather", 8192, NULL,
                        tskIDLE_PRIORITY + 1, &weather_task) == pdPASS;
+}
+
+void lf_weather_debug(lf_weather_debug_t *d)
+{
+    if(!d)return;
+    memset(d,0,sizeof(*d));
+    portENTER_CRITICAL(&weather_mux);
+    d->enabled=config.enabled;
+    snprintf(d->city,sizeof d->city,"%s",config.city);
+    snprintf(d->status,sizeof d->status,"%s",weather_strip);
+    d->valid=weather_numeric_valid;
+    d->temperature=weather_temperature;
+    portEXIT_CRITICAL(&weather_mux);
+    d->fetches=weather_fetches;
+    d->fetch_ok=weather_fetch_ok;
+    d->last_err=weather_last_err;
+    d->last_http=weather_last_http;
+    d->last_bytes=weather_last_bytes;
+    d->last_overflow=weather_last_overflow;
 }

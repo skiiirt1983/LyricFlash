@@ -10,6 +10,11 @@ typedef struct {
     bool enabled;
     uint16_t interval_minutes;   /* 15, 30, 60, or 120 */
     char city[LF_WEATHER_CITY_MAX + 1];
+    /* Exact Open-Meteo geocoding selection, saved as integer degrees x 1e5.
+       Old text-only configurations remain supported. */
+    bool has_coordinates;
+    int32_t latitude_e5;
+    int32_t longitude_e5;
 } lf_weather_config_t;
 
 bool lf_weather_start(void);
@@ -47,3 +52,13 @@ typedef struct {
     unsigned day_count;
 } lf_weather_view_t;
 void lf_weather_get_view(lf_weather_view_t *out);
+
+/* 0.8.124: weather pipeline state for diagnostics. */
+typedef struct {
+    bool enabled, valid, last_overflow;
+    char city[48];
+    char status[68];
+    int temperature, last_err, last_http, last_bytes;
+    uint32_t fetches, fetch_ok;
+} lf_weather_debug_t;
+void lf_weather_debug(lf_weather_debug_t *out);
