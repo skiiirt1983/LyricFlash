@@ -5,9 +5,10 @@
  * Additive schema 16 preserves NVS and prior users' clock customizations.
  * New open-licensed clock fonts remain monochrome on embedded LVGL.
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
-#define LF_VERSION "0.8.116-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.116"
+#define LF_VERSION "0.8.117-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.117"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 0.8.117: balanced flush-completion handoff between LVGL and the swipe compositor (removes the per-swipe 200 ms stall); 4 px scroll grab, 10 ms touch sampling. */
 /* 0.8.116: swipe compositor: LVGL drawing suspended during pager motion, frames composed from PSRAM page snapshots and pushed straight to the panel; 240-360 ms ease-out settle. */
 /* 0.8.115: swipe snapshots: idle RGB565 page images shown during pager motion, live widgets restored and repainted at commit. */
 /* 0.8.114: per-swipe frame statistics (last 8 swipes) in /api/diagnostics. */

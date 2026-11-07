@@ -773,7 +773,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // fallback path when tear mode ends up as NONE.
 #define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
-/* 0.8.116 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+/* 0.8.117 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
    DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
    strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
    Used only when tear mode is NONE and enough internal RAM remains for
@@ -1018,7 +1018,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         (size_t)BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT_INTERNAL_FAST * BSP_LCD_BITS_PER_PIXEL / 8;
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-    /* 0.8.116: disabled. Hardware logs showed panel flush waits under 1 ms
+    /* 0.8.117: disabled. Hardware logs showed panel flush waits under 1 ms
        (render, not transfer, is the bottleneck) while the 45 KB of internal
        SRAM starved song ID. Keep LVGL strips in PSRAM with DMA staging. */
     const bool internal_fast = BSP_LVGL_INTERNAL_FAST_ENABLE && !use_te_sync &&
@@ -1218,7 +1218,7 @@ esp_err_t bsp_display_rotation_set(bsp_display_rotation_t rotation)
 }
 
 /* ---------------------------------------------------------------------
- * 0.8.116: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
+ * 0.8.117: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
  * shape), replacing esp_lvgl_adapter for this panel. Hardware benchmarks
  * showed a blank full frame costing 47 ms through the adapter although the
  * panel accepts a full frame in 13.8 ms. Here LVGL renders 24-row strips
@@ -1245,16 +1245,22 @@ static bool IRAM_ATTR bsp_direct_color_done(esp_lcd_panel_io_handle_t io,
     xSemaphoreGiveFromISR(direct_flush_done, &woken);
     return woken == pdTRUE;
 }
+/* True while an LVGL strip has been submitted but LVGL has not yet consumed
+   its completion. LVGL waits for completion only before the NEXT flush, so
+   the last strip of every refresh stays pending until the next refresh. */
+static volatile bool direct_lvgl_flush_pending;
 static void bsp_direct_flush_wait(lv_display_t *disp)
 {
     (void)disp;
     /* Bounded: a lost completion must never freeze the UI. */
     (void)xSemaphoreTake(direct_flush_done, pdMS_TO_TICKS(200));
+    direct_lvgl_flush_pending = false;
 }
 static void bsp_direct_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px)
 {
     (void)disp;
     lv_draw_sw_rgb565_swap(px, lv_area_get_size(area));
+    direct_lvgl_flush_pending = true;
     if (esp_lcd_panel_draw_bitmap(panel_handle, area->x1, area->y1,
                                   area->x2 + 1, area->y2 + 1, px) != ESP_OK) {
         xSemaphoreGive(direct_flush_done);
@@ -1354,7 +1360,7 @@ lv_display_t *bsp_display_start_direct(void)
     return disp;
 }
 
-/* 0.8.116: push a full frame straight to the panel, bypassing LVGL.
+/* 0.8.117: push a full frame straight to the panel, bypassing LVGL.
    The caller must hold the LVGL lock and have LVGL invalidation disabled,
    so LVGL is not flushing. Rows are produced into the two internal DMA
    strips in ping-pong: strip N+1 is filled while strip N transfers.
@@ -1362,10 +1368,14 @@ lv_display_t *bsp_display_start_direct(void)
 esp_err_t bsp_display_push_frame(bsp_row_fill_cb_t fill, void *ctx)
 {
     if (!direct_mode || !fill || !direct_buf[0] || !direct_buf[1]) return ESP_ERR_INVALID_STATE;
-    /* Let any in-flight LVGL transfer finish, then drop its completion. */
-    uint8_t caset[4] = {0, 0, (uint8_t)((BSP_LCD_H_RES - 1) >> 8), (uint8_t)((BSP_LCD_H_RES - 1) & 0xFF)};
-    esp_lcd_panel_io_tx_param(io_handle, (0x02u << 24) | (0x2Au << 8), caset, 4);
-    (void)xSemaphoreTake(direct_flush_done, 0);
+    /* 0.8.117: finish LVGL's outstanding last strip on LVGL's behalf and tell
+       LVGL it is done, so its next refresh does not wait for a completion
+       this function consumed (0.8.117: one 200 ms stall per swipe). */
+    if (direct_lvgl_flush_pending) {
+        (void)xSemaphoreTake(direct_flush_done, pdMS_TO_TICKS(100));
+        direct_lvgl_flush_pending = false;
+        if (direct_disp) lv_display_flush_ready(direct_disp);
+    }
     bool pending = false;
     int slot = 0;
     for (int y = 0; y < BSP_LCD_V_RES; y += BSP_DIRECT_ROWS) {
