@@ -5,9 +5,10 @@
  * Additive schema 16 preserves NVS and prior users' clock customizations.
  * New open-licensed clock fonts remain monochrome on embedded LVGL.
  * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
-#define LF_VERSION "0.8.119-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.119"
+#define LF_VERSION "0.8.120-alpha"
+#define LF_VERSION_LABEL "ALPHA 0.8.120"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 0.8.120: settle starts immediately on finger release (no ~125 ms pause); swipe frames start on the panel TE pulse (no tearing). */
 /* 0.8.119: no start-up flashes (panel on at zero brightness, black default screen, boot benchmark off); touch/pager state in diagnostics for freeze reports. */
 /* 0.8.118: ticketed panel-transfer accounting shared by LVGL and the swipe compositor (no lost/stolen completions); drawing-suspension watchdog. */
 /* 0.8.117: balanced flush-completion handoff between LVGL and the swipe compositor (removes the per-swipe 200 ms stall); 4 px scroll grab, 10 ms touch sampling. */

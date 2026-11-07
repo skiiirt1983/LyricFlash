@@ -773,7 +773,7 @@ esp_codec_dev_handle_t bsp_audio_codec_microphone_init(void)
 // fallback path when tear mode ends up as NONE.
 #define LVGL_BUFFER_HEIGHT_PSRAM (32)
 #define LVGL_BUFFER_HEIGHT_INTERNAL (12)
-/* 0.8.119 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
+/* 0.8.120 fast path: two 24-row RGB565 strips (2 x 22.4 KiB) in internal,
    DMA-capable SRAM. LVGL renders strip N+1 in fast SRAM while SPI DMA sends
    strip N straight from the LVGL buffer (no PSRAM render, no memcpy staging).
    Used only when tear mode is NONE and enough internal RAM remains for
@@ -942,7 +942,7 @@ esp_err_t bsp_display_new(const bsp_display_config_t *config, esp_lcd_panel_hand
     esp_lcd_panel_set_gap(panel_handle, 0x06, 0);
     esp_lcd_panel_reset(panel_handle);
     esp_lcd_panel_init(panel_handle);
-    /* 0.8.119: switch the panel on dark. Its RAM holds random pixels until
+    /* 0.8.120: switch the panel on dark. Its RAM holds random pixels until
        the first black frame; at full brightness that was a white flash. */
     {
         uint8_t zero = 0;
@@ -1024,7 +1024,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         (size_t)BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT_INTERNAL_FAST * BSP_LCD_BITS_PER_PIXEL / 8;
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
     const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-    /* 0.8.119: disabled. Hardware logs showed panel flush waits under 1 ms
+    /* 0.8.120: disabled. Hardware logs showed panel flush waits under 1 ms
        (render, not transfer, is the bottleneck) while the 45 KB of internal
        SRAM starved song ID. Keep LVGL strips in PSRAM with DMA staging. */
     const bool internal_fast = BSP_LVGL_INTERNAL_FAST_ENABLE && !use_te_sync &&
@@ -1224,7 +1224,7 @@ esp_err_t bsp_display_rotation_set(bsp_display_rotation_t rotation)
 }
 
 /* ---------------------------------------------------------------------
- * 0.8.119: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
+ * 0.8.120: direct LVGL <-> esp_lcd port (Espressif/Waveshare reference
  * shape), replacing esp_lvgl_adapter for this panel. Hardware benchmarks
  * showed a blank full frame costing 47 ms through the adapter although the
  * panel accepts a full frame in 13.8 ms. Here LVGL renders 24-row strips
@@ -1238,18 +1238,48 @@ static SemaphoreHandle_t direct_lvgl_mux;
 static lv_display_t *direct_disp;
 static bool direct_mode;
 
-/* 0.8.119: ticketed transfer accounting shared by LVGL and the swipe
+/* 0.8.120: ticketed transfer accounting shared by LVGL and the swipe
    compositor. Every pixel transfer gets a ticket when submitted; the SPI
    "color done" ISR (flash-cache safe: no flash code) bumps the completed
    count and gives a wake-up semaphore. Waiters wait until completed reaches
    their ticket, so no completion can be lost or consumed by the wrong side
-   (0.8.116/0.8.119: one-shot semaphore handoffs caused 100-200 ms timeouts
+   (0.8.116/0.8.120: one-shot semaphore handoffs caused 100-200 ms timeouts
    and an apparent freeze). */
 static SemaphoreHandle_t direct_flush_done;
 static void *direct_buf[2];
 static volatile uint32_t lcd_submitted;
 static volatile uint32_t lcd_completed;
 static uint32_t lvgl_last_ticket;
+/* 0.8.120: panel TE (tearing-effect) pulse, used to start compositor frames
+   right as the CO5300 begins a new scan so the 14 ms write stays ahead of
+   the ~16.7 ms scan (no torn/doubled swipe frames). */
+static SemaphoreHandle_t te_sem;
+static volatile uint32_t te_count;
+static void IRAM_ATTR bsp_te_isr(void *arg)
+{
+    (void)arg;
+    te_count = te_count + 1;
+    BaseType_t woken = pdFALSE;
+    if (te_sem) xSemaphoreGiveFromISR(te_sem, &woken);
+    if (woken == pdTRUE) portYIELD_FROM_ISR();
+}
+static void bsp_te_init(void)
+{
+    te_sem = xSemaphoreCreateBinary();
+    if (!te_sem) return;
+    const gpio_config_t io = {
+        .pin_bit_mask = 1ULL << BSP_LCD_TE_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_POSEDGE,
+    };
+    if (gpio_config(&io) != ESP_OK) return;
+    esp_err_t err = gpio_install_isr_service(0);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) return;
+    (void)gpio_isr_handler_add(BSP_LCD_TE_GPIO, bsp_te_isr, NULL);
+}
+uint32_t bsp_display_te_count(void) { return te_count; }
 static bool IRAM_ATTR bsp_direct_color_done(esp_lcd_panel_io_handle_t io,
                                             esp_lcd_panel_io_event_data_t *edata,
                                             void *user_ctx)
@@ -1376,6 +1406,7 @@ lv_display_t *bsp_display_start_direct(void)
         ESP_LOGE(TAG, "Direct LVGL: touch init failed");
     }
 
+    bsp_te_init();
     direct_disp = disp;
     direct_mode = true;
     /* LVGL's default screen is white: make it black, and leave the backlight
@@ -1390,7 +1421,7 @@ lv_display_t *bsp_display_start_direct(void)
     return disp;
 }
 
-/* 0.8.119: push a full frame straight to the panel, bypassing LVGL.
+/* 0.8.120: push a full frame straight to the panel, bypassing LVGL.
    The caller must hold the LVGL lock and have LVGL invalidation disabled,
    so LVGL is not flushing. Rows are produced into the two internal DMA
    strips in ping-pong: strip N+1 is filled while strip N transfers.
@@ -1410,6 +1441,12 @@ esp_err_t bsp_display_push_frame(bsp_row_fill_cb_t fill, void *ctx)
         bsp_lcd_wait_ticket(ticket[slot]);
         uint16_t *dst = (uint16_t *)direct_buf[slot];
         fill(dst, y, rows, ctx);
+        if (y == 0 && te_sem) {
+            /* Start the frame on a fresh TE pulse; never stall a swipe if the
+               panel's TE line is silent. */
+            (void)xSemaphoreTake(te_sem, 0);
+            (void)xSemaphoreTake(te_sem, pdMS_TO_TICKS(25));
+        }
         ticket[slot] = bsp_lcd_submit(0, y, BSP_LCD_H_RES, y + rows, dst);
         slot ^= 1;
     }
