@@ -147,7 +147,7 @@ jobs:
             echo
             echo "Creator and maintainer: skiiirt1983."
             echo
-            echo "Updating a watch that already runs LyricFlash: open the watch's web page, go to Firmware and install $VERSION. Saved Wi-Fi and settings are kept."
+            echo "Updating a device that already runs LyricFlash: open the device's web page, go to Firmware and install $VERSION. Saved Wi-Fi and settings are kept."
             echo
             echo "New install over USB: use LyricFlash-$VERSION-USB-and-OTA.zip (see USB-INSTALL.txt inside). The full USB image erases saved settings."
           } > "$RUNNER_TEMP/lyricflash-stable-notes.txt"

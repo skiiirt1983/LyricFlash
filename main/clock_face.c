@@ -11,7 +11,7 @@
 #include <sys/time.h>
 
 /* A luxury diver-inspired face for personal use, plus two original alternatives.
-   No watchmaker graphics, images, fonts, or proprietary assets are required. */
+   No third-party clock graphics, images, fonts, or proprietary assets are required. */
 #define CW 466
 #define CC 233
 #define PI_F 3.14159265359f
@@ -214,7 +214,7 @@ static void tick_draw_event(lv_event_t *e)
     const bool diver=(uintptr_t)lv_event_get_user_data(e)!=0;
     const lf_dial_tick_t *ticks=dial_tick_cache[diver?1:0];
     for(int i=0;i<60;i++){
-        /* Dress watch has only twelve markers, diver has sixty. */
+        /* The dress face has only twelve markers, diver has sixty. */
         if(!diver && i%5)continue;
         const bool major=(i%5)==0;
         /* Discard invisible ticks BEFORE lv_draw_line adds a draw task.
@@ -365,7 +365,7 @@ static void build_digital(lv_obj_t *parent)
 }
 static void build_classic(lv_obj_t *parent)
 {
-    /* Restrained dress-watch face deliberately unlike the diver: no
+    /* Restrained dress-style face deliberately unlike the diver: no
        diving bezel, luminous bars or large date magnifier. Roman markers,
        slim hands and a simple brushed inner rim. */
     round_panel(parent,449,0x101822,0x70808F,3);
@@ -383,8 +383,8 @@ static void build_classic(lv_obj_t *parent)
     info_label=face_text(parent,"",0,129,&lv_font_montserrat_12,0x809DB8);
 }
 
-/* Retro green 1980s LCD watch. Intentionally an original face, not a
-   reproduction of any company's trademark or printed watch artwork. */
+/* Retro green 1980s LCD clock. Intentionally an original face, not a
+   reproduction of any company's trademark or printed clock artwork. */
 static void build_retro_lcd(lv_obj_t *parent)
 {
     round_panel(parent, 450, 0x090B10, 0x6A737C, 9);

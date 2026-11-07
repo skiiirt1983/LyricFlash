@@ -35,4 +35,4 @@ Font generation needs `lv_font_conv` (`npm install --global lv_font_conv@1.5.3`)
 
 ## Tests
 
-`bash tests/run_tests.sh` runs the host-side logic, contract and web-page tests (needs Python 3, Node.js and a C compiler). They do not replace a full ESP-IDF compile or testing on the watch.
+`bash tests/run_tests.sh` runs the host-side logic, contract and web-page tests (needs Python 3, Node.js and a C compiler). They do not replace a full ESP-IDF compile or testing on the device.
