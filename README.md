@@ -2,35 +2,32 @@
 
 **Creator and maintainer:** [skiiirt1983](https://github.com/skiiirt1983)
 
-This repository contains the LyricFlash application. Third-party libraries, board support and fonts retain their own authors and licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+LyricFlash is firmware for the Waveshare ESP32-S3 Touch AMOLED 1.75 (466×466 round AMOLED, 16 MB flash). It identifies the song playing around you, shows its timed lyrics, and doubles as a customizable clock.
 
-## Historical Alpha 0.8.1 notes
+Third-party libraries, board support and fonts keep their own authors and licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
 
-Development firmware for Waveshare ESP32-S3 Touch AMOLED 1.75 (466×466, 16 MB).
-Public stable v1.0 is not released; do not promote this build without hardware validation.
+## Current release: 1.0.0
 
-## Improvements over Alpha 0.7
-- Full-screen slide animations replaced by immediate screen swaps; button gradients/shadows reduced to improve responsiveness.
-- Swipe DOWN from Home to open Device Diagnostics, then UP or BACK HOME to return. Shows version, IP, connected SSID/RSSI, uptime, internal heap/PSRAM, max UI tick gap, battery/USB/charge, OTA state, microphone OFF, and sanitized application errors.
-- Read-only network JSON diagnostics: `http://DEVICE-IP/api/diagnostics`.
-- Local `http://DEVICE-IP/settings` Basic Clock Studio: font preset, time size, ring mode, background/foreground/ring colors, date, weather, weather city and refresh interval. Save requires a one-time PIN on the device via Device Settings → ARM WEB / OTA.
-- Adds visible SPACE key to the character wheel for two-word weather locations.
-- Preserves Alpha 0.7's corrected lyric preview scrolling, Rolex clock and OTA diagnostics. OTA is still awaiting physical update testing.
+- **Song ID and lyrics:** listens through the built-in microphones, identifies the song and shows synced lyrics. Per-song timing and tempo adjustments are saved.
+- **Smooth navigation:** swipe between Clock, Home and Settings at 25–60 fps, with drag-to-follow and a settle animation.
+- **Clock:** one customizable face with 20 fonts, adjustable size and color, date, battery and live weather. Press and hold the clock for its settings.
+- **Weather:** current conditions for a chosen city, refreshed on a set interval. Swipe up on the clock for details.
+- **Battery:** the CPU drops to 80 MHz with the screen off, touch and screen polling slow down, and the Wi-Fi radio sleeps during long idle periods. Standby drain is about 1% per hour.
+- **Web pages:** the watch serves settings, clock customization, weather, diagnostics and firmware updates at `http://<watch-ip>/`.
+- **Reliability:** a display watchdog restarts the UI if it ever stalls. Diagnostics are at `http://<watch-ip>/api/diagnostics`.
 
-## Installing the full USB image
-Run the GitHub Actions workflow for Alpha 0.8 and download `LyricFlash-Alpha-0.8.1-FULL-USB-and-OTA-UNTESTED`. The full USB `lyricflash-full.bin` is flashed at offset `0x0` on this specific ESP32-S3 16 MB device (or through the deployed Alpha/Beta browser installer). The standalone `lyricflash-ota.bin` is for a subsequent OTA update, never flash it at `0x0`.
+## Updating a watch that already runs LyricFlash
 
-Full merged USB firmware overwrites saved NVS and OTA selection data; note Wi-Fi settings before flashing. A build passing CI is not proof of hardware OTA compatibility.
+Open `http://<watch-ip>/`, go to **Firmware** and install the newest version. Saved Wi-Fi and settings are kept.
 
-## Alpha 0.8.1 hotfix — gesture reboot protection
+## New install over USB
 
-A physical-device test found that Alpha 0.8 may reboot during a swipe.
-Root-cause hypothesis: synchronous `lv_obj_delete(old_screen)` while an LVGL
-gesture/click event is still being dispatched. This hotfix changes that to
-`lv_obj_delete_async(old_screen)`, retaining instant screen swaps but deferring
-old-screen destruction until LVGL has finished handling the input event.
+Download `LyricFlash-<version>-USB-and-OTA.zip` from the [latest release](https://github.com/skiiirt1983/LyricFlash/releases/latest) and follow `USB-INSTALL.txt` inside it. The full USB image is flashed at offset `0x0` and erases saved settings. The `lyricflash-ota.bin` file is only for over-the-air updates; never flash it at `0x0`.
 
-The source test explicitly rejects reintroduction of synchronous deletion.
-The patch is not hardware-verified until swiping in all directions on the actual
-Waveshare ESP32-S3. Alpha 0.8 remains unmodified as a recoverable prior build;
-use this OTA image on 0.8 if its local updater still works.
+## Building and releasing
+
+See [BUILD.md](BUILD.md).
+
+## Version history
+
+The full per-version change log is kept in [main/version.h](main/version.h).

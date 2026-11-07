@@ -23,5 +23,5 @@ image_version=data[0x30:0x50].split(b'\0',1)[0].decode('ascii','strict')
 project=data[0x50:0x70].split(b'\0',1)[0].decode('ascii','strict')
 if image_version!=version or project!='lyricflash':
     raise SystemExit('Refusing manifest with wrong app version or project')
-m={'name':'LyricFlash Alpha','version':version,'builds':[{'chipFamily':'ESP32-S3','parts':[{'path':'firmware/lyricflash-full.bin','offset':0}]}]}
+m={'name':'LyricFlash','version':version,'builds':[{'chipFamily':'ESP32-S3','parts':[{'path':'firmware/lyricflash-full.bin','offset':0}]}]}
 (site/'beta/manifest.json').write_text(json.dumps(m,indent=2)+'\n')

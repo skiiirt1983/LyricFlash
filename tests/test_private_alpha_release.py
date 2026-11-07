@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Protect the explicit private 0.8.130 OTA release gate from regression."""
+"""Protect the 1.0 build and release workflow from regression."""
 from pathlib import Path
 p=Path(__file__).resolve().parents[1]
 wf=(p/'.github/workflows/firmware.yml').read_text()
 preparer=(p/'tools/prepare_site.py').read_text()
 publisher=(p/'tools/publish_alpha_ota.py').read_text()
-assert "claude/trusting-cannon-wblknf" in wf
+assert "      - main\n" in wf
 assert "Run all host and native source tests before compiling" in wf
-assert "contains(github.event.head_commit.message, '[compile-once]')" in wf
+assert "github.ref == 'refs/heads/main'" in wf
 assert "needs: preflight" in wf
 assert "contents: write" in wf
 ordered=[
@@ -18,8 +18,9 @@ ordered=[
     "Validate OTA app and merged USB image",
     "Package and verify mandatory USB, OTA and checksummed ZIP",
     "Upload complete validated firmware artifacts",
-    "Publish and verify direct HTTPS private alpha OTA image",
-    "Publish verified private alpha as a GitHub prerelease",
+    "Publish and verify direct HTTPS OTA image",
+    "Publish the build for on-device updates",
+    "Publish the stable release",
 ]
 positions=[wf.index(token) for token in ordered]
 assert positions==sorted(positions), "Firmware validation/release order regressed"
@@ -30,11 +31,13 @@ for requirement in (
     "tools/create_preserve_usb.py _site",
     "tools/package_release.py --verify _site",
     "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin",
-    "LyricFlash-0.8.130-alpha-USB-and-OTA.zip",
+    "LyricFlash-1.0.0-USB-and-OTA.zip",
     "gh release create",
     "--prerelease --latest=false",
     "gh release view",
-    "0.8.130-alpha",
+    "1.0.0",
+    'gh release create "v$VERSION"',
+    "--latest\n",
 ):
     assert requirement in wf, requirement
 assert "image_version!=version" in preparer, "The manifest must match the binary"
@@ -46,4 +49,4 @@ assert 'TAG="alpha-build-${GITHUB_SHA:0:12}"' in wf
 assert 'BRANCH = "alpha-ota"' in publisher
 assert 'if request("GET",key+"?ref="+BRANCH,token) is None:' in publisher
 assert 'releases/"+tag+"/lyricflash-ota.bin' in publisher
-print("PASS: private-alpha compile-once, complete USB/OTA release and publication gates")
+print("PASS: main-branch build, complete USB/OTA release and publication gates")

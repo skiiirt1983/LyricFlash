@@ -3974,7 +3974,7 @@ static void wake_finish_async(void *arg)
         lv_timer_resume(clock_sweep_timer);
     }
 }
-/* 0.8.130: screen-off power saving. Touch and the LVGL loop slow to 40 ms
+/* 1.0.0: screen-off power saving. Touch and the LVGL loop slow to 40 ms
    while the panel is dark; full 10 ms responsiveness returns on wake. */
 static void ui_low_power(bool low)
 {
@@ -4826,7 +4826,7 @@ bool lf_ui_start(lf_settings_t *s)
     (void)ui_boot_benchmark_timer;
     lv_timer_create(on_tick, 50, NULL);
     /* 30 Hz sweep: visually smooth, half the redraw load of 60 Hz. */
-    /* 0.8.130: only the retired Diver face animated a sweep hand; the
+    /* 1.0.0: only the retired Diver face animated a sweep hand; the
        Basic face needs no 30 Hz timer. */
     clock_sweep_timer=lv_timer_create(on_clock_sweep, 1000, NULL);
     bsp_display_unlock();

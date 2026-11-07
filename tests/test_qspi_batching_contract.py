@@ -24,4 +24,4 @@ assert "CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1" in cfg
 assert "bsp_display_start_direct()" in (root/"main/main.c").read_text()
 assert "LF_PAGER_STALL_GUARD_MS 1600U" in ui
 assert "lf_network_set_idle(true);" in ui and "lf_network_set_idle(false);" in ui
-print("PASS: 0.8.130 TE-synchronized QSPI / 8-row DMA batching, 4-row fallback, unchanged safety/power")
+print("PASS: 1.0.0 TE-synchronized QSPI / 8-row DMA batching, 4-row fallback, unchanged safety/power")

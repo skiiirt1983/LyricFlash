@@ -1,14 +1,11 @@
 #pragma once
-/* LyricFlash private alpha: skip a second full-page repaint only when LVGL confirms the destination frame; retain Copy Log and wake safeguards.
- * retaining colour swatches, one Clock reset and separate
- * Time/AMPM, Battery, Weather and Date colours on six faces.
- * Additive schema 16 preserves NVS and prior users' clock customizations.
- * New open-licensed clock fonts remain monochrome on embedded LVGL.
- * Supersede 0.8.74/0.8.75 dynamic scroll restrictions; preserve 0.8.73 and older. */
-#define LF_VERSION "0.8.130-alpha"
-#define LF_VERSION_LABEL "ALPHA 0.8.130"
+/* LyricFlash 1.0.0 - first stable release for the Waveshare ESP32-S3 Touch AMOLED 1.75.
+ * Settings schema 16 is unchanged, so saved Wi-Fi and clock settings carry over. */
+#define LF_VERSION "1.0.0"
+#define LF_VERSION_LABEL "1.0.0"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
-/* 0.8.130: time zone set before the first Clock frame (no UTC flash); screen-off power saving (touch and LVGL loop 40 ms while dark); swipe compositor timer paused outside swipes; clock sweep timer 1 s. */
+/* 1.0.0: first stable release (0.8.130 code, alpha labels removed).
+   0.8.130: time zone set before the first Clock frame (no UTC flash); screen-off power saving (touch and LVGL loop 40 ms while dark); swipe compositor timer paused outside swipes; clock sweep timer 1 s. */
 /* 0.8.129: off-screen Clock keeps the current time and its swipe picture refreshes each minute; clock updated before the screen lights on wake (no stale times). */
 /* 0.8.128: one combined Clock Settings list (no gap, no Customize sub-screen); clock-face weather fixed (face was built before weather settings loaded); weather refetch on first time sync; AM/PM placed beside the digits. Fixes the 0.8.126/0.8.127 build. */
 /* 0.8.127: on-screen FPS/CPU meter removed. */

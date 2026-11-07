@@ -244,7 +244,7 @@ bool lf_network_is_connected(void)
            (xEventGroupGetBits(connected_event) & LF_CONNECTED);
 }
 
-/* Pacific Time is the Alpha default. Later versions can expose time zone
+/* Pacific Time is the default. Later versions can expose time zone
    as a user setting. NTP needs Wi-Fi but does not require a cloud account. */
 static void start_time_sync(void)
 {
@@ -1402,11 +1402,11 @@ static esp_err_t handle_device(httpd_req_t *req)
 {
     uint8_t mac[6]={0};
     esp_wifi_get_mac(in_ap?WIFI_IF_AP:WIFI_IF_STA,mac);
-    char response[220];
+    char response[240];
     snprintf(response,sizeof(response),
-        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"0.8.4-alpha\","
+        "{\"app\":\"LyricFlash\",\"name\":\"LyricFlash 1.75\",\"version\":\"%s\","
         "\"device_id\":\"LF-%02X%02X%02X\",\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\"}",
-        mac[3],mac[4],mac[5],mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
+        LF_VERSION,mac[3],mac[4],mac[5],mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
     httpd_resp_set_type(req,"application/json");
     return httpd_resp_sendstr(req,response);
 }
