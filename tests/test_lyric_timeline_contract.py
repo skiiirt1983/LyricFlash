@@ -6,7 +6,7 @@ ui=(p/"main/ui.c").read_text()
 sync_h=(p/"main/lyric_sync.h").read_text()
 sync=(p/"main/lyric_sync.c").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "1.0.4"' in version
+assert 'LF_VERSION "1.0.5"' in version
 assert "LF_SYNC_DISPLAY_DELAY_MS 1000U" in sync_h
 assert "lf_sync_visible_position_ms" in ui and "lf_sync_visible_position_ms" in sync
 assert "lf_lyric_clock_position(&timed_clock,current)" in ui
