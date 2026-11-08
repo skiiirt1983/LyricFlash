@@ -44,6 +44,12 @@ h1 em{font-style:normal;color:var(--mint)}
 .panel h3{font-size:20px;letter-spacing:-.03em;margin:12px 0}
 .panel p{font-size:12px;line-height:1.7;color:var(--muted)}
 .panel .num{font-size:11px;font-weight:850;color:var(--mint);background:#1b3b63;padding:8px 9px;border-radius:8px;margin-right:11px}
+/* Numbered section labels: badge and text side by side, so a label that wraps
+   (narrow phones, large system text) lines up instead of sliding under it. */
+.eyebrow:has(>.num){display:flex;align-items:center;gap:11px;line-height:1.5}
+.eyebrow>.num{flex:none;margin-right:0}
+/* Install buttons' messages are spans: one block each, never overlapping. */
+esp-web-install-button .message{display:block;margin-top:10px}
 .filedetails,.message{border:1px solid #39557c;background:#0b172b;border-radius:11px;padding:16px;color:#c6dbf5;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
 .message{margin:17px 0}.error{border-color:#7d5940;color:#f4c4a5;background:#2b211d}
 .warning{background:#352b24;border:1px solid #6d5736;color:#ecd2a4;border-radius:11px;padding:15px 17px;margin:19px 0;font-size:12px;line-height:1.7}
