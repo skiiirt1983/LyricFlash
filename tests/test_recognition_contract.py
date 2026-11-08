@@ -39,7 +39,7 @@ assert 'cJSON_AddStringToObject(reply,"artist",s.artist)' in net
 assert 'cJSON_AddBoolToObject(reply,"token_configured",lf_recog_has_token())' in net
 assert 'cJSON_AddStringToObject(reply,"api_token",' not in net
 assert "if(!manual_audio_header(req))" in net
-assert 'cfg.max_uri_handlers=28' in net
+assert 'cfg.max_uri_handlers=32' in net
 assert 'lf_recog_busy()' in net
 assert "lf_recog_start()" in net
 assert "lf_recog_stop()" in net

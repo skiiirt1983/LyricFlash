@@ -103,12 +103,16 @@ allowed_httpd = {
     "HTTPD_408_REQ_TIMEOUT", "HTTPD_403_FORBIDDEN", "HTTPD_DEFAULT_CONFIG",
     "HTTPD_404_NOT_FOUND",
 }
-# Captive portal (1.0.3, keep in all future builds): joining the setup network
+# Captive portal (1.0.4, keep in all future builds): joining the setup network
 # must open the LyricFlash page automatically, and only on the setup network.
 require("httpd_register_err_handler(server,HTTPD_404_NOT_FOUND,handle_not_found);" in network
         and "if(in_ap)start_captive_portal();" in network
         and "lf_captive_dns_start(" in network
-        and "ESP_NETIF_CAPTIVEPORTAL_URI" in network,
+        and "ESP_NETIF_CAPTIVEPORTAL_URI" in network
+        and "ESP_NETIF_DOMAIN_NAME_SERVER" in network
+        and '{.uri="/captive",.method=HTTP_GET,.handler=handle_captive_api}' in network
+        and "cfg.lru_purge_enable=true;" in network
+        and "CONFIG_LWIP_MAX_SOCKETS=16" in read("sdkconfig.defaults"),
         "Setup network captive portal (DNS, redirect, DHCP URI) missing")
 nf=network.split("static esp_err_t handle_not_found(",1)[1].split("static void start_captive_portal",1)[0]
 require("if (!in_ap) {" in nf and "HTTPD_404_NOT_FOUND" in nf,
@@ -309,7 +313,7 @@ require('lf_ui_display_stats_t' in read('main/ui.h') and
         "Thread-safe display metrics contract missing")
 
 # Hardware display recovery: local independently licensed BSP has PSRAM -> DMA
-# staging and a one-slot SPI transfer queue. 1.0.3: tear mode NONE (partial
+# staging and a one-slot SPI transfer queue. 1.0.4: tear mode NONE (partial
 # render) with double-buffered internal-SRAM strips; TE_SYNC full-frame retired.
 bsp=read('components/esp32_s3_touch_amoled_1_75/esp32_s3_touch_amoled_1_75.c')
 display_header=read('components/esp32_s3_touch_amoled_1_75/include/bsp/display.h')
@@ -445,7 +449,7 @@ require('primary_pager_snap_started_ms' in ui and
 # No snapshot image, no off-screen proxy, no dynamic hiding of real clock.
 # Repaint on Clock settle *without requiring an additional touch*.
 commit=ui.split('static void primary_pager_commit(int index)\n{',1)[1].split('static void primary_pager_start_snap',1)[0]
-# 1.0.3: page snapshots are used during swipes only; the commit must
+# 1.0.4: page snapshots are used during swipes only; the commit must
 # restore live widgets AND explicitly repaint the settled page.
 require('snap_exit();' in commit and
         'lv_obj_invalidate(primary_pager_pages[index]);' in commit and
@@ -528,7 +532,7 @@ require('"/api/hardware/mic-test"' in network and
         'X-LyricFlash-Manual-Test' in network and
         'X-LyricFlash-Manual-Test' in web and
         'audio_uploaded' in network and 'audio_saved' in network and
-        'max_uri_handlers=28' in network,
+        'max_uri_handlers=32' in network,
         "0.8.31 manual-only Web UI test and no raw audio exposure")
 
 # 0.8.32: frame the physical ES7210 correctly; never touch the display path.

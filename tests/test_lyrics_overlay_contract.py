@@ -6,7 +6,7 @@ ui=(p/"main/ui.c").read_text()
 net=(p/"main/network.c").read_text()
 header=(p/"main/ui.h").read_text()
 version=(p/"main/version.h").read_text()
-assert 'LF_VERSION "1.0.3"' in version
+assert 'LF_VERSION "1.0.4"' in version
 assert "static lv_obj_t *timed_overlay;" in ui
 scene=ui.split("static void build_timed_lyrics_now(const lf_recog_snapshot_t *song)\n{",1)[1].split("\nstatic void build_preview_now",1)[0]
 assert "if(primary_pager && screen)" in scene

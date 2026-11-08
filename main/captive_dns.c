@@ -17,6 +17,17 @@
 static const char *TAG = "LFCaptiveDNS";
 static TaskHandle_t dns_task;
 static uint32_t answer_ip; /* network byte order */
+static volatile bool dns_running;
+static volatile uint32_t dns_queries, dns_answered, http_redirects;
+void lf_captive_note_redirect(void) { http_redirects++; }
+void lf_captive_stats(lf_captive_stats_t *out)
+{
+    if (!out) return;
+    out->running = dns_running;
+    out->queries = dns_queries;
+    out->answered = dns_answered;
+    out->redirects = http_redirects;
+}
 
 #define DNS_PORT 53
 #define DNS_MAX LF_CAPTIVE_DNS_MAX
@@ -43,14 +54,17 @@ static void dns_worker(void *arg)
         return;
     }
     ESP_LOGI(TAG, "Captive portal DNS active");
+    dns_running = true;
     static uint8_t buf[DNS_MAX];
     for (;;) {
         struct sockaddr_in from;
         socklen_t from_len = sizeof from;
         const int n = recvfrom(sock, buf, sizeof buf, 0, (struct sockaddr *)&from, &from_len);
         if (n <= 0) continue;
+        dns_queries++;
         const size_t reply = lf_captive_dns_reply(buf, (size_t)n, answer_ip);
-        if (reply) sendto(sock, buf, reply, 0, (struct sockaddr *)&from, from_len);
+        if (reply && sendto(sock, buf, reply, 0, (struct sockaddr *)&from, from_len) > 0)
+            dns_answered++;
     }
 }
 

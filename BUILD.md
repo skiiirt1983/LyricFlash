@@ -22,9 +22,10 @@ Use 1.0.x for fixes and 1.x.0 for new features.
 
 - **Setup network:** when the device has no working Wi-Fi it starts an open network named `LyricFlash-XXXX` (no password).
 - **Captive portal:** joining that network must open the LyricFlash page by itself on phones and computers. Three pieces make this work, and tests enforce all three:
-  - DNS answers every lookup with the device's address (`main/captive_dns.c`).
+  - DHCP names the device as the network's DNS server, and DNS answers every lookup with the device's address (`main/captive_dns.c`).
   - Unknown pages redirect to the home page, on the setup network only (`handle_not_found` in `main/network.c`).
-  - The portal address is sent in DHCP option 114.
+  - DHCP option 114 points to `/captive`, which answers in the RFC 8908 captive-portal format.
+  - Diagnostics report `captive_dns_queries`, `captive_dns_answered` and `captive_redirects`.
 
 ## Local build
 

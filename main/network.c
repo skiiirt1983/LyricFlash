@@ -1329,6 +1329,13 @@ static esp_err_t handle_diagnostics(httpd_req_t *req)
         cJSON_AddNumberToObject(root, "snapshot_last_ms", snap_last);
         cJSON_AddNumberToObject(root, "snapshot_max_ms", snap_max);
         cJSON_AddNumberToObject(root, "snapshot_sync_retakes", lf_ui_snapshot_sync_retakes());
+        lf_captive_stats_t portal;
+        lf_captive_stats(&portal);
+        cJSON_AddBoolToObject(root, "setup_network_active", in_ap);
+        cJSON_AddBoolToObject(root, "captive_dns_running", portal.running);
+        cJSON_AddNumberToObject(root, "captive_dns_queries", portal.queries);
+        cJSON_AddNumberToObject(root, "captive_dns_answered", portal.answered);
+        cJSON_AddNumberToObject(root, "captive_redirects", portal.redirects);
         cJSON *arr=cJSON_AddArrayToObject(root, "swipes_recent");
         static const char *names[3]={"clock","home","settings"};
         for(unsigned i=0;arr && i<sw.count;i++){
@@ -1751,11 +1758,24 @@ static esp_err_t handle_not_found(httpd_req_t *req, httpd_err_code_t err)
     }
     char location[40];
     snprintf(location, sizeof location, "http://%s/", address);
+    lf_captive_note_redirect();
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", location);
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     httpd_resp_send(req, "LyricFlash setup", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
+}
+/* RFC 8908 captive portal API, announced through DHCP option 114. */
+static esp_err_t handle_captive_api(httpd_req_t *req)
+{
+    char body[96];
+    if (in_ap)
+        snprintf(body, sizeof body,
+                 "{\"captive\":true,\"user-portal-url\":\"http://%s/\"}", address);
+    else snprintf(body, sizeof body, "{\"captive\":false}");
+    httpd_resp_set_type(req, "application/captive+json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_sendstr(req, body);
 }
 static void start_captive_portal(void)
 {
@@ -1765,14 +1785,25 @@ static void start_captive_portal(void)
         ESP_LOGW(TAG, "Captive portal: setup network address unavailable");
         return;
     }
-    /* RFC 8910: newer phones read the portal address straight from DHCP. */
     char uri[32];
-    snprintf(uri, sizeof uri, "http://" IPSTR "/", IP2STR(&ip.ip));
+    snprintf(uri, sizeof uri, "http://" IPSTR "/captive", IP2STR(&ip.ip));
     (void)esp_netif_dhcps_stop(ap);
+    /* 1.0.4: DHCP must name the device as the DNS server, or phones never ask
+       it and the portal cannot appear. ESP-IDF only offers DNS when told to. */
+    esp_netif_dns_info_t dns = {0};
+    dns.ip.type = ESP_IPADDR_TYPE_V4;
+    dns.ip.u_addr.ip4.addr = ip.ip.addr;
+    uint8_t offer_dns = 0x02; /* OFFER_DNS */
+    if (esp_netif_set_dns_info(ap, ESP_NETIF_DNS_MAIN, &dns) != ESP_OK ||
+        esp_netif_dhcps_option(ap, ESP_NETIF_OP_SET, ESP_NETIF_DOMAIN_NAME_SERVER,
+                               &offer_dns, sizeof offer_dns) != ESP_OK)
+        ESP_LOGW(TAG, "Captive portal: DHCP DNS offer not set");
+    /* RFC 8910: newer phones read the portal address straight from DHCP. */
     if (esp_netif_dhcps_option(ap, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI,
                                uri, strlen(uri)) != ESP_OK)
         ESP_LOGW(TAG, "Captive portal: DHCP option not set");
-    (void)esp_netif_dhcps_start(ap);
+    if (esp_netif_dhcps_start(ap) != ESP_OK)
+        ESP_LOGW(TAG, "Captive portal: DHCP restart failed");
     if (!lf_captive_dns_start(ip.ip.addr))
         ESP_LOGW(TAG, "Captive portal DNS did not start");
 }
@@ -1780,8 +1811,11 @@ static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
-    cfg.max_uri_handlers=28; /* Read-only song database added; no new audio routes. */
+    cfg.max_uri_handlers=32; /* 1.0.4: captive portal API route */
     cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
+    /* 1.0.4: phones probing a captive portal open several connections at
+       once; allow more and recycle the oldest idle one instead of refusing. */
+    cfg.max_open_sockets=10; cfg.lru_purge_enable=true;
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
         {.uri="/",.method=HTTP_GET,.handler=handle_home},
@@ -1811,7 +1845,8 @@ static bool serve(void)
         {.uri="/api/device",.method=HTTP_GET,.handler=handle_device},
         {.uri="/wifi",.method=HTTP_POST,.handler=handle_wifi},
         {.uri="/api/wifi-scan",.method=HTTP_GET,.handler=handle_scan},
-        {.uri="/update",.method=HTTP_POST,.handler=handle_update}
+        {.uri="/update",.method=HTTP_POST,.handler=handle_update},
+        {.uri="/captive",.method=HTTP_GET,.handler=handle_captive_api}
     };
     for(size_t i=0;i<sizeof(routes)/sizeof(routes[0]);i++)
         if(httpd_register_uri_handler(server,&routes[i])!=ESP_OK) return false;
