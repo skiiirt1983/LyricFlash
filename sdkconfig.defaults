@@ -80,3 +80,6 @@ CONFIG_ESP_WIFI_IRAM_OPT=n
 CONFIG_ESP_WIFI_RX_IRAM_OPT=n
 # 0.8.124: page snapshots for swipes.
 CONFIG_LV_USE_SNAPSHOT=y
+# 1.0.4: captive portal. The web server keeps 10 client sockets (phones open
+# several at once) plus 3 internal; the setup-network DNS responder needs one.
+CONFIG_LWIP_MAX_SOCKETS=16
