@@ -8,6 +8,7 @@ cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/ota_health_logic.c tests
 /tmp/lyricflash_test_ota_health
 rm -f /tmp/lyricflash_test_ota_health
 python3 tests/test_preflight_contracts.py
+python3 tests/test_clock_settings_apply_contract.py
 python3 tests/test_touch_release_blackout_contract.py
 python3 tests/test_wake_release_lifecycle_contract.py
 python3 tests/test_wake_recovery_watchdog_contract.py
