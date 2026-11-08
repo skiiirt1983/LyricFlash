@@ -103,7 +103,7 @@ allowed_httpd = {
     "HTTPD_408_REQ_TIMEOUT", "HTTPD_403_FORBIDDEN", "HTTPD_DEFAULT_CONFIG",
     "HTTPD_404_NOT_FOUND",
 }
-# Captive portal (1.0.7, keep in all future builds): joining the setup network
+# Captive portal (1.0.8, keep in all future builds): joining the setup network
 # must open the LyricFlash page automatically, and only on the setup network.
 require("httpd_register_err_handler(server,HTTPD_404_NOT_FOUND,handle_not_found);" in network
         and "if(in_ap)start_captive_portal();" in network
@@ -314,7 +314,7 @@ require('lf_ui_display_stats_t' in read('main/ui.h') and
         "Thread-safe display metrics contract missing")
 
 # Hardware display recovery: local independently licensed BSP has PSRAM -> DMA
-# staging and a one-slot SPI transfer queue. 1.0.7: tear mode NONE (partial
+# staging and a one-slot SPI transfer queue. 1.0.8: tear mode NONE (partial
 # render) with double-buffered internal-SRAM strips; TE_SYNC full-frame retired.
 bsp=read('components/esp32_s3_touch_amoled_1_75/esp32_s3_touch_amoled_1_75.c')
 display_header=read('components/esp32_s3_touch_amoled_1_75/include/bsp/display.h')
@@ -450,7 +450,7 @@ require('primary_pager_snap_started_ms' in ui and
 # No snapshot image, no off-screen proxy, no dynamic hiding of real clock.
 # Repaint on Clock settle *without requiring an additional touch*.
 commit=ui.split('static void primary_pager_commit(int index)\n{',1)[1].split('static void primary_pager_start_snap',1)[0]
-# 1.0.7: page snapshots are used during swipes only; the commit must
+# 1.0.8: page snapshots are used during swipes only; the commit must
 # restore live widgets AND explicitly repaint the settled page.
 require('snap_exit();' in commit and
         'lv_obj_invalidate(primary_pager_pages[index]);' in commit and
