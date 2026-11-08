@@ -37,7 +37,7 @@ setup_warning=ui.split("static const char *home_setup_warning(void)",1)[1].split
 check('home_setup_warning()' in on_click and 'lf_recog_has_token()' in setup_warning
       and 'lf_network_is_connected()' in setup_warning,
       "Missing actionable failure states")
-# 1.0.8: the Wi-Fi / AudD warning appears only when Play is pressed, in red,
+# 1.0.7: the Wi-Fi / AudD warning appears only when Play is pressed, in red,
 # under the Play button, and clears itself; never a permanent Home caption.
 refresh=ui.split("static void home_refresh(uint64_t current)",1)[1].split("static void on_home_scan",1)[0]
 check('home_setup_warning' not in refresh and '0xFF4D4D' in refresh

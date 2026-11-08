@@ -1,1 +1,129 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="author" content="skiiirt1983"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#050910"><title>LyricFlash · Music & Clock Control</title><meta name="description" content="Official LyricFlash ESP32-S3 firmware installer and factory recovery."><link rel="stylesheet" href="assets/pi-theme.css"></head><body data-page="stable"><div class="app"><header class="top"><a class="brand" href="./"><span class="brandicon">♫</span><span><b>LYRICFLASH</b><small>MUSIC & CLOCK CONTROL / STABLE CHANNEL</small></span></a><nav class="nav" aria-label="Site navigation"><a href="./" aria-current="page">Stable</a><a href="beta/" >Beta</a><a href="restore/" >Recovery</a><span class="tag"><span class="dot"></span>STABLE · v1.0</span></nav></header><main><div class="eyebrow">YOUR MUSIC DISPLAY, ONE PLACE</div><h1>Your device,<br><em>ready when you are.</em></h1><p class="lead">Install LyricFlash by USB once, then keep it updated over Wi-Fi. A streamlined control centre for the Waveshare 1.75-inch AMOLED—no Raspberry Pi, scanning or terminal required.</p><section class="hero"><div class="circle" aria-hidden="true"><div class="inner"><span class="inner-icon">♫</span><b>LYRICFLASH</b><small>466 × 466 AMOLED</small></div></div><div class="hero-copy"><span class="eyebrow">OFFICIAL FIRMWARE</span><h2>A fresh start for your ESP32.</h2><p>Your first installation uses a USB data cable and a supported desktop browser. After setup, LyricFlash handles firmware updates through its own local Wi-Fi updater.</p><span class="status"><span class="dot"></span>STABLE v1.0 · NOT RELEASED</span><p class="hint">The stable installer remains unavailable until v1.0 is built and validated.</p></div></section><div class="sectiontop"><div><div class="eyebrow">CHOOSE YOUR ACTION</div><h2>Firmware options</h2></div><small>Choose the channel that matches your device</small></div><div class="choices"><div class="choice active disabled"><span class="miniicon">♫</span><b>Install LyricFlash v1.0</b><small>Official stable release. Not yet available.</small><span class="arrow">·</span></div><a class="choice" href="beta/"><span class="miniicon">◇</span><b>Install Alpha / Beta</b><small>Development firmware for hands-on testing over USB.</small><span class="arrow">↗</span></a><a class="choice" href="restore/"><span class="miniicon blue">↺</span><b>Restore Waveshare</b><small>Official manufacturer firmware recovery over USB.</small><span class="arrow">↗</span></a></div><div class="work"><section class="panel"><div class="eyebrow"><span class="num">01</span>FIRST-TIME SETUP</div><h3>Connect by USB</h3><p>Use Chrome or Edge with a data-capable USB cable. Connect the ESP32-S3 and follow the visual installer's prompts.</p><div class="filedetails">Stable installer: awaiting a tested v1.0 full-flash image.</div><button class="primary" disabled>Install stable firmware · Not yet available</button></section><section class="panel"><div class="eyebrow"><span class="num">02</span>AFTER INSTALLATION</div><h3>Updates over Wi-Fi</h3><p>Use LyricFlash's local, PIN-protected update page from your browser. No USB cable is needed for routine OTA firmware updates.</p><div class="filedetails">OTA is supported by Alpha 0.3, but still requires an on-device hardware test before relying on it.</div><a class="secondary" href="beta/">View beta firmware</a></section></div><a class="restore-entry" href="restore/"><span class="miniicon">↺</span><span><b>Need to return to the original Waveshare firmware?</b><small>USB factory recovery stays available even when LyricFlash cannot start.</small></span><span class="arrow">↗</span></a></main><footer><span style="color:var(--mint)">LYRICFLASH &nbsp; <span style="color:#75968e">MUSIC & CLOCK CONTROL</span></span><span>USB initial setup · OTA updates afterward</span></footer></div></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="author" content="skiiirt1983">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050910">
+<title>LyricFlash · Install</title>
+<meta name="description" content="Install or update LyricFlash on the Waveshare ESP32-S3 Touch AMOLED 1.75.">
+<link rel="stylesheet" href="assets/pi-theme.css">
+<script type="module" src="https://unpkg.com/esp-web-tools@10.1.0/dist/web/install-button.js?module"></script>
+</head>
+<body data-page="stable">
+<div class="app">
+<header class="top">
+<a class="brand" href="./"><span class="brandicon">♫</span><span><b>LYRICFLASH</b><small>MUSIC & CLOCK CONTROL</small></span></a>
+<nav class="nav" aria-label="Site navigation">
+<a href="./" aria-current="page">Install</a>
+<a href="restore/">Recovery</a>
+<span class="tag"><span class="dot"></span><span id="versionTag">LYRICFLASH</span></span>
+</nav>
+</header>
+<main>
+<div class="eyebrow">SONG ID · TIMED LYRICS · CLOCK</div>
+<h1>LyricFlash<br><em>for your round display.</em></h1>
+<p class="lead">Firmware for the Waveshare ESP32-S3 Touch AMOLED 1.75. It identifies the song playing around you, shows its timed lyrics, and doubles as a customizable clock with weather. Install once over USB; after that it updates itself over Wi-Fi.</p>
+
+<section class="hero">
+<div class="circle" aria-hidden="true"><div class="inner"><span class="inner-icon">♫</span><b>LYRICFLASH</b><small>466 × 466 AMOLED</small></div></div>
+<div class="hero-copy">
+<div class="eyebrow">CURRENT RELEASE</div>
+<h2 id="releaseTitle">LyricFlash</h2>
+<span class="status"><span class="dot"></span><span id="buildStatus">Checking the published firmware…</span></span>
+<p>Waveshare ESP32-S3 Touch AMOLED 1.75 · 466 × 466 round AMOLED · 16 MB flash.</p>
+<p><a class="secondary" href="https://github.com/skiiirt1983/LyricFlash/releases/latest" target="_blank" rel="noopener">Release notes and downloads ↗</a></p>
+</div>
+</section>
+
+<div class="sectiontop"><div><div class="eyebrow">CHOOSE YOUR ACTION</div><h2>Install or update</h2></div><small>Pick the one that matches your device</small></div>
+
+<div class="work">
+<section class="panel">
+<div class="eyebrow"><span class="num">01</span>ALREADY RUNNING LYRICFLASH</div>
+<h3>Update over Wi-Fi</h3>
+<p>No cable needed. Open the device's web page (its address is in <b>Settings → Device Settings</b> on the device), go to <b>Firmware</b> and install the newest version. Saved Wi-Fi and settings are kept.</p>
+<p class="hint">This is the normal way to update.</p>
+</section>
+
+<section class="panel">
+<div class="eyebrow"><span class="num">02</span>INSTALL OVER USB</div>
+<h3>Connect by USB</h3>
+<p>Use desktop Chrome or Edge and a USB <b>data</b> cable. If the device is not detected, hold <b>BOOT</b>, press <b>RESET</b>, then release <b>BOOT</b>.</p>
+<div id="blocked" class="message error">USB install unlocks once the published firmware has been checked.</div>
+<div id="install" class="hidden">
+<h3>Update and keep settings</h3>
+<p>For a device that already runs LyricFlash. When asked, do <b>not</b> erase the device.</p>
+<esp-web-install-button manifest="beta/manifest-preserve.json">
+<button slot="activate" class="primary">Update LyricFlash · keep Wi-Fi and settings</button>
+<span slot="unsupported" class="message error">This browser cannot install over USB. Use desktop Chrome or Edge.</span>
+<span slot="not-allowed" class="message error">USB installation needs this page over HTTPS.</span>
+</esp-web-install-button>
+</div>
+<div id="full-install" class="hidden">
+<h3>New install</h3>
+<p>For a new device, or to start fresh. This erases saved Wi-Fi and settings.</p>
+<esp-web-install-button manifest="beta/manifest.json">
+<button slot="activate" class="secondary">Install LyricFlash · erase and start fresh</button>
+<span slot="unsupported" class="message error">This browser cannot install over USB. Use desktop Chrome or Edge.</span>
+<span slot="not-allowed" class="message error">USB installation needs this page over HTTPS.</span>
+</esp-web-install-button>
+</div>
+</section>
+</div>
+
+<section class="panel" style="margin-top:18px">
+<div class="eyebrow"><span class="num">03</span>FIRST-TIME SETUP</div>
+<h3>Connect it to your Wi-Fi</h3>
+<p>After a new install the device starts its own open Wi-Fi network called <b>LyricFlash-Setup</b>. Join it from your phone or computer and the setup page opens by itself (or go to <b>http://192.168.4.1</b>). Choose your home Wi-Fi there.</p>
+<p>For Song ID, add your AudD API key on the device's web page. Pressing Play without Wi-Fi or a key shows a red reminder under the Play button.</p>
+</section>
+
+<section class="panel" style="margin-top:18px" aria-labelledby="local-heading">
+<div class="eyebrow"><span class="num">04</span>ADVANCED · LOCAL FILE</div>
+<h3 id="local-heading">Install a firmware file from your computer</h3>
+<p>Already downloaded a release? Choose its <b>FULL-USB</b> .bin below. The file stays on your computer; the browser checks it is a complete LyricFlash image for the ESP32-S3 before enabling the installer.</p>
+<label class="upload" for="localBin"><b>Choose full USB firmware (.bin)</b><input id="localBin" type="file" accept=".bin,application/octet-stream" aria-describedby="localFileStatus"></label>
+<div class="filedetails" id="localFileStatus" role="status" aria-live="polite">Choose a complete USB firmware .bin to enable installation.</div>
+<esp-web-install-button id="local-install" class="hidden" manifest="beta/manifest.json">
+<button slot="activate">Connect &amp; install selected file</button>
+<span slot="unsupported" class="message error">This browser cannot install over USB. Use desktop Chrome or Edge.</span>
+<span slot="not-allowed" class="message error">USB installation needs this page over HTTPS.</span>
+</esp-web-install-button>
+<p id="localInstallNote" class="hint hidden">This writes the selected full image at address 0x0 and erases saved Wi-Fi and settings. Do not choose the over-the-air (lyricflash-ota.bin) file.</p>
+</section>
+
+<a class="restore-entry" href="restore/"><span class="miniicon">↺</span><span><b>Need the original Waveshare firmware back?</b><small>Factory recovery over USB works even when LyricFlash cannot start.</small></span><span class="arrow">↗</span></a>
+<div class="linkline">
+<a href="https://github.com/skiiirt1983/LyricFlash" target="_blank" rel="noopener">Source on GitHub ↗</a>
+<a href="https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-1.75" target="_blank" rel="noopener">Waveshare hardware documentation ↗</a>
+</div>
+</main>
+<footer><span style="color:var(--mint)">LYRICFLASH &nbsp; <span style="color:#75968e">MUSIC & CLOCK CONTROL</span></span><span>by skiiirt1983 · USB once, Wi-Fi updates afterward</span></footer>
+</div>
+<script>
+async function check(){
+ const status=document.querySelector('#buildStatus');
+ try{
+  const r=await fetch('beta/manifest.json',{cache:'no-store'});
+  if(!r.ok)throw Error('not published yet');
+  const m=await r.json();
+  if(!m.builds?.some(b=>b.chipFamily==='ESP32-S3'&&b.parts?.some(p=>p.offset===0&&p.path==='firmware/lyricflash-full.bin')))throw Error('manifest invalid');
+  for(const name of ['beta/firmware/lyricflash-full.bin','beta/firmware/lyricflash-ota.bin','beta/firmware/lyricflash-otadata-reset.bin','beta/manifest-preserve.json']){
+   const h=await fetch(name,{method:'HEAD',cache:'no-store'});if(!h.ok)throw Error('missing '+name);
+  }
+  const preserve=await (await fetch('beta/manifest-preserve.json',{cache:'no-store'})).json();
+  if(preserve.version!==m.version||!preserve.builds?.some(b=>b.chipFamily==='ESP32-S3'&&b.parts?.some(p=>p.offset===0x110000&&p.path==='firmware/lyricflash-ota.bin')&&b.parts?.some(p=>p.offset===0x109000&&p.path==='firmware/lyricflash-otadata-reset.bin')))throw Error('keep-settings manifest invalid');
+  document.querySelector('#releaseTitle').textContent='LyricFlash '+m.version;
+  document.querySelector('#versionTag').textContent='v'+m.version;
+  status.textContent='Version '+m.version+' ready to install';
+  document.querySelector('#blocked').classList.add('hidden');
+  document.querySelector('#install').classList.remove('hidden');
+  document.querySelector('#full-install').classList.remove('hidden');
+ }catch(e){status.textContent='Firmware not available: '+e.message;}
+}
+check();
+</script>
+<script src="beta/local-flash.js" defer></script>
+</body>
+</html>

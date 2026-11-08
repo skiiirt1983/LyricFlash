@@ -3,7 +3,7 @@
 from pathlib import Path
 
 root=Path(__file__).resolve().parents[1]
-html=(root/'docs/beta/index.html').read_text()
+html=(root/'docs/index.html').read_text()  # installer moved to the site root in 1.0.8
 script=(root/'docs/beta/local-flash.js').read_text()
 assert 'local-flash.js' in html
 assert 'id="localBin"' in html
