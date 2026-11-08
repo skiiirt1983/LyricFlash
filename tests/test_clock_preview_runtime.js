@@ -63,7 +63,9 @@ const runtime=new Function("document","fetch","setInterval",
   el("clock_face").dispatch("change");
   const graphic=el("clock-preview").innerHTML;
   assert(graphic.length>150, "Missing live SVG for "+i);
-  assert(graphic.includes("#"+colours[i].toString(16).padStart(6,"0")),
+  /* The Basic face (5) is always drawn on black, like the device. */
+  const dial=i===5?"#000000":"#"+colours[i].toString(16).padStart(6,"0");
+  assert(graphic.includes(dial),
     "Face "+i+" preview has no CSS-legal dial colour");
  }
  el("clock_face").value="5";el("clock_face").dispatch("change");

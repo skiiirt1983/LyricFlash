@@ -1821,21 +1821,20 @@ bool lf_network_start(void)
         in_ap=true;
         esp_wifi_stop();
     }
-    /* Fallback to a password-protected access point if home Wi-Fi is unavailable. */
+    /* Fallback to an open setup access point if home Wi-Fi is unavailable. */
     in_ap=true;
     uint8_t mac[6]={0};
     esp_wifi_get_mac(WIFI_IF_STA,mac);
     snprintf(ap_ssid,sizeof ap_ssid,"LyricFlash-%02X%02X",mac[4],mac[5]);
-    /* Private device's intentionally simple WPA2 setup password.
-       Never replace/erase the saved home Wi-Fi credentials. */
-    strlcpy(ap_pass, "lyricflash", sizeof ap_pass);
+    /* 1.0.1: open setup network (no password) so anyone setting the device
+       up can join it. Never replace/erase the saved home Wi-Fi credentials. */
+    ap_pass[0]=0;
     wifi_config_t apcfg={0};
     strlcpy((char *)apcfg.ap.ssid,ap_ssid,sizeof(apcfg.ap.ssid));
-    strlcpy((char *)apcfg.ap.password,ap_pass,sizeof(apcfg.ap.password));
     apcfg.ap.ssid_len=strlen(ap_ssid);
     apcfg.ap.channel=6;
     apcfg.ap.max_connection=2;
-    apcfg.ap.authmode=WIFI_AUTH_WPA2_PSK;
+    apcfg.ap.authmode=WIFI_AUTH_OPEN;
     if(esp_wifi_set_mode(WIFI_MODE_AP)!=ESP_OK ||
        esp_wifi_set_config(WIFI_IF_AP,&apcfg)!=ESP_OK ||
        esp_wifi_start()!=ESP_OK) return false;
