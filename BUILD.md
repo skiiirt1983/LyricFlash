@@ -18,6 +18,14 @@ To release a new version:
 
 Use 1.0.x for fixes and 1.x.0 for new features.
 
+## Rules for all future versions
+
+- **Setup network:** when the device has no working Wi-Fi it starts an open network named `LyricFlash-XXXX` (no password).
+- **Captive portal:** joining that network must open the LyricFlash page by itself on phones and computers. Three pieces make this work, and tests enforce all three:
+  - DNS answers every lookup with the device's address (`main/captive_dns.c`).
+  - Unknown pages redirect to the home page, on the setup network only (`handle_not_found` in `main/network.c`).
+  - The portal address is sent in DHCP option 114.
+
 ## Local build
 
 With ESP-IDF 5.5.4 installed:

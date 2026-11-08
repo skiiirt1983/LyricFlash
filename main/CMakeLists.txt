@@ -33,6 +33,8 @@ idf_component_register(
         "power.c"
         "power_logic.c"
         "network.c"
+        "captive_dns.c"
+        "captive_dns_logic.c"
         "wifi_json.c"
     INCLUDE_DIRS "."
     REQUIRES
@@ -44,6 +46,7 @@ idf_component_register(
         esp_https_ota
         esp_wifi
         esp_netif
+        lwip
         esp_event
         esp_http_server
         esp_http_client

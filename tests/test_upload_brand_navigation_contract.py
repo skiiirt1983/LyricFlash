@@ -6,7 +6,7 @@ ui=(r/"main/ui.c").read_text()
 worker=(r/"main/recognition.c").read_text()
 header=(r/"main/recognition.h").read_text()
 network=(r/"main/network.c").read_text()
-assert 'LF_VERSION "1.0.2"' in (r/"main/version.h").read_text()
+assert 'LF_VERSION "1.0.3"' in (r/"main/version.h").read_text()
 assert "uint64_t upload_progress_ms;" in header
 assert "result.upload_progress_ms=lf_recog_now_ms();" in worker
 assert "result.upload_bytes_sent+=(uint32_t)written;" in worker

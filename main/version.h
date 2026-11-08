@@ -1,9 +1,11 @@
 #pragma once
 /* LyricFlash 1.0.0 - first stable release for the Waveshare ESP32-S3 Touch AMOLED 1.75.
  * Settings schema 16 is unchanged, so saved Wi-Fi and clock settings carry over. */
-#define LF_VERSION "1.0.2"
-#define LF_VERSION_LABEL "1.0.2"
+#define LF_VERSION "1.0.3"
+#define LF_VERSION_LABEL "1.0.3"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 1.0.3: captive portal on the setup network: joining LyricFlash-XXXX opens the setup page automatically
+   (DNS answers every lookup with the device, unknown pages redirect home, DHCP option 114). */
 /* 1.0.2: web Clock Studio saves now apply every setting (time/battery/date/weather colours, battery size,
    icon and %, date format/size/position, weather size/position were validated but dropped); the device's
    Time color and Date buttons now change what the clock draws. */

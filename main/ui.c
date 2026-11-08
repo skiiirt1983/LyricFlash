@@ -3039,7 +3039,7 @@ static void build_device_settings_now(void)
     }else if(*lf_network_ap_ssid()){
         snprintf(text,sizeof text,"Join %.32s",lf_network_ap_ssid());
         device_line(content,text,308,&lv_font_montserrat_20,0xFFD866);
-        device_line(content,"Open network, then go to 192.168.4.1",336,
+        device_line(content,"No password; setup page opens by itself (192.168.4.1)",336,
                     &lv_font_montserrat_16,0xD6F0FF);
     }else{
         device_line(content,"Connecting...",308,&lv_font_montserrat_20,0xFFFFFF);

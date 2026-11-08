@@ -15,6 +15,7 @@
 #include "basic_open_face.h"
 #include "web_device_html.h"
 #include "web_weather_html.h"
+#include "captive_dns.h"
 #include "esp_https_ota.h"
 #include "esp_crt_bundle.h"
 #include <stdatomic.h>
@@ -1737,6 +1738,44 @@ static esp_err_t handle_github_install(httpd_req_t *req)
     return httpd_resp_sendstr(req,"Firmware download started on device");
 }
 
+/* 1.0.3 captive portal: on the setup network, any page the device does not
+   serve (the "am I online?" checks of iOS, macOS, Android and Windows, or a
+   typed address) is redirected to the LyricFlash home page, so the setup page
+   opens by itself when someone joins. On home Wi-Fi unknown pages stay 404. */
+static esp_err_t handle_not_found(httpd_req_t *req, httpd_err_code_t err)
+{
+    (void)err;
+    if (!in_ap) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Not found");
+        return ESP_FAIL;
+    }
+    char location[40];
+    snprintf(location, sizeof location, "http://%s/", address);
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", location);
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_send(req, "LyricFlash setup", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+static void start_captive_portal(void)
+{
+    esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    esp_netif_ip_info_t ip = {0};
+    if (!ap || esp_netif_get_ip_info(ap, &ip) != ESP_OK || ip.ip.addr == 0) {
+        ESP_LOGW(TAG, "Captive portal: setup network address unavailable");
+        return;
+    }
+    /* RFC 8910: newer phones read the portal address straight from DHCP. */
+    char uri[32];
+    snprintf(uri, sizeof uri, "http://" IPSTR "/", IP2STR(&ip.ip));
+    (void)esp_netif_dhcps_stop(ap);
+    if (esp_netif_dhcps_option(ap, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI,
+                               uri, strlen(uri)) != ESP_OK)
+        ESP_LOGW(TAG, "Captive portal: DHCP option not set");
+    (void)esp_netif_dhcps_start(ap);
+    if (!lf_captive_dns_start(ip.ip.addr))
+        ESP_LOGW(TAG, "Captive portal DNS did not start");
+}
 static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
@@ -1776,6 +1815,8 @@ static bool serve(void)
     };
     for(size_t i=0;i<sizeof(routes)/sizeof(routes[0]);i++)
         if(httpd_register_uri_handler(server,&routes[i])!=ESP_OK) return false;
+    httpd_register_err_handler(server,HTTPD_404_NOT_FOUND,handle_not_found);
+    if(in_ap)start_captive_portal();
     return true;
 }
 const char *lf_network_address(void){return address;}
