@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """1.0.2: every clock field the web Clock Studio save writes must reach the
-running device. 1.0.2 and earlier validated colours, sizes, date format and
+running device. 1.0.1 and earlier validated colours, sizes, date format and
 weather placement but dropped them in lf_ui_apply_basic_settings()."""
 import re
 from pathlib import Path
