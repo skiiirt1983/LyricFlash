@@ -22,7 +22,9 @@ Open `http://<device-ip>/`, go to **Firmware** and install the newest version. S
 
 ## New install over USB
 
-Download `LyricFlash-<version>-USB-and-OTA.zip` from the [latest release](https://github.com/skiiirt1983/LyricFlash/releases/latest) and follow `USB-INSTALL.txt` inside it. The full USB image is flashed at offset `0x0` and erases saved settings. The `lyricflash-ota.bin` file is only for over-the-air updates; never flash it at `0x0`.
+The easiest way is the install page, **https://skiiirt1983.github.io/LyricFlash/**: connect the device by USB in desktop Chrome or Edge and press Install. It always offers the latest release.
+
+Without the install page: Download `LyricFlash-<version>-USB-and-OTA.zip` from the [latest release](https://github.com/skiiirt1983/LyricFlash/releases/latest) and follow `USB-INSTALL.txt` inside it. The full USB image is flashed at offset `0x0` and erases saved settings. The `lyricflash-ota.bin` file is only for over-the-air updates; never flash it at `0x0`.
 
 ## Building and releasing
 

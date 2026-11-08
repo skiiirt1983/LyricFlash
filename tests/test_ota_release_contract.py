@@ -7,7 +7,7 @@ net = (root / "main/network.c").read_text()
 ui = (root / "main/web_device_html.h").read_text()
 workflow = (root / ".github/workflows/pages-and-firmware.yml").read_text()
 preparer = (root / "tools/prepare_site.py").read_text()
-page = (root / "docs/beta/index.html").read_text()
+page = (root / "docs/index.html").read_text()
 main = (root / "main/main.c").read_text()
 
 for token in (
@@ -31,7 +31,7 @@ assert "_site/beta/firmware/" in workflow
 assert "lyricflash-full.bin" in workflow and "lyricflash-ota.bin" in workflow
 assert "tools/validate_full_image.py" in workflow
 assert "LF_VERSION" in preparer and "image_version" in preparer
-assert "Alpha 0.8.41" in page
+assert "beta/manifest-preserve.json" in page and "beta/manifest.json" in page
 assert "LF_VERSION" in main
 print("PASS: Alpha 0.8.41 OTA and full-USB packaging contract")
 

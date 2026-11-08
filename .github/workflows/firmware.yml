@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - '.github/workflows/firmware.yml'
+      - 'docs/**'
       - 'main/**'
       - 'tests/**'
       - 'tools/**'
@@ -161,3 +162,24 @@ jobs:
             --latest
           gh release view "v$VERSION" --json isPrerelease,assets | \
             python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["isPrerelease"]; assert len(p["assets"])==3; print("PASS: stable release published")'
+      - name: Package the website (docs/ plus the firmware just built)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  pages:
+    # The install site (https://skiiirt1983.github.io/LyricFlash/) always
+    # offers the firmware from the latest build on main.
+    if: github.ref == 'refs/heads/main'
+    needs: esp32s3
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

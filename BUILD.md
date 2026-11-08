@@ -9,6 +9,7 @@ The **LyricFlash <version> - ESP32-S3 Build** workflow (`.github/workflows/firmw
 3. Validates the OTA image and the merged full USB image, and packages the USB-and-OTA ZIP.
 4. Publishes the build for on-device updates, as an `alpha-build-<commit>` prerelease with a direct OTA image. Every LyricFlash updater, including 0.8.x, finds updates this way.
 5. For a stable version (no `-alpha`, `-beta` or `-rc` suffix), also publishes a normal `v<version>` release marked Latest.
+6. Publishes the install website (`docs/` plus the firmware just built) to GitHub Pages.
 
 To release a new version:
 
