@@ -1779,32 +1779,16 @@ static esp_err_t handle_captive_api(httpd_req_t *req)
 }
 static void start_captive_portal(void)
 {
+    /* 1.0.5: same proven approach as the Basecamp bootloader. The stock
+       SoftAP DHCP already names the device as DNS server; restarting DHCP to
+       add options (1.0.3/1.0.4) is not needed and is the likely reason the
+       portal did not appear, so DHCP is left untouched. */
     esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
     esp_netif_ip_info_t ip = {0};
-    if (!ap || esp_netif_get_ip_info(ap, &ip) != ESP_OK || ip.ip.addr == 0) {
-        ESP_LOGW(TAG, "Captive portal: setup network address unavailable");
-        return;
-    }
-    char uri[32];
-    snprintf(uri, sizeof uri, "http://" IPSTR "/captive", IP2STR(&ip.ip));
-    (void)esp_netif_dhcps_stop(ap);
-    /* 1.0.4: DHCP must name the device as the DNS server, or phones never ask
-       it and the portal cannot appear. ESP-IDF only offers DNS when told to. */
-    esp_netif_dns_info_t dns = {0};
-    dns.ip.type = ESP_IPADDR_TYPE_V4;
-    dns.ip.u_addr.ip4.addr = ip.ip.addr;
-    uint8_t offer_dns = 0x02; /* OFFER_DNS */
-    if (esp_netif_set_dns_info(ap, ESP_NETIF_DNS_MAIN, &dns) != ESP_OK ||
-        esp_netif_dhcps_option(ap, ESP_NETIF_OP_SET, ESP_NETIF_DOMAIN_NAME_SERVER,
-                               &offer_dns, sizeof offer_dns) != ESP_OK)
-        ESP_LOGW(TAG, "Captive portal: DHCP DNS offer not set");
-    /* RFC 8910: newer phones read the portal address straight from DHCP. */
-    if (esp_netif_dhcps_option(ap, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI,
-                               uri, strlen(uri)) != ESP_OK)
-        ESP_LOGW(TAG, "Captive portal: DHCP option not set");
-    if (esp_netif_dhcps_start(ap) != ESP_OK)
-        ESP_LOGW(TAG, "Captive portal: DHCP restart failed");
-    if (!lf_captive_dns_start(ip.ip.addr))
+    uint32_t addr = 0;
+    if (ap && esp_netif_get_ip_info(ap, &ip) == ESP_OK && ip.ip.addr != 0) addr = ip.ip.addr;
+    else addr = ESP_IP4TOADDR(192, 168, 4, 1);
+    if (!lf_captive_dns_start(addr))
         ESP_LOGW(TAG, "Captive portal DNS did not start");
 }
 static bool serve(void)
