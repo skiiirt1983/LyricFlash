@@ -1,9 +1,11 @@
 #pragma once
 /* LyricFlash 1.0.0 - first stable release for the Waveshare ESP32-S3 Touch AMOLED 1.75.
  * Settings schema 16 is unchanged, so saved Wi-Fi and clock settings carry over. */
-#define LF_VERSION "1.0.5"
-#define LF_VERSION_LABEL "1.0.5"
+#define LF_VERSION "1.0.6"
+#define LF_VERSION_LABEL "1.0.6"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 1.0.6: setup network renamed LyricFlash-Setup; web server accepts 2 KB request headers (Firefox and
+   Samsung Internet got "connection reset" at 192.168.4.1 with the 512-byte default); up to 4 setup clients. */
 /* 1.0.5: captive portal matches the working Basecamp bootloader: DHCP is no longer restarted or
    reconfigured (no option 114, no DNS offer change); DNS responder + catch-all redirect only. */
 /* 1.0.4: captive portal attempt: DHCP names the device as DNS server (ESP-IDF does not by default),

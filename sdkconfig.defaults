@@ -83,3 +83,7 @@ CONFIG_LV_USE_SNAPSHOT=y
 # 1.0.4: captive portal. The web server keeps 10 client sockets (phones open
 # several at once) plus 3 internal; the setup-network DNS responder needs one.
 CONFIG_LWIP_MAX_SOCKETS=16
+# 1.0.6: browsers (Firefox on Windows, Samsung Internet, Chrome with client
+# hints) send more than the 512-byte default of request headers; the web
+# server then dropped the connection ("The connection was reset").
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=2048

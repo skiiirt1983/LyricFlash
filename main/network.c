@@ -1883,9 +1883,8 @@ bool lf_network_start(void)
     }
     /* Fallback to an open setup access point if home Wi-Fi is unavailable. */
     in_ap=true;
-    uint8_t mac[6]={0};
-    esp_wifi_get_mac(WIFI_IF_STA,mac);
-    snprintf(ap_ssid,sizeof ap_ssid,"LyricFlash-%02X%02X",mac[4],mac[5]);
+    /* 1.0.6: one fixed, easy-to-spot name for the setup network. */
+    strlcpy(ap_ssid,"LyricFlash-Setup",sizeof ap_ssid);
     /* 1.0.1: open setup network (no password) so anyone setting the device
        up can join it. Never replace/erase the saved home Wi-Fi credentials. */
     ap_pass[0]=0;
@@ -1893,7 +1892,7 @@ bool lf_network_start(void)
     strlcpy((char *)apcfg.ap.ssid,ap_ssid,sizeof(apcfg.ap.ssid));
     apcfg.ap.ssid_len=strlen(ap_ssid);
     apcfg.ap.channel=6;
-    apcfg.ap.max_connection=2;
+    apcfg.ap.max_connection=4;
     apcfg.ap.authmode=WIFI_AUTH_OPEN;
     if(esp_wifi_set_mode(WIFI_MODE_AP)!=ESP_OK ||
        esp_wifi_set_config(WIFI_IF_AP,&apcfg)!=ESP_OK ||
