@@ -21,7 +21,7 @@ assert "const unsigned strip=x>=360U?LF_RECORD_WAVE_SEGMENTS-1U:" in wave
 assert "lv_line_set_points(home_record_wave_segments[strip]," in wave
 assert "home_record_wave_counts[strip]=count;" in wave
 assert "if(count<LF_RECORD_WAVE_STRIP_POINTS)" in wave
-assert "if(home_record_cancel_pending_attempt==song->attempts)return;" in wave
+assert "if(home_record_cancel_pending_attempt && home_record_cancel_pending_attempt==song->attempts)return;" in wave
 assert "lv_line_set_points(home_record_wave,home_record_wave_points," not in ui
 # 10 seconds sampled at 140ms gives ~18 samples/90px strip plus a seam point.
 for strip in range(4):

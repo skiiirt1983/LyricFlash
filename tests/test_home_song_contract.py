@@ -18,7 +18,7 @@ end=ui.index("\nstatic void render_home(void)",start)
 home=ui[start:end]
 refresh=ui[ui.index("static void home_refresh(uint64_t current)\n{"):start]
 on_click=ui[ui.index("static void on_home_scan(lv_event_t *e)\n{"):ui.index("static lv_obj_t *home_decor_ring")]
-check('LF_VERSION "1.0.7"' in version,"0.8.84 alpha version not set")
+check('LF_VERSION "1.0.8"' in version,"0.8.84 alpha version not set")
 check('home_scan_button=lv_button_create(parent);' in home,"Missing single circular play surface")
 check(home.count('lv_button_create(')==1,"Home must expose only one visual control")
 check('button(parent,' not in home,"Old rectangular navigation buttons still on Home")
@@ -37,12 +37,17 @@ setup_warning=ui.split("static const char *home_setup_warning(void)",1)[1].split
 check('home_setup_warning()' in on_click and 'lf_recog_has_token()' in setup_warning
       and 'lf_network_is_connected()' in setup_warning,
       "Missing actionable failure states")
-# 1.0.7: the Wi-Fi / AudD warning appears only when Play is pressed, in red,
+# 1.0.8: the Wi-Fi / AudD warning appears only when Play is pressed, in red,
 # under the Play button, and clears itself; never a permanent Home caption.
 refresh=ui.split("static void home_refresh(uint64_t current)",1)[1].split("static void on_home_scan",1)[0]
 check('home_setup_warning' not in refresh and '0xFF4D4D' in refresh
       and 'home_warning_until_ms=now_ms()+4500U;' in on_click,
       "Setup warning must be red, on Play press only, and time out")
+# 1.0.8: a zero "cancel pending" id must never block Home updates (before the
+# first scan the attempt counter is also zero, which hid every warning).
+check('home_record_cancel_pending_attempt==song' not in ui.replace(
+          'home_record_cancel_pending_attempt && home_record_cancel_pending_attempt==song',''),
+      "Cancel guard must ignore a zero pending attempt")
 check('lf_recog_snapshot(&song)' in refresh and 'No Song Lyrics Available' in refresh,
       "Home must show a single error only when song lyrics are unavailable")
 check('home_play_hint=home_caption(' not in home and

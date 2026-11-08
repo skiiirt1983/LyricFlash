@@ -1350,7 +1350,8 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
     /* No LVGL display changes from the recording refresh while Stop is
        queued. In particular the 75ms waveform timer must not race the
        cancellation timer and invalidate the same full-screen object. */
-    if(home_record_cancel_pending_attempt==song->attempts)return;
+    /* 0 means no cancel pending (and also "no scan yet"): never block on it. */
+    if(home_record_cancel_pending_attempt && home_record_cancel_pending_attempt==song->attempts)return;
     /* The physical pager must not scroll during recording/upload/lookup.
        Re-enable once the scan has finished and the finger is released. */
     if(primary_pager && page==0){
@@ -1560,7 +1561,9 @@ static void home_refresh(uint64_t current)
     lf_recog_snapshot(&song);
     /* The recording overlay is still the topmost touch surface until the
        dedicated cancel tick retires it. Defer ALL Home-style mutations. */
-    if(home_record_cancel_pending_attempt==song.attempts)return;
+    /* 1.0.8: 0 means no cancel pending. Before the first scan attempts is also 0,
+       and this guard used to skip every Home update, hiding the Play warnings. */
+    if(home_record_cancel_pending_attempt && home_record_cancel_pending_attempt==song.attempts)return;
     const bool busy=lf_recog_busy();
     home_recording_update(&song,current);
     const char *message="";
