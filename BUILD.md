@@ -20,7 +20,7 @@ Use 1.0.x for fixes and 1.x.0 for new features.
 
 ## Rules for all future versions
 
-- **Setup network:** when the device has no working Wi-Fi it starts an open network named `LyricFlash-XXXX` (no password).
+- **Setup network:** when the device has no working Wi-Fi it starts an open network named `LyricFlash-Setup` (no password). The web server must accept large request headers (`CONFIG_HTTPD_MAX_REQ_HDR_LEN=2048`) or some browsers get "connection reset".
 - **Captive portal:** joining that network must open the LyricFlash page by itself on phones and computers. Three pieces make this work, and tests enforce all three:
   - DNS answers every lookup with the device's address (`main/captive_dns.c`). The stock SoftAP DHCP already points clients at the device; do not restart or reconfigure DHCP.
   - Unknown pages redirect to the home page, on the setup network only (`handle_not_found` in `main/network.c`).
