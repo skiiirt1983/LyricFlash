@@ -1,9 +1,14 @@
 #pragma once
 /* LyricFlash 1.0.0 - first stable release for the Waveshare ESP32-S3 Touch AMOLED 1.75.
  * Settings schema 16 is unchanged, so saved Wi-Fi and clock settings carry over. */
-#define LF_VERSION "1.0.0"
-#define LF_VERSION_LABEL "1.0.0"
+#define LF_VERSION "1.0.1"
+#define LF_VERSION_LABEL "1.0.1"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 1.0.1: Device Settings shows the Wi-Fi network (or the open setup network to join) and Song ID (AudD) status;
+   Home shows a setup hint while Wi-Fi or the AudD key is missing; setup network is open (no password);
+   web clock settings save again (colour fields sent as numbers); web clock preview matches the device
+   (black dial, AM/PM beside the digits); device Font button cycles the same 16 fonts as the web page and
+   new installs start on Montserrat; Lyrics & Display sliders no longer need unlocking. */
 /* 1.0.0: first stable release (0.8.130 code, alpha labels removed).
    0.8.130: time zone set before the first Clock frame (no UTC flash); screen-off power saving (touch and LVGL loop 40 ms while dark); swipe compositor timer paused outside swipes; clock sweep timer 1 s. */
 /* 0.8.129: off-screen Clock keeps the current time and its swipe picture refreshes each minute; clock updated before the screen lights on wake (no stale times). */

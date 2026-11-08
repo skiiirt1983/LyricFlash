@@ -1531,6 +1531,26 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
                        home_record_wave_points[strip],count);
 }
 
+/* Persistent setup hint: names everything recognition still needs, or NULL.
+ * Wi-Fi is only reported missing after a boot grace period so the normal
+ * reconnect at power-on does not flash a warning. */
+#define LF_HOME_WIFI_GRACE_MS 15000U
+static const char *home_setup_hint(uint64_t current)
+{
+    /* lf_recog_has_token() reads NVS: sample it at most every 5 s here. */
+    static uint64_t key_checked_ms;
+    static bool key_cached;
+    if(!key_checked_ms || current==UINT64_MAX || current-key_checked_ms>=5000U){
+        key_cached=lf_recog_has_token();
+        key_checked_ms=current==UINT64_MAX?now_ms():current;
+    }
+    const bool wifi=lf_network_is_connected() || current<LF_HOME_WIFI_GRACE_MS;
+    const bool key=key_cached;
+    if(!wifi && !key)return "Set up Wi-Fi + AudD key";
+    if(!wifi)return "Connect to Wi-Fi in Settings";
+    if(!key)return "Set AudD key in web settings";
+    return NULL;
+}
 /* The Home screen is intentionally sparse. The Play symbol conveys idle,
  * recording/stop and ready states; duplicate TAP PLAY/READY/MIC OFF captions
  * caused overlap on the round AMOLED. Show only actionable errors beneath
@@ -1558,6 +1578,10 @@ static void home_refresh(uint64_t current)
             message="Song Not Recognized";
         else if(song.state==LF_RECOG_ERROR)
             message="Identification Error";
+        if(!message[0] && !busy){
+            const char *hint=home_setup_hint(current);
+            if(hint)message=hint;
+        }
     }
     home_set_text(home_song_title,message);
     /* Do not dirty Home when the empty caption was already hidden. */
@@ -1594,9 +1618,8 @@ static void on_home_scan(lv_event_t *e)
     }else if(lf_recog_busy()) {
         lf_recog_stop();
     }else if(!lf_network_is_connected() || !lf_recog_has_token()) {
-        home_warning=!lf_network_is_connected()?
-            "Connect to Wi-Fi in Settings":
-            "Set AudD key in web settings";
+        const char *hint=home_setup_hint(UINT64_MAX);
+        home_warning=hint?hint:"Connect to Wi-Fi in Settings";
         home_warning_until_ms=now_ms()+4500U;
     }else{
         /* LV_EVENT_CLICKED follows a finger release; on_tick independently
@@ -2930,6 +2953,21 @@ static lv_obj_t *device_line(lv_obj_t *parent,const char *text,int top,
     lv_obj_align(line,LV_ALIGN_TOP_MID,0,top);
     return line;
 }
+/* 1.0.1: Song ID (AudD) status for Device Settings, from the saved key and
+   the outcome of the most recent scan. Never shows the key itself. */
+static const char *song_id_status_text(void)
+{
+    if(!lf_recog_has_token())return "No key - add it in web settings";
+    lf_recog_snapshot_t r;
+    lf_recog_snapshot(&r);
+    if(r.audd_api_error_code>=900 && r.audd_api_error_code<=902)
+        return "Key rejected - check web settings";
+    if(r.http_status==401 || r.http_status==403)
+        return "Key rejected - check web settings";
+    if(r.http_status==200 && r.audd_api_error_code==0)return "Connected";
+    if(r.attempts==0)return "Key saved - not tried yet";
+    return "Key saved - last scan failed";
+}
 static void build_device_settings_now(void)
 {
     page=10;
@@ -2946,7 +2984,7 @@ static void build_device_settings_now(void)
     lv_obj_set_scroll_dir(viewport,LV_DIR_VER);
     lv_obj_set_scrollbar_mode(viewport,LV_SCROLLBAR_MODE_ACTIVE);
     lv_obj_t *content=lv_obj_create(viewport);
-    lv_obj_set_size(content,272,610);
+    lv_obj_set_size(content,272,790);
     lv_obj_align(content,LV_ALIGN_TOP_MID,0,0);
     lv_obj_set_style_bg_opa(content,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(content,0,0);
@@ -2956,7 +2994,7 @@ static void build_device_settings_now(void)
     char text[80];
     snprintf(text,sizeof text,"System font: %s pt",
         prefs->system_font_size==0?"18":prefs->system_font_size==1?"20":"24");
-    button(content,text,248,55,0,-264,0xB2C6D3,on_system_font,NULL);
+    button(content,text,248,55,0,-354,0xB2C6D3,on_system_font,NULL);
     snprintf(text,sizeof text,"Brightness: %u%%",prefs->brightness);
     brightness_text=device_line(content,text,94,&lv_font_montserrat_20,0xD6F0FF);
     lv_obj_t *slider=lv_slider_create(content);
@@ -2985,22 +3023,42 @@ static void build_device_settings_now(void)
          prefs->sleep_seconds==0?"Never":
          prefs->sleep_seconds==15?"15s":
          prefs->sleep_seconds==30?"30s":"60s");
-    button(content,text,248,55,0,-92,0xB2C6D3,on_timeout,NULL);
+    button(content,text,248,55,0,-182,0xB2C6D3,on_timeout,NULL);
     /* The timeout action keeps its own caption in sync after a tap. */
     timeout_text=NULL;
     const char *address=lf_network_address();
     const bool online=address && address[0] &&
                        strcmp(address,"Offline")!=0;
-    device_line(content,"IP ADDRESS",285,&lv_font_montserrat_16,0x87B8D9);
-    device_line(content,online?address:"Not connected",308,
+    /* 1.0.1: which Wi-Fi network is in use, or which open setup network
+       to join when none is set up yet. */
+    char ssid[33]={0};
+    device_line(content,"WI-FI",285,&lv_font_montserrat_16,0x87B8D9);
+    if(lf_network_connected_ssid(ssid,sizeof ssid)){
+        snprintf(text,sizeof text,"%.32s",ssid);
+        device_line(content,text,308,&lv_font_montserrat_20,0xFFFFFF);
+    }else if(*lf_network_ap_ssid()){
+        snprintf(text,sizeof text,"Join %.32s",lf_network_ap_ssid());
+        device_line(content,text,308,&lv_font_montserrat_20,0xFFD866);
+        device_line(content,"Open network, then go to 192.168.4.1",336,
+                    &lv_font_montserrat_16,0xD6F0FF);
+    }else{
+        device_line(content,"Connecting...",308,&lv_font_montserrat_20,0xFFFFFF);
+    }
+    device_line(content,"SONG ID (AUDD)",380,&lv_font_montserrat_16,0x87B8D9);
+    const char *song_id=song_id_status_text();
+    const bool song_ok=strcmp(song_id,"Connected")==0;
+    device_line(content,song_id,403,song_ok?&lv_font_montserrat_20:&lv_font_montserrat_16,
+                song_ok?0x86E3AE:0xFFD866);
+    device_line(content,"IP ADDRESS",465,&lv_font_montserrat_16,0x87B8D9);
+    device_line(content,online?address:"Not connected",488,
                 &lv_font_montserrat_20,0xFFFFFF);
-    device_line(content,"WEB ADDRESS",362,&lv_font_montserrat_16,0x87B8D9);
+    device_line(content,"WEB ADDRESS",542,&lv_font_montserrat_16,0x87B8D9);
     snprintf(text,sizeof text,"%s",online?"":"Connect to Wi-Fi");
     if(online)snprintf(text,sizeof text,"http://%s/",address);
-    device_line(content,text,388,&lv_font_montserrat_16,0x7FD4FF);
-    device_line(content,"VERSION",460,&lv_font_montserrat_16,0x87B8D9);
-    device_line(content,LF_VERSION,482,&lv_font_montserrat_20,0xF1F7FF);
-    button(content,"BACK",204,50,0,251,0xB2C6D3,on_settings,NULL);
+    device_line(content,text,568,&lv_font_montserrat_16,0x7FD4FF);
+    device_line(content,"VERSION",640,&lv_font_montserrat_16,0x87B8D9);
+    device_line(content,LF_VERSION,662,&lv_font_montserrat_20,0xF1F7FF);
+    button(content,"BACK",204,50,0,341,0xB2C6D3,on_settings,NULL);
 }
 
 /* Clock dial elements must never consume swipe/hold touch events. */
@@ -3669,10 +3727,17 @@ static void build_clock_settings_now(void)
     /* 0.8.128: one combined clock menu (no separate Customize screen). */
     build_basic_settings_now();
 }
+/* 1.0.1: the device Font button cycles the same 16 embedded fonts as the
+   web Clock Studio (styles 24-39). Older presets (0-23) step to the first. */
+static const char *const clock_font_names[16]={
+    "Kablammo","Mystery Quest","Moirai One","Rampart One","Hanalei",
+    "Bitcount Grid","Iceberg","Montserrat","Sancreek","Modak",
+    "Alumni Sans","Honk","Nabla","Carlito","Tinos","Asap"};
 static void on_basic_font(lv_event_t *e)
 {
     (void)e;
-    prefs->basic_font_style = (prefs->basic_font_style + 1) % 20;
+    prefs->basic_font_style = prefs->basic_font_style < 24 || prefs->basic_font_style >= 39 ?
+                              24 : (uint8_t)(prefs->basic_font_style + 1);
     save_settings();
     build_basic_settings();
 }
@@ -3810,7 +3875,9 @@ static void build_basic_settings_now(void)
     lv_obj_remove_flag(list, LV_OBJ_FLAG_GESTURE_BUBBLE);
     char text[65];
     /* Time */
-    snprintf(text, sizeof text, "Font %u / 20", prefs->basic_font_style + 1);
+    if(prefs->basic_font_style>=24 && prefs->basic_font_style<=39)
+        snprintf(text, sizeof text, "Font: %s", clock_font_names[prefs->basic_font_style-24]);
+    else snprintf(text, sizeof text, "Font: classic %u", prefs->basic_font_style + 1);
     button(list, text, 270, 50, 0, 0, 0xB2C6D3, on_basic_font, NULL);
     basic_font_size_label = lv_label_create(list);
     snprintf(text, sizeof text, "Time size: %u%%", prefs->basic_font_size);
@@ -4407,7 +4474,7 @@ static void on_tick_body(lv_timer_t *timer)
         if (network_password) {
             char text[72];
             if (*lf_network_ap_ssid())
-                snprintf(text, sizeof text, "Password: %s", lf_network_ap_password());
+                snprintf(text, sizeof text, "Open network - no password");
             else snprintf(text, sizeof text, "Connected to home Wi-Fi");
             ui_label_set_text_if_changed(network_password, text);
         }

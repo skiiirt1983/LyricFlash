@@ -23,7 +23,7 @@ void lf_settings_defaults(lf_settings_t *s)
         .timing_offset_ms = 0, /* neutral baseline; manual tuning saved separately */
         .line_spacing_px = 5,
         .clock_face = 5,
-        .basic_font_style = 0,
+        .basic_font_style = 31, /* 1.0.1: Montserrat, the web Clock Studio default */
         .basic_font_size = 60,
         .basic_time_x = 0, .basic_time_y = -6,
         .basic_battery_x = 0, .basic_battery_y = -160,
@@ -208,7 +208,7 @@ esp_err_t lf_settings_load(lf_settings_t *s)
     s->clock_face = 5; /* 0.8.124: Basic is the only face */
     s->face_background[5] = 0x000000;
     s->basic_background = 0x000000;
-    s->basic_font_style = in_range(s->basic_font_style, 0, 39, 0);
+    s->basic_font_style = in_range(s->basic_font_style, 0, 39, 31);
     s->basic_font_size = in_range(s->basic_font_size, 0, 200, 60);
     /* Per-element offsets remain bounded inside the AMOLED circle. */
     if(s->basic_time_x<-100||s->basic_time_x>100)s->basic_time_x=0;
