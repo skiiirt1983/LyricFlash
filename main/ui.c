@@ -3751,7 +3751,9 @@ static void on_basic_ring_mode(lv_event_t *e)
 static void on_basic_date(lv_event_t *e)
 {
     (void)e;
-    prefs->basic_show_date = !prefs->basic_show_date;
+    /* 1.0.2: the clock reads face_show_date[5]; keep the legacy copy in step. */
+    prefs->face_show_date[5] = !prefs->face_show_date[5];
+    prefs->basic_show_date = prefs->face_show_date[5];
     save_settings();
     build_basic_settings();
 }
@@ -3793,7 +3795,7 @@ static uint32_t *selected_basic_rgb(void)
 {
     switch (selected_colour_target) {
         case 0: return &prefs->basic_background;
-        case 1: return &prefs->basic_foreground;
+        case 1: return &prefs->face_time_color[5]; /* 1.0.2: the colour the clock draws */
         case 2: return &prefs->basic_ring_a;
         case 3: return &prefs->basic_ring_b;
         default: return &prefs->basic_ring_c;
@@ -3891,7 +3893,7 @@ static void build_basic_settings_now(void)
     lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(slider, on_basic_size, LV_EVENT_RELEASED, NULL);
     button(list,"Time color",270,50,0,0,0xB2C6D3,on_basic_colour,(void*)1);
-    button(list, prefs->basic_show_date?"Date: ON":"Date: OFF",270,50,0,0,
+    button(list, prefs->face_show_date[5]?"Date: ON":"Date: OFF",270,50,0,0,
            0xB2C6D3,on_basic_date,NULL);
     /* Weather */
     button(list, prefs->basic_weather?"Weather: ON":"Weather: OFF",270,50,0,0,
@@ -4937,6 +4939,26 @@ esp_err_t lf_ui_apply_basic_settings(const lf_settings_t *basic)
     memcpy(prefs->face_battery_x,basic->face_battery_x,sizeof(prefs->face_battery_x));
     memcpy(prefs->face_battery_y,basic->face_battery_y,sizeof(prefs->face_battery_y));
     memcpy(prefs->face_24h,basic->face_24h,sizeof(prefs->face_24h));
+    /* 1.0.2: every remaining clock field the web page edits. These were
+       validated and received but never applied, so colours, sizes, date
+       format and weather placement from the web page were discarded. */
+#define LF_COPY_FACE(field) memcpy(prefs->field,basic->field,sizeof(prefs->field))
+    LF_COPY_FACE(face_time_color);
+    LF_COPY_FACE(face_battery_color);
+    LF_COPY_FACE(face_weather_color);
+    LF_COPY_FACE(face_date_color);
+    LF_COPY_FACE(face_battery_size);
+    LF_COPY_FACE(face_show_percent);
+    LF_COPY_FACE(face_show_icon);
+    LF_COPY_FACE(face_date_format);
+    LF_COPY_FACE(face_date_x);
+    LF_COPY_FACE(face_date_y);
+    LF_COPY_FACE(face_date_size);
+    LF_COPY_FACE(face_show_weather);
+    LF_COPY_FACE(face_weather_x);
+    LF_COPY_FACE(face_weather_y);
+    LF_COPY_FACE(face_weather_size);
+#undef LF_COPY_FACE
     err = lf_settings_save(prefs);
     if (err == ESP_OK) {
         clock_scene_stale=true;
