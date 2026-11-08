@@ -8,6 +8,11 @@
 <title>LyricFlash · Install</title>
 <meta name="description" content="Install or update LyricFlash on the Waveshare ESP32-S3 Touch AMOLED 1.75.">
 <link rel="stylesheet" href="assets/pi-theme.css">
+<style>
+/* Slotted messages are inline spans: give them their own block so a wrapped
+   message is one box, not overlapping line fragments. */
+esp-web-install-button .message{display:block;margin-top:10px}
+</style>
 <script type="module" src="https://unpkg.com/esp-web-tools@10.1.0/dist/web/install-button.js?module"></script>
 </head>
 <body data-page="stable">
@@ -51,6 +56,7 @@
 <h3>Connect by USB</h3>
 <p>Use desktop Chrome or Edge and a USB <b>data</b> cable. If the device is not detected, hold <b>BOOT</b>, press <b>RESET</b>, then release <b>BOOT</b>.</p>
 <div id="blocked" class="message error">USB install unlocks once the published firmware has been checked.</div>
+<div id="noUsb" class="message hidden">USB install needs a computer with desktop <b>Chrome</b> or <b>Edge</b>. On a phone, use <b>Update over Wi-Fi</b> above, or open this page on a computer.</div>
 <div id="install" class="hidden">
 <h3>Update and keep settings</h3>
 <p>For a device that already runs LyricFlash. When asked, do <b>not</b> erase the device.</p>
@@ -83,7 +89,8 @@
 <div class="eyebrow"><span class="num">04</span>ADVANCED · LOCAL FILE</div>
 <h3 id="local-heading">Install a firmware file from your computer</h3>
 <p>Already downloaded a release? Choose its <b>FULL-USB</b> .bin below. The file stays on your computer; the browser checks it is a complete LyricFlash image for the ESP32-S3 before enabling the installer.</p>
-<label class="upload" for="localBin"><b>Choose full USB firmware (.bin)</b><input id="localBin" type="file" accept=".bin,application/octet-stream" aria-describedby="localFileStatus"></label>
+<div id="localNoUsb" class="message hidden">Needs a computer with desktop Chrome or Edge.</div>
+<label class="upload" for="localBin" id="localPicker"><b>Choose full USB firmware (.bin)</b><input id="localBin" type="file" accept=".bin,application/octet-stream" aria-describedby="localFileStatus"></label>
 <div class="filedetails" id="localFileStatus" role="status" aria-live="polite">Choose a complete USB firmware .bin to enable installation.</div>
 <esp-web-install-button id="local-install" class="hidden" manifest="beta/manifest.json">
 <button slot="activate">Connect &amp; install selected file</button>
@@ -102,6 +109,15 @@
 <footer><span style="color:var(--mint)">LYRICFLASH &nbsp; <span style="color:#75968e">MUSIC & CLOCK CONTROL</span></span><span>by skiiirt1983 · USB once, Wi-Fi updates afterward</span></footer>
 </div>
 <script>
+/* Browsers without Web Serial (phones, Firefox, Safari) cannot flash over USB. */
+function usbCapable(){return typeof navigator!=='undefined' && 'serial' in navigator;}
+if(!usbCapable()){
+ document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelector('#localNoUsb').classList.remove('hidden');
+  document.querySelector('#localPicker').classList.add('hidden');
+  document.querySelector('#localFileStatus').classList.add('hidden');
+ });
+}
 async function check(){
  const status=document.querySelector('#buildStatus');
  try{
@@ -118,6 +134,10 @@ async function check(){
   document.querySelector('#versionTag').textContent='v'+m.version;
   status.textContent='Version '+m.version+' ready to install';
   document.querySelector('#blocked').classList.add('hidden');
+  if(!usbCapable()){
+   document.querySelector('#noUsb').classList.remove('hidden');
+   return;
+  }
   document.querySelector('#install').classList.remove('hidden');
   document.querySelector('#full-install').classList.remove('hidden');
  }catch(e){status.textContent='Firmware not available: '+e.message;}
