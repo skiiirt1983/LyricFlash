@@ -31,11 +31,11 @@ for requirement in (
     "tools/create_preserve_usb.py _site",
     "tools/package_release.py --verify _site",
     "tools/publish_alpha_ota.py _site/beta/firmware/lyricflash-ota.bin",
-    "LyricFlash-1.0.2-USB-and-OTA.zip",
+    "LyricFlash-1.0.3-USB-and-OTA.zip",
     "gh release create",
     "--prerelease --latest=false",
     "gh release view",
-    "1.0.2",
+    "1.0.3",
     'gh release create "v$VERSION"',
     "--latest\n",
 ):

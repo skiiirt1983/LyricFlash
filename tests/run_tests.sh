@@ -71,6 +71,8 @@ cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/lyric_clock.c tests/test
 /tmp/lyricflash_test_lyric_clock
 cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/lyrics.c tests/test_lyrics.c -o /tmp/lyricflash_test_lyrics
 /tmp/lyricflash_test_lyrics
+cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/captive_dns_logic.c tests/test_captive_dns.c -o /tmp/lyricflash_test_captive_dns
+/tmp/lyricflash_test_captive_dns
 cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/image_policy.c tests/test_image_policy.c -o /tmp/lyricflash_test_image
 /tmp/lyricflash_test_image
 cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/service_errors.c tests/test_service_errors.c -o /tmp/lyricflash_test_api
