@@ -6,9 +6,9 @@ LyricFlash is firmware for the Waveshare ESP32-S3 Touch AMOLED 1.75 (466×466 ro
 
 Third-party libraries, board support and fonts keep their own authors and licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
 
-## Current release: 1.0.0
+## Current release: 1.0.1
 
-- **Song ID and lyrics:** listens through the built-in microphones, identifies the song and shows synced lyrics. Per-song timing and tempo adjustments are saved.
+- **Song ID and lyrics:** listens through the built-in microphones, identifies the song and shows synced lyrics. Per-song timing and tempo adjustments are saved. Until Wi-Fi and an AudD key are both set up, the Home screen says which one is missing.
 - **Smooth navigation:** swipe between Clock, Home and Settings at 25–60 fps, with drag-to-follow and a settle animation.
 - **Clock:** one customizable face with 20 fonts, adjustable size and color, date, battery and live weather. Press and hold the clock for its settings.
 - **Weather:** current conditions for a chosen city, refreshed on a set interval. Swipe up on the clock for details.

@@ -1531,6 +1531,26 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
                        home_record_wave_points[strip],count);
 }
 
+/* Persistent setup hint: names everything recognition still needs, or NULL.
+ * Wi-Fi is only reported missing after a boot grace period so the normal
+ * reconnect at power-on does not flash a warning. */
+#define LF_HOME_WIFI_GRACE_MS 15000U
+static const char *home_setup_hint(uint64_t current)
+{
+    /* lf_recog_has_token() reads NVS: sample it at most every 5 s here. */
+    static uint64_t key_checked_ms;
+    static bool key_cached;
+    if(!key_checked_ms || current==UINT64_MAX || current-key_checked_ms>=5000U){
+        key_cached=lf_recog_has_token();
+        key_checked_ms=current==UINT64_MAX?now_ms():current;
+    }
+    const bool wifi=lf_network_is_connected() || current<LF_HOME_WIFI_GRACE_MS;
+    const bool key=key_cached;
+    if(!wifi && !key)return "Set up Wi-Fi + AudD key";
+    if(!wifi)return "Connect to Wi-Fi in Settings";
+    if(!key)return "Set AudD key in web settings";
+    return NULL;
+}
 /* The Home screen is intentionally sparse. The Play symbol conveys idle,
  * recording/stop and ready states; duplicate TAP PLAY/READY/MIC OFF captions
  * caused overlap on the round AMOLED. Show only actionable errors beneath
@@ -1558,6 +1578,10 @@ static void home_refresh(uint64_t current)
             message="Song Not Recognized";
         else if(song.state==LF_RECOG_ERROR)
             message="Identification Error";
+        if(!message[0] && !busy){
+            const char *hint=home_setup_hint(current);
+            if(hint)message=hint;
+        }
     }
     home_set_text(home_song_title,message);
     /* Do not dirty Home when the empty caption was already hidden. */
@@ -1594,9 +1618,8 @@ static void on_home_scan(lv_event_t *e)
     }else if(lf_recog_busy()) {
         lf_recog_stop();
     }else if(!lf_network_is_connected() || !lf_recog_has_token()) {
-        home_warning=!lf_network_is_connected()?
-            "Connect to Wi-Fi in Settings":
-            "Set AudD key in web settings";
+        const char *hint=home_setup_hint(UINT64_MAX);
+        home_warning=hint?hint:"Connect to Wi-Fi in Settings";
         home_warning_until_ms=now_ms()+4500U;
     }else{
         /* LV_EVENT_CLICKED follows a finger release; on_tick independently

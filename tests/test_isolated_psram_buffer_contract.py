@@ -5,7 +5,7 @@ root=Path(__file__).resolve().parents[1]
 bsp=(root/"components/esp32_s3_touch_amoled_1_75/esp32_s3_touch_amoled_1_75.c").read_text()
 version=(root/"main/version.h").read_text()
 cfg=(root/"sdkconfig.defaults").read_text()
-assert '#define LF_VERSION "1.0.0"' in version
+assert '#define LF_VERSION "1.0.1"' in version
 assert "#define LVGL_BUFFER_HEIGHT_PSRAM (32)" in bsp
 assert "#define BSP_LCD_DMA_STAGING_ROWS (8)" in bsp
 assert "#define BSP_LCD_DMA_FALLBACK_ROWS (4)" in bsp
