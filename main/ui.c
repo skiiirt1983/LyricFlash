@@ -1531,25 +1531,23 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
                        home_record_wave_points[strip],count);
 }
 
-/* Persistent setup hint: names everything recognition still needs, or NULL.
- * Wi-Fi is only reported missing after a boot grace period so the normal
- * reconnect at power-on does not flash a warning. */
-#define LF_HOME_WIFI_GRACE_MS 15000U
-static const char *home_setup_hint(uint64_t current)
+/* 1.0.7: shown only when Play is pressed and something is missing; red,
+   under the Play button, gone after a few seconds. */
+static const char LF_WARN_BOTH[]="No Wi-Fi and no AudD key";
+static const char LF_WARN_WIFI[]="Wi-Fi not connected";
+static const char LF_WARN_KEY[]="AudD key not entered";
+static const char *home_setup_warning(void)
 {
-    /* lf_recog_has_token() reads NVS: sample it at most every 5 s here. */
-    static uint64_t key_checked_ms;
-    static bool key_cached;
-    if(!key_checked_ms || current==UINT64_MAX || current-key_checked_ms>=5000U){
-        key_cached=lf_recog_has_token();
-        key_checked_ms=current==UINT64_MAX?now_ms():current;
-    }
-    const bool wifi=lf_network_is_connected() || current<LF_HOME_WIFI_GRACE_MS;
-    const bool key=key_cached;
-    if(!wifi && !key)return "Set up Wi-Fi + AudD key";
-    if(!wifi)return "Connect to Wi-Fi in Settings";
-    if(!key)return "Set AudD key in web settings";
+    const bool wifi=lf_network_is_connected();
+    const bool key=lf_recog_has_token();
+    if(!wifi && !key)return LF_WARN_BOTH;
+    if(!wifi)return LF_WARN_WIFI;
+    if(!key)return LF_WARN_KEY;
     return NULL;
+}
+static bool home_warning_is_setup(const char *message)
+{
+    return message==LF_WARN_BOTH || message==LF_WARN_WIFI || message==LF_WARN_KEY;
 }
 /* The Home screen is intentionally sparse. The Play symbol conveys idle,
  * recording/stop and ready states; duplicate TAP PLAY/READY/MIC OFF captions
@@ -1578,12 +1576,14 @@ static void home_refresh(uint64_t current)
             message="Song Not Recognized";
         else if(song.state==LF_RECOG_ERROR)
             message="Identification Error";
-        if(!message[0] && !busy){
-            const char *hint=home_setup_hint(current);
-            if(hint)message=hint;
-        }
     }
     home_set_text(home_song_title,message);
+    /* Setup warnings are red; everything else keeps the normal caption colour. */
+    {
+        const lv_color_t colour=lv_color_hex(home_warning_is_setup(message)?0xFF4D4D:0xB4DAFC);
+        if(!lv_color_eq(lv_obj_get_style_text_color(home_song_title,LV_PART_MAIN),colour))
+            lv_obj_set_style_text_color(home_song_title,colour,0);
+    }
     /* Do not dirty Home when the empty caption was already hidden. */
     const bool hide_title=!message[0];
     if(lv_obj_has_flag(home_song_title,LV_OBJ_FLAG_HIDDEN)!=hide_title){
@@ -1617,9 +1617,8 @@ static void on_home_scan(lv_event_t *e)
         home_scan_released_ms=0;
     }else if(lf_recog_busy()) {
         lf_recog_stop();
-    }else if(!lf_network_is_connected() || !lf_recog_has_token()) {
-        const char *hint=home_setup_hint(UINT64_MAX);
-        home_warning=hint?hint:"Connect to Wi-Fi in Settings";
+    }else if(home_setup_warning()) {
+        home_warning=home_setup_warning();
         home_warning_until_ms=now_ms()+4500U;
     }else{
         /* LV_EVENT_CLICKED follows a finger release; on_tick independently

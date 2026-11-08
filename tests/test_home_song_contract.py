@@ -18,7 +18,7 @@ end=ui.index("\nstatic void render_home(void)",start)
 home=ui[start:end]
 refresh=ui[ui.index("static void home_refresh(uint64_t current)\n{"):start]
 on_click=ui[ui.index("static void on_home_scan(lv_event_t *e)\n{"):ui.index("static lv_obj_t *home_decor_ring")]
-check('LF_VERSION "1.0.6"' in version,"0.8.84 alpha version not set")
+check('LF_VERSION "1.0.7"' in version,"0.8.84 alpha version not set")
 check('home_scan_button=lv_button_create(parent);' in home,"Missing single circular play surface")
 check(home.count('lv_button_create(')==1,"Home must expose only one visual control")
 check('button(parent,' not in home,"Old rectangular navigation buttons still on Home")
@@ -33,8 +33,16 @@ check('lv_obj_add_event_cb(home_scan_button,on_home_scan,LV_EVENT_CLICKED,NULL);
       "Play not wired to manual song scan")
 check('lf_recog_start()' in ui and 'lf_recog_stop()' in on_click,
       "Play must manually start and stop recognition")
-check('lf_recog_has_token()' in on_click and 'lf_network_is_connected()' in on_click,
+setup_warning=ui.split("static const char *home_setup_warning(void)",1)[1].split("static bool home_warning_is_setup",1)[0]
+check('home_setup_warning()' in on_click and 'lf_recog_has_token()' in setup_warning
+      and 'lf_network_is_connected()' in setup_warning,
       "Missing actionable failure states")
+# 1.0.7: the Wi-Fi / AudD warning appears only when Play is pressed, in red,
+# under the Play button, and clears itself; never a permanent Home caption.
+refresh=ui.split("static void home_refresh(uint64_t current)",1)[1].split("static void on_home_scan",1)[0]
+check('home_setup_warning' not in refresh and '0xFF4D4D' in refresh
+      and 'home_warning_until_ms=now_ms()+4500U;' in on_click,
+      "Setup warning must be red, on Play press only, and time out")
 check('lf_recog_snapshot(&song)' in refresh and 'No Song Lyrics Available' in refresh,
       "Home must show a single error only when song lyrics are unavailable")
 check('home_play_hint=home_caption(' not in home and
