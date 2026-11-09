@@ -82,3 +82,5 @@ Rules it follows (from Bambu Studio's loader, confirmed on Paul's machine 2026-1
 - every object's lowest point is exactly z = 0, otherwise Bambu merges the objects into one
   multi-part object and drops the assembled poses.
 Trial: `concepts/assembled_trial.py` -> `out/concepts/assembled_trial_v2.3mf`.
+Confirmed by Paul 2026-11-09: parts flat on the plate, assembled in Assembly view, parts land on
+filament slots 1/2. Bambu shows a harmless "not from Bambu Lab" notice (geometry + slots load fine).
