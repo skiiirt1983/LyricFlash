@@ -56,9 +56,11 @@ spigot.
    must not touch on any side.
 4. **Web:** the strip above the opening is 0.63 mm thick at the centre. Check it printed
    complete (no holes, not drooping onto the shell).
-5. Plug your cable in and out **50 times**, one-handed, with the coupon on the desk. **Check:**
-   the board doesn't shift, the web doesn't crack (especially at its corners), the latches stay
-   closed, and the mouth still reads flush with the plug in.
+5. Plug your cable in and out **50 times**, holding the coupon in your other hand the way you'd
+   hold the finished device (wrap your fingers around the assembled halves, not just the top
+   slice, so you're not holding the latches shut yourself). **Check:** the board doesn't shift,
+   the web doesn't crack (especially at its corners), the latches stay closed, and the mouth
+   still reads flush with the plug in. Also note which way you naturally grip it.
 6. Squeeze the plug's overmould hard against the face. **Check:** the web doesn't flex.
 7. Open the latches (pull the beam tips outward) and close them 10 times. **Check:** no
    whitening at the beam roots.

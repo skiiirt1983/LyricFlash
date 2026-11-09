@@ -1,5 +1,11 @@
 # Enclosure changelog
 
+## Acceptance criterion (Paul 2026-11-09)
+- A ~100 g device can't take a 5-20 N USB-C insertion one-handed on a desk. C2 test now plugs in
+  while holding the coupon. Proposed PLAN 7 wording: "USB-C plugs in fully while the case is held;
+  once plugged in, a gentle tug on the cable from any direction doesn't slide or tip the case on
+  the desk" (the tug is what the cable clip + low exit handle). Pending Paul's OK.
+
 ## Materials, 2026-11-09
 - Top shell: Iridium Gold PLA Metal. Base tray: black PETG. Coupons printed per plate in those.
 - Phase 2: latch beams move to the PETG base (no flexing features in PLA).
