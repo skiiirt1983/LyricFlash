@@ -481,3 +481,12 @@ PWR_TUBE_WALL = 1.2
 PWR_PIN_RECESS = 0.3                 # outer end below the case surface at rest
 PWR_DIMPLE_D = 7.0                   # finger dimple round the pin end
 PWR_DIMPLE_DEPTH = 1.2
+
+# ---- Phase 2: latch clips (separate PETG parts printed flat = C7 v5 notch 1 geometry)
+LATCH_CLIP_X = 22.0                  # world X of the two clips (front + back wall), far from the hinge
+LATCH_CLIP_E = 6.0                   # clip width (print height), = SNAP_EXTRUDE of C7
+LATCH_CLIP_NB0 = 1.0                 # beam outer face, inward from the wall's inner face
+LATCH_CLIP_LIP_MIN = 1.0             # lid material between the seam and the catch
+LATCH_CLIP_BAR_H = 4.0
+LATCH_CLIP_FIT = 0.25                # clip in its base channel, per side (slides in by hand)
+LATCH_POCKET_T_CLEAR = 0.5           # lid pocket, either side of the clip width

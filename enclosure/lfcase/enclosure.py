@@ -415,3 +415,111 @@ def speaker_features(b, zb):
 def speaker_dummy():
     (sx0, sy0, sz0), (sx1, sy1, sz1) = speaker_box()
     return _box((sx1 - P.SPK_SEAL_RIB_H - P.SPK_T, -P.SPK_L / 2, sz0), (sx1 - P.SPK_SEAL_RIB_H, P.SPK_L / 2, sz0 + P.SPK_W))
+
+
+# ------------------------------------------------------------------ latch clips (C7 v5 notch 1, separate PETG parts)
+def _clip_profile():
+    """(n, a) polygons of the clip: n inward from the wall face, a along the closing motion, 0 at the seam."""
+    hk, tb, L = P.LATCH_HOOK, P.SNAP_BEAM_T, P.SNAP_BEAM_L
+    lead = hk / math.tan(math.radians(P.SNAP_LEADIN_DEG))
+    ret = hk / math.tan(math.radians(P.LATCH_CATCH_DEG))
+    nb0 = P.LATCH_CLIP_NB0
+    c_ax = P.LATCH_AXIAL_PLAY
+    n_lip = nb0 - P.LATCH_GUIDE_CLEAR
+    # place the hook so the lid keeps LATCH_CLIP_LIP_MIN under the catch at its thinnest point
+    # retention face: (nb0-hk, a_ro) -> (nb0, a_ro - ret); lid catch = that face shifted by -c_ax
+    a_ro = P.LATCH_CLIP_LIP_MIN + c_ax + (hk - (nb0 - n_lip)) * ret / hk
+    a_tip = a_ro + lead + 0.3
+    a_root = a_tip - L
+    beam = [(nb0 + tb, a_root - 0.01), (nb0 + tb, a_tip), (nb0, a_tip), (nb0 - hk, a_tip - lead), (nb0 - hk, a_ro),
+            (nb0, a_ro - ret), (nb0, a_root - 0.01)]
+    nb_lo, nb_hi = nb0 - 0.7, nb0 + tb + 1.6
+    a_b0 = a_root - P.LATCH_CLIP_BAR_H
+    bar = [(nb_lo, a_b0), (nb_hi, a_b0), (nb_hi, a_root - (nb_hi - nb0 - tb)), (nb0 + tb, a_root), (nb0, a_root),
+           (nb_lo, a_root - (nb0 - nb_lo))]
+    lip_a = lambda n: a_ro - c_ax - (n - (nb0 - hk)) * ret / hk
+    return dict(beam=beam, bar=bar, nb0=nb0, tb=tb, hk=hk, a_tip=a_tip, a_root=a_root, a_b0=a_b0,
+                nb_lo=nb_lo, nb_hi=nb_hi, n_lip=n_lip, lip_a=lip_a)
+
+
+def _clip_frames(zb):
+    """[(name, origin, n, a, t)] in the world, one per clip. a = closing direction at that point."""
+    H = bf_point_to_wf((P.TILT_HINGE[0], 0, P.TILT_HINGE[1]), zb)
+    ax = bf_point_to_wf((P.TILT_HINGE[0], 1, P.TILT_HINGE[1]), zb) - H
+    ax /= np.linalg.norm(ax)
+    up_bf = bf_point_to_wf((0, 0, 1), zb) - bf_point_to_wf((0, 0, 0), zb)
+    x0, x1, y0, y1 = footprint()
+    out = []
+    for name, y_in, nrm in (("front", y0 + P.CASE_WALL, (0, 1, 0)), ("back", y1 - P.CASE_WALL, (0, -1, 0))):
+        x = P.LATCH_CLIP_X
+        # seam height on the wall face at this X: BF z = SEAM_Z
+        # solve world z for (x, y_in) on the plane BF z = SEAM_Z
+        # world point = BOARD_X + bx, by cos - bz sin, zb + by sin + bz cos  with bz = SEAM_Z
+        by = (y_in + P.SEAM_Z * math.sin(T)) / math.cos(T)
+        S = np.array([x, y_in, zb + by * math.sin(T) + P.SEAM_Z * math.cos(T)])
+        v = np.cross(ax, S - H)
+        a = v / np.linalg.norm(v)
+        if np.dot(a, up_bf) < 0:
+            a = -a
+        n = np.array(nrm, float)
+        n = n - np.dot(n, a) * a
+        n /= np.linalg.norm(n)
+        t = np.cross(n, a)                    # so the plane's local Y comes out as +a
+        out.append((name, S, n, a, t))
+    return out
+
+
+def _frame_loc(S, n, a, t):
+    """Location mapping local (X=n, Y=a, Z=t) to the world."""
+    pl = cq.Plane(origin=cq.Vector(*S), xDir=cq.Vector(*n), normal=cq.Vector(*t))
+    return cq.Location(pl)
+
+
+def _poly_solid(pts, z0, z1):
+    w = cq.Wire.makePolygon([cq.Vector(x, y, 0) for x, y in pts], close=True)
+    return cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, 0, z1 - z0)).moved(cq.Location(cq.Vector(0, 0, z0)))
+
+
+def clip_local():
+    """The clip in its local frame (X=n, Y=a, Z=t); this is also its print orientation (flat, Z up)."""
+    pr = _clip_profile()
+    E_ = P.LATCH_CLIP_E
+    return _poly_solid(pr["beam"], 0, E_).fuse(_poly_solid(pr["bar"], 0, E_)).clean().moved(cq.Location(cq.Vector(0, 0, -E_ / 2)))
+
+
+def latch_clips(zb):
+    return {f"clip_{name}": clip_local().moved(_frame_loc(S, n, a, t)) for name, S, n, a, t in _clip_frames(zb)}
+
+
+def latch_features(b, top, zb):
+    """Base: boss with a channel the clip slides into along the wall (open at +t). Top shell: pocket with the catch."""
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+    pr = _clip_profile()
+    E_, c = P.LATCH_CLIP_E, P.LATCH_CLIP_FIT
+    clip_poly = unary_union([Polygon(pr["beam"]), Polygon(pr["bar"])])
+    chan = clip_poly.buffer(c, join_style=2)
+    # beam bending room below the seam (inward), plus the channel continues up through the seam
+    defl = Polygon([(pr["nb0"] - c, pr["a_root"] + 0.5), (pr["nb0"] + pr["tb"] + 0.9, pr["a_root"] + 0.5),
+                    (pr["nb0"] + pr["tb"] + 0.9, 3.0), (pr["nb0"] - c, 3.0)])
+    chan = unary_union([chan, defl])
+    nB = pr["nb_hi"] + c + 1.2
+    a_bot = pr["a_b0"] - c - 1.2 - nB
+    boss = [(0.0 - 1.0, a_bot - 1.0), (nB, a_bot + nB), (nB, 0.5), (-1.0, 0.5)]   # 45 deg underside, into the wall
+    hk = pr["hk"]
+    n_far = pr["nb0"] + pr["tb"] + hk + 0.3
+    n_win = pr["nb0"] - hk - 0.2
+    a_top = pr["a_tip"] + 0.3
+    pocket = [(pr["n_lip"], -3.0), (n_far, -3.0), (n_far, a_top), (n_win, a_top), (n_win, pr["lip_a"](n_win)),
+              (pr["n_lip"], pr["lip_a"](pr["n_lip"]))]
+    ct = P.LATCH_POCKET_T_CLEAR
+    below = halfspace_bf(zb, P.SEAM_Z, above=False)
+    for name, S, n, a, t in _clip_frames(zb):
+        loc = _frame_loc(S, n, a, t)
+        bs = _poly_solid(boss, -E_ / 2 - 1.6, E_ / 2 + 1.6).moved(loc).intersect(below).intersect(outer_body(zb))
+        (bx0, by0, bz0), (bx1, by1, bz1) = battery_box()
+        bs = bs.cut(_box((bx0 - 0.5, by0 - 0.5, bz0 - 1), (bx1 + 0.5, by1 + 0.5, bz1 + 0.5)))   # keep off the battery
+        ch = _poly_solid(list(chan.exterior.coords)[:-1], -E_ / 2 - c, E_ / 2 + 5.0).moved(loc)
+        b = b.fuse(bs).cut(ch)
+        top = top.cut(_poly_solid(pocket, -E_ / 2 - ct, E_ / 2 + ct).moved(loc))
+    return A.solidify(b), A.solidify(top), dict(a_tip=round(pr["a_tip"], 2), a_root=round(pr["a_root"], 2))
