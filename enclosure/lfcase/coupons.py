@@ -27,6 +27,8 @@ class Coupon:
 
 def deboss(wp_solid: cq.Shape, text: str, at, size=None, depth=None, face_z=None, rot=0.0):
     """Cut text into the top face at Z = face_z (default: shape top)."""
+    if not text:
+        return wp_solid
     size = size or P.COUPON_LABEL_SIZE
     depth = depth or P.COUPON_LABEL_DEPTH
     bb = wp_solid.BoundingBox()
@@ -267,14 +269,23 @@ def speaker_pocket() -> Coupon:
 
 
 # --------------------------------------------------------------- C7 v3 (guided)
-def _snap_pair_v3(c_ax: float, label: str):
+def id_notches(shape: cq.Shape, n: int, x_edge: float, y_c: float, side: int = -1):
+    """Cut n countable notches into a vertical edge face at x = x_edge (side -1: notch goes +X)."""
+    for i in range(n):
+        y = y_c + (i - (n - 1) / 2) * P.ID_NOTCH_PITCH
+        x0 = x_edge if side < 0 else x_edge - P.ID_NOTCH_D
+        shape = shape.cut(cq.Solid.makeBox(P.ID_NOTCH_D, P.ID_NOTCH_W, 50, pnt=cq.Vector(x0 - (0.01 if side < 0 else 0), y - P.ID_NOTCH_W / 2, -10)))
+    return shape
+
+
+def _snap_pair_v3(c_ax: float, label: str, retain_deg: float | None = None):
     """Guided snap test. Male: base bar + two guide posts + beam with hook. Female: block with two
     guide channels and the beam slot; the slot only gives the beam room on the side it bends to."""
     t, hk, L = P.SNAP_BEAM_T, P.SNAP_HOOK, P.SNAP_BEAM_L
     E = P.SNAP_EXTRUDE
     gd, gw, gc = P.SNAP_GUIDE_DEPTH, P.SNAP_GUIDE_W, P.SNAP_GUIDE_CLEAR
     lead = hk / math.tan(math.radians(P.SNAP_LEADIN_DEG))
-    ret = hk / math.tan(math.radians(P.SNAP_RETAIN_DEG))
+    ret = hk / math.tan(math.radians(retain_deg or P.SNAP_RETAIN_DEG))
     gx = 5.5                                     # guide post centres at +/- gx
     y_tip = -L
     y_ret_out = y_tip + lead + 0.3
@@ -316,3 +327,19 @@ def snap_latches_v3() -> Coupon:
                   notes=[f"Guide posts {P.SNAP_GUIDE_DEPTH} deep stop the rocking; hook {P.SNAP_HOOK}, catch {P.SNAP_RETAIN_DEG:g} deg; "
                          "P1 = 0.1 preload, P0 = zero play, L1 = 0.1 play."],
                   checks={"beam_strain": eps})
+
+
+def snap_latches_v4() -> Coupon:
+    """Guided pairs with 0.3 guide clearance, 0.8 hook, L1 play; catch angle 45/55/65 deg.
+    Pairs side by side; 1/2/3 notches on the left edge of both halves."""
+    parts = {}
+    for i, ang in enumerate(P.SNAP_RETAIN_VARIANTS):
+        m, f = _snap_pair_v3(P.SNAP_AXIAL_PLAY_V4, "", retain_deg=ang)
+        m = id_notches(m, i + 1, -8.0, 2.5)          # male bar spans x -8..8
+        f = id_notches(f, i + 1, -9.0, -7.0)         # female block spans x -9..9
+        x = i * 42.0
+        parts[f"snap4_{i+1}notch_{int(ang)}deg_hook"] = m.moved(cq.Location(cq.Vector(x, 0, 0)))
+        parts[f"snap4_{i+1}notch_{int(ang)}deg_socket"] = f.moved(cq.Location(cq.Vector(x + 20.0, 0, 0)))
+    return Coupon("C7v4_snap_latches", "Guided snap latches, 3 release strengths", parts,
+                  notes=["1 notch = 45 deg catch (easiest to pull apart), 2 = 55 deg, 3 = 65 deg (firmest). "
+                         f"Guide clearance {P.SNAP_GUIDE_CLEAR}/side, hook {P.SNAP_HOOK}, play {P.SNAP_AXIAL_PLAY_V4}."])

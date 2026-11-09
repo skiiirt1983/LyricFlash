@@ -30,9 +30,10 @@ def drop_to_bed(shape: cq.Shape) -> cq.Shape:
     return shape.moved(cq.Location(cq.Vector(-bb.xmin, -bb.ymin, -bb.zmin)))
 
 
-def pack(shapes: dict, gap=6.0, bed=BED):
-    """Shelf-pack bounding boxes on the bed. Returns {name: shape placed}."""
-    items = sorted(shapes.items(), key=lambda kv: -(kv[1].BoundingBox().ylen))
+def pack(shapes: dict, gap=6.0, bed=BED, keep_order=False):
+    """Shelf-pack bounding boxes on the bed. Returns {name: shape placed}.
+    keep_order: place in the given order (keeps matching halves next to each other)."""
+    items = list(shapes.items()) if keep_order else sorted(shapes.items(), key=lambda kv: -(kv[1].BoundingBox().ylen))
     placed, x, y, row_h = {}, gap, gap, 0.0
     for name, s in items:
         s = drop_to_bed(s)
@@ -157,7 +158,7 @@ def _xyz_mat(rot_deg_x=0.0):
     return np.array([[1, 0, 0], [0, c, -s_], [0, s_, c]])
 
 
-def write_3mf_project(parts: list, path: Path, gap: float = 6.0):
+def write_3mf_project(parts: list, path: Path, gap: float = 6.0, keep_order: bool = True):
     """One 3MF with every part laid flat on the plate (print orientation) AND an assembled
     pose for Bambu Studio's Assembly view (Metadata/model_settings.config <assemble>).
 
@@ -189,7 +190,7 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0):
         # local = R*S + d  ->  S = R^T (local - d); assembled world = S + a_shift
         Rt = R.T
         mats_asm[p["name"]] = (Rt, Rt @ (-d) + a_shift)
-    placed = pack(dict(locals_), gap=gap)          # only used for the plate positions
+    placed = pack(dict(locals_), gap=gap, keep_order=keep_order)   # plate positions
     objs, items, asm, slots = [], [], [], []
     for i, p in enumerate(parts, 2):
         n = p["name"]

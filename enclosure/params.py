@@ -425,3 +425,9 @@ LABEL_MIN_SIZE = 10.0                # text height, only where a face is big eno
 COUPON_LABEL_DEPTH = 0.4                # 2 layers
 ID_NOTCH_W, ID_NOTCH_D, ID_NOTCH_PITCH = 2.0, 1.0, 3.5   # small parts: count notches (1/2/3) on an edge
 PAIR_PARTS_ADJACENT = True           # matching halves next to each other on the plate
+
+# C7 v4 (Paul: v3 P1-hook + L1-socket "very very tight, needs pliers"; others too tight to assemble).
+SNAP_GUIDE_CLEAR = 0.30              # PETG sliding fit: ~0.3/side (v3 0.15 too tight)
+SNAP_HOOK = 0.8                      # back from 1.0
+SNAP_AXIAL_PLAY_V4 = 0.10            # the L1 socket setting that worked
+SNAP_RETAIN_VARIANTS = (45.0, 55.0, 65.0)   # release force: easy / medium / firm (notches 1/2/3)
