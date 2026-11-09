@@ -132,7 +132,8 @@ def save_labelled(scene: Scene, path, labels=(), title=None, footer=None, dpi=10
         )
         ax.plot([x], [y], "o", ms=7, mfc=col, mec="black")
     if title:
-        ax.text(20, 30, title, fontsize=22, fontweight="bold", va="top")
+        ax.text(20, 30, title, fontsize=22, fontweight="bold", va="top",
+                bbox=dict(fc="white", ec="none", alpha=0.85))
     if footer:
         ax.text(20, h - 20, footer, fontsize=14, va="bottom", color="#333")
     fig.savefig(path, dpi=dpi)
