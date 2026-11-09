@@ -1,5 +1,9 @@
 # Enclosure changelog
 
+## Labels (2026-11-09)
+- Paul: 3.5 mm text unreadable; ~10 mm at 0.3 deep is legible. Small parts get countable edge
+  notches instead; matching halves placed next to each other on the plate.
+
 ## C1 decision (2026-11-09)
 - Paul, looking at C1 v2 from the front: "this look is good" -> lip design final (1.0 over the
   glass, 1.0 proud, flex-fold notches). Bore clearance 0.3 -> 0.7 on diameter (no force).
