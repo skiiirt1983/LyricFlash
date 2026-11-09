@@ -1,5 +1,11 @@
 # Enclosure changelog
 
+## C9 result (2026-11-09)
+- Gauge C (0.40 side / 0.70 under / 0.15 behind / 0.55 opening) is perfectly sized; A and B way
+  too tight. It only goes on angled: with the web above the opening, a base moving straight up
+  must pass the web over the port (root cause of the C2 misfit too). -> tilt-in (hinge) assembly,
+  proven with an assembly-path simulation before printing.
+
 ## Round 2 (after Paul's round-1 table, 2026-11-09)
 - Results: C1 glass didn't reach the lip (flex folds stick out past the STEP: bore had 0.13 on
   paper), lip too much to swipe, locator rocks (top cup 0.08 mm from the SPK socket; plugs in);

@@ -366,3 +366,7 @@ PLUG_KEEPOUT_GROW = 1.0              # XY grow around the socket footprints
 # C7 v2: Paul "no tension, rattles": v1 had 0.15-0.35 axial play by design. Now:
 SNAP_LATERAL_CLEAR = 0.15
 SNAP_AXIAL_VARIANTS = (-0.10, 0.00, 0.10)   # negative = preload (pulls tight)
+
+# C9 result (Paul 2026-11-09): gauge C is "perfectly sized" once on (A, B way too tight).
+# It only went on by angling/twisting: a straight-up base can't pass the web over the port.
+USB_GUIDE_CLEAR, USB_UNDER_GAP, USB_BACKSTOP_GAP, USB_OPENING_CLEAR = USB_GAUGE_VARIANTS["C"]
