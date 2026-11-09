@@ -1,5 +1,9 @@
 # Enclosure changelog
 
+## Materials, 2026-11-09
+- Top shell: Iridium Gold PLA Metal. Base tray: black PETG. Coupons printed per plate in those.
+- Phase 2: latch beams move to the PETG base (no flexing features in PLA).
+
 ## Phase 1 v2, 2026-11-09 (Paul: non-manifold 3MF, C6 floating regions)
 - 3MF writer welds each part into one connected mesh; every object checked: 0 non-manifold edges.
 - C6 flexure redesigned: beam stands on the plate (full-height inner wall layer, gap behind,

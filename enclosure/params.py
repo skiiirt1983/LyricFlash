@@ -337,3 +337,11 @@ SPK_GRILLE_MARGIN = 3.0                    # grille area = speaker front minus t
 SPK_GRIP_RIB = 0.25                        # side crush ribs (interference) that hold the speaker
 SPK_LEAD_SLOT_W = 4.0                      # Paul 2026-11-09: leads leave dead centre of a 20 mm end (mid-width, mid-thickness)
 SPK_PLACEMENT = "any secure spot"          # Paul 2026-11-09: speaker only plays while the mics are idle, so no keep-out from the mic holes
+
+# ============================================================================
+# MATERIALS (Paul 2026-11-09)
+# ============================================================================
+MATERIAL_TOP = "PLA Metal, Iridium Gold"   # top shell (bezel ring): rigid only, nothing that flexes
+MATERIAL_BASE = "PETG, black"              # base tray: carries every springy feature (PWR flexure, latch beams)
+# Phase 2 note: move the latch beams from the top shell to the PETG base, so the gold PLA part
+# has nothing that bends. PLA softens at ~55-60 C (fine indoors / pocket, not a hot car dashboard).
