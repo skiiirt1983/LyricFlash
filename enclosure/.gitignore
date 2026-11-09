@@ -1,0 +1,7 @@
+# Waveshare's STEP model is downloaded by the user (see README), not committed.
+board/*.stp
+board/*.step
+# Per-machine caches
+cache/
+__pycache__/
+.venv/

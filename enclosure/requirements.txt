@@ -1,0 +1,4 @@
+# LyricFlash enclosure toolchain (tested with Python 3.13 on Linux)
+cadquery==2.8.0
+numpy
+matplotlib
