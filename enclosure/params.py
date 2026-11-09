@@ -483,7 +483,7 @@ PWR_DIMPLE_D = 7.0                   # finger dimple round the pin end
 PWR_DIMPLE_DEPTH = 1.2
 
 # ---- Phase 2: latch clips (separate PETG parts printed flat = C7 v5 notch 1 geometry)
-LATCH_CLIP_X = 22.0                  # world X of the two clips (front + back wall), far from the hinge
+LATCH_CLIP_X = 12.5                  # world X of the two clips (front + back wall); 22 sat on the PWR/BOOT paths
 LATCH_CLIP_E = 6.0                   # clip width (print height), = SNAP_EXTRUDE of C7
 LATCH_CLIP_NB0 = 1.0                 # beam outer face, inward from the wall's inner face
 LATCH_CLIP_LIP_MIN = 1.0             # lid material between the seam and the catch
@@ -494,3 +494,21 @@ TILT_SWEEP_DEG = 26.0                # swing range checked / relieved (base come
 HINGE_RELIEF_AIR = 0.2               # top shell cut back along the path of the base's left wall
 LEDGE_AIR = 0.25                     # ledges keep this from every board part along the whole swing
 PWR_PIN_REST_GAP = 0.35              # pin tip to plunger at rest (pin is loose, no preload; swing came 0.11 close at 0.2)
+
+# ---- Phase 2: slide switch in the floor (Paul: underside pocket), C4 K3 cell, outer face = case bottom
+SWITCH_CELL_X = -16.0                # world X of the pocket centre (back-left, beside the battery wire exit)
+SWITCH_OPEN_GAP = 0.0                # open side flush with the battery box: the cell keeps it in
+
+# ---- Phase 2: BOOT pinhole (PLAN 3.5: ~1.5 mm pinhole for recovery flashing)
+BOOT_HOLE_D = 1.6                    # paperclip guide (a 1 mm paperclip slides freely)
+BOOT_TUBE_START = 1.5                # tube starts this far out from the plunger tip (clear of the PCB edge)
+
+# ---- Phase 2: cable clip (separate part) on a dovetail rail, left face, at desk height
+CABLE_RAIL_Y = (-8.0, 14.0)          # world Y span of the rail (clip slides on from the front)
+CABLE_RAIL_Z = 4.0                   # rail centre height
+CABLE_RAIL_W = 3.0                   # rail width at the wall
+CABLE_RAIL_PROUD = 1.0               # rail stands this far off the left face (45 deg flanks)
+CABLE_CLIP_FIT = 0.25                # clip on the rail, per side (slides on by hand)
+CABLE_CLIP_WALL = 1.6
+CABLE_CLIP_MOUTH = 0.75              # channel opening, fraction of the cable OD (cable pops in/out by hand)
+CABLE_CLIP_FLOOR_GAP = 0.5           # clip bottom stays off the desk

@@ -325,17 +325,17 @@ def mic_features(b, zb):
 
 
 # ------------------------------------------------------------------ PWR push pin (KEY2)
-def _pin_frame():
-    key = P.PWR_IS
+def _pin_frame(key=None):
+    key = key or P.PWR_IS
     a = math.radians(getattr(P, f"{key}_PRESS_ANGLE"))
     tip = getattr(P, f"{key}_TIP_CENTER")
     tz = getattr(P, f"{key}_TIP_Z")
     return a, tip, (tz[0] + tz[1]) / 2
 
 
-def _local_box(s0, s1, l0, l1, z0, z1):
+def _local_box(s0, s1, l0, l1, z0, z1, key=None):
     """Box in the pin frame (s outward along the press axis from the plunger tip face, l across, BF z)."""
-    a, tip, _ = _pin_frame()
+    a, tip, _ = _pin_frame(key)
     b = cq.Solid.makeBox(s1 - s0, l1 - l0, z1 - z0, pnt=cq.Vector(s0, l0, z0))
     return b.rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), math.degrees(a)).moved(cq.Location(cq.Vector(tip[0], tip[1], 0)))
 
@@ -512,6 +512,18 @@ def _clip_frames(zb):
         n = n - np.dot(n, a) * a
         n /= np.linalg.norm(n)
         t = np.cross(n, a)                    # so the plane's local Y comes out as +a
+        # the clip leans with the closing motion; slide it inward until every point of the clip (and
+        # its base channel) stays >= 0.3 inside the wall face
+        nw = np.array(nrm, float)
+        pr = _clip_profile()
+        pts = pr["beam"] + pr["bar"] + [(pr["nb_lo"] - P.LATCH_CLIP_FIT, pr["a_b0"] - P.LATCH_CLIP_FIT)]
+        dmin = min(nn * np.dot(n, nw) + aa * np.dot(a, nw) for nn, aa in pts if aa < 0)
+        if dmin < 0.3:
+            # leaning would take it into the wall (back wall): stand it parallel to the wall instead
+            a = a - np.dot(a, nw) * nw
+            a /= np.linalg.norm(a)
+            n = nw.copy()
+            t = np.cross(n, a)
         out.append((name, S, n, a, t))
     return out
 
@@ -552,7 +564,9 @@ def latch_features(b, top, zb):
     chan = unary_union([chan, defl])
     nB = pr["nb_hi"] + c + 1.2
     a_bot = pr["a_b0"] - c - 1.2 - nB
-    boss = [(0.0 - 1.0, a_bot - 1.0), (nB, a_bot + nB), (nB, 0.5), (-1.0, 0.5)]   # 45 deg underside, into the wall
+    # 45 deg underside into the wall; inner top corner chamfered so it keeps clear of the PCB edge in the swing
+    ch_n = nB - (pr["nb0"] + pr["tb"] + 0.9 + 1.2)
+    boss = [(0.0 - 1.0, a_bot - 1.0), (nB, a_bot + nB), (nB, 0.5 - ch_n - 2.0), (nB - ch_n, 0.5 - 2.0), (nB - ch_n, 0.5), (-1.0, 0.5)]
     hk = pr["hk"]
     n_far = pr["nb0"] + pr["tb"] + hk + 0.3
     n_win = pr["nb0"] - hk - 0.2
@@ -582,8 +596,137 @@ def build_all(zb=None, log=print):
     log("mic ducts"); b, mic = mic_features(b, zb)
     log("PWR pin tube"); b, pwr = pwr_features(b, zb)
     log("speaker"); b, spk = speaker_features(b, zb)
+    log("switch"); b, sw = switch_features(b, zb)
+    log("BOOT pinhole"); b, boot = boot_features(b, zb)
+    log("cable rail"); b = cable_rail_features(b, zb)
     log("top shell"); top = top_shell(zb)
     log("latches"); b, top, lat = latch_features(b, top, zb)
-    parts = {"top_shell": top, "base": b, "pwr_pin": pwr_pin(zb)}
+    parts = {"top_shell": top, "base": b, "pwr_pin": pwr_pin(zb), "cable_clip": cable_clip(zb)}
     parts.update(latch_clips(zb))
-    return parts, dict(mic=mic, pwr=pwr, speaker=spk, latch=lat, zb=zb)
+    return parts, dict(mic=mic, pwr=pwr, speaker=spk, switch=sw, boot=boot, latch=lat, zb=zb)
+
+
+# ------------------------------------------------------------------ slide switch: C4 K3 cell in the floor
+def switch_features(b, zb):
+    """The C4 pocket (K3) set into the floor, outer face = case bottom, open side toward the battery.
+    Same numbers and print orientation as the coupon Paul tested."""
+    bl, bw, bh = P.SWITCH_BODY
+    pl, pw = P.SWITCH_POCKET
+    sl, sw = P.SWITCH_KNOB_SLOT
+    wall = P.WALL_MIN
+    cav_h = bh + P.SWITCH_POCKET_H_CLEAR
+    pin = P.SWITCH_PIN_SPACE
+    plate = P.SWITCH_KNOB_HEIGHT + P.SWITCH_KNOB_TIP_RECESS
+    H = plate + cav_h + pin
+    (bx0, by0, bz0), (bx1, by1, bz1) = battery_box()
+    cx = P.SWITCH_CELL_X
+    y_open = by1 + P.SWITCH_OPEN_GAP
+    y_closed = y_open + pw
+    yc = y_open + pw / 2
+    cell = _box((cx - pl / 2 - wall, y_open, 0), (cx + pl / 2 + wall, y_closed + wall, H))
+    b = b.fuse(cell.intersect(outer_body(zb)))
+    # gap in the battery's low back wall over the pocket (the battery itself closes the pocket)
+    b = b.cut(_box((cx - pl / 2 - wall, by1 - 0.1, bz0), (cx + pl / 2 + wall, y_open + 0.01, bz0 + P.BATTERY_POCKET_WALL_H + 1)))
+    # knob slot through the plate
+    b = b.cut(_box((cx - sl / 2, yc - sw / 2, -1), (cx + sl / 2, yc + sw / 2, plate)))
+    # knob entry channel from the slot to the open side, under a skin on the outer face
+    cw = P.SWITCH_KNOB_CHANNEL_W
+    b = b.cut(_box((cx - cw / 2, y_open - 0.5, P.SWITCH_CHANNEL_SKIN), (cx + cw / 2, yc, plate + 0.01)))
+    # body cavity, open toward the battery and upward (pins)
+    b = b.cut(_box((cx - pl / 2, y_open - 0.5, plate), (cx + pl / 2, y_closed, H + 5)))
+    # lips over both body ends, 45 deg wedge on the underside (as C4)
+    z0 = plate + cav_h - P.SWITCH_LIP
+    for s in (-1, 1):
+        xw = cx + s * pl / 2
+        xi = xw - s * P.SWITCH_LIP
+        prof = [(xw, z0), (xi, z0 + P.SWITCH_LIP), (xi, H), (xw, H)]
+        w = cq.Wire.makePolygon([cq.Vector(x, y_open, z) for x, z in prof], close=True)
+        lip = cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, y_closed - y_open, 0))
+        b = b.fuse(lip)
+    return A.solidify(b), dict(centre=(cx, round(yc, 2)), knob_slot=(sl, sw), plate=plate)
+
+
+# ------------------------------------------------------------------ BOOT pinhole (KEY1), PLAN 3.5
+def boot_features(b, zb):
+    """Paperclip guide: a tube on KEY1's press axis from just past the PCB edge out through the
+    front-right corner, D BOOT_HOLE_D at the surface. Fin under it like the PWR tube."""
+    key = P.BOOT_IS
+    a, tip, zc = _pin_frame(key)
+    d, w = P.BOOT_HOLE_D, P.PWR_TUBE_WALL
+    s0 = P.BOOT_TUBE_START
+    body = outer_body(zb)
+    s = s0
+    while s < 80:
+        p = (tip[0] + s * math.cos(a), tip[1] + s * math.sin(a), zc)
+        if not body.isInside(cq.Vector(*bf_point_to_wf(p, zb)), 1e-4):
+            break
+        s += 0.05
+    s_x = s
+    h = d / 2
+    top_z = min(zc + h + w, P.PWR_PIN_TOP + P.PWR_PIN_CLEAR + w)
+    tube = _local_box(s0, s_x + 5, -h - w, h + w, zc - h - w, top_z, key)
+    bore = _local_box(s0 - 3, s_x + 6, -h, h, zc - h, zc + h, key)
+    fin = _local_box(s0, s_x + 5, -h - w, h + w, -60, zc - h - w + 0.01, key)
+    tube_w, bore_w, fin_w = (to_wf(x, zb) for x in (tube, bore, fin))
+    p_in = bf_point_to_wf((tip[0] + s0 * math.cos(a), tip[1] + s0 * math.sin(a), zc - h - w), zb)
+    u = bf_point_to_wf((tip[0] + math.cos(a), tip[1] + math.sin(a), 0), zb) - bf_point_to_wf((tip[0], tip[1], 0), zb)
+    uh = np.array([u[0], u[1], 0.0]); uh /= np.linalg.norm(uh)
+    nrm = cq.Vector(uh[0], uh[1], 1.0).normalized()
+    keep = cq.Solid.makeBox(400, 400, 400, pnt=cq.Vector(-200, -200, 0)).moved(
+        cq.Location(cq.Plane(origin=cq.Vector(*p_in), xDir=cq.Vector(-uh[1], uh[0], 0), normal=nrm)))
+    fin_w = fin_w.intersect(keep)
+    (bx0, by0, bz0), (bx1, by1, bz1) = battery_box()
+    add = (tube_w.fuse(fin_w).intersect(body).intersect(halfspace_bf(zb, P.SEAM_Z, above=False)).cut(_box(*speaker_box()))
+           .cut(_box((bx0 - 0.5, by0 - 0.5, bz0 - 1), (bx1 + 0.5, by1 + 0.5, bz1 + 0.5))))
+    b = b.fuse(add).cut(bore_w)
+    ex = bf_point_to_wf((tip[0] + s_x * math.cos(a), tip[1] + s_x * math.sin(a), zc), zb)
+    return A.solidify(b), dict(exit=tuple(round(float(v), 2) for v in ex), length=round(s_x - s0, 1))
+
+
+# ------------------------------------------------------------------ cable clip (separate part) on a rail, left face, low
+def _clip_rail_profile():
+    """Dovetail rail (X out from the wall face = 0, Z up), 45 deg flanks."""
+    zc, wb, pr = P.CABLE_RAIL_Z, P.CABLE_RAIL_W, P.CABLE_RAIL_PROUD
+    return [(0.01, zc - wb / 2), (-pr, zc - wb / 2 - pr), (-pr, zc + wb / 2 + pr), (0.01, zc + wb / 2)]
+
+
+def cable_rail_features(b, zb):
+    x0 = footprint()[0]
+    y_a, y_b = P.CABLE_RAIL_Y
+    prof = _clip_rail_profile()
+    w = cq.Wire.makePolygon([cq.Vector(x0 + x, y_a, z) for x, z in prof], close=True)
+    rail = cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, y_b - y_a, 0))
+    # stop at the back end: the clip slides on from the front, cable pulls push it onto the stop
+    zc = P.CABLE_RAIL_Z
+    stop = _box((x0 - P.CABLE_RAIL_PROUD, y_b, zc - P.CABLE_RAIL_W / 2 - P.CABLE_RAIL_PROUD),
+                (x0 + 0.01, y_b + 2.0, zc + P.CABLE_RAIL_W / 2 + P.CABLE_RAIL_PROUD))
+    return A.solidify(b.fuse(rail).fuse(stop))
+
+
+def cable_clip(zb):
+    """Separate part: dovetail slot that slides onto the rail + a C-channel for the cable (along Y),
+    opening outward so the cable pops in and out by hand. Profile in XZ, length along Y."""
+    x0 = footprint()[0]
+    y_a, y_b = P.CABLE_RAIL_Y
+    c = P.CABLE_CLIP_FIT
+    zc, wb, pr = P.CABLE_RAIL_Z, P.CABLE_RAIL_W, P.CABLE_RAIL_PROUD
+    od = P.CABLE_OD
+    t = P.CABLE_CLIP_WALL
+    x_body0 = -pr - c - t                                   # body outer face (beyond the rail)
+    z_lo, z_hi = max(P.CABLE_CLIP_FLOOR_GAP, zc - wb / 2 - pr - c - t), zc + wb / 2 + pr + c + t
+    rc = od / 2 + 0.15                                      # channel radius (0.15 slack)
+    cxc = x_body0 - rc - 0.01 + 0.0                         # channel centre: just outside the body
+    body = _box((x0 + x_body0 - 2 * rc - t, y_a + 0.3, z_lo), (x0 - c, y_b - 0.3, z_hi))
+    # dovetail slot = rail profile grown by c
+    prof = [(0.5, zc - wb / 2 - c * 0.4), (-pr - c, zc - wb / 2 - pr - c * 0.4 - c), (-pr - c, zc + wb / 2 + pr + c * 0.4 + c), (0.5, zc + wb / 2 + c * 0.4)]
+    wv = cq.Wire.makePolygon([cq.Vector(x0 + x, y_a - 1, z) for x, z in prof], close=True)
+    slot = cq.Solid.extrudeLinear(cq.Face.makeFromWires(wv), cq.Vector(0, y_b - y_a + 2, 0))
+    body = body.cut(slot)
+    # cable channel (cylinder along Y) with an outward mouth of CABLE_CLIP_MOUTH x OD
+    chan = cq.Solid.makeCylinder(rc, y_b - y_a + 4, pnt=cq.Vector(x0 + cxc, y_a - 2, zc), dir=cq.Vector(0, 1, 0))
+    mouth = P.CABLE_CLIP_MOUTH * od
+    mo = _box((x0 + cxc - rc - t - 1, y_a - 2, zc - mouth / 2), (x0 + cxc, y_b + 2, zc + mouth / 2))
+    ring = cq.Solid.makeCylinder(rc + t, y_b - y_a - 0.6, pnt=cq.Vector(x0 + cxc, y_a + 0.3, zc), dir=cq.Vector(0, 1, 0))
+    clip = body.fuse(ring).cut(chan).cut(mo)
+    clip = clip.intersect(_box((x0 - 50, y_a - 5, max(0.3, z_lo)), (x0 + 5, y_b + 5, 50)))
+    return A.solidify(clip)
