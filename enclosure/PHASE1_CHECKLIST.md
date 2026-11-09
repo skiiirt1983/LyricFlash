@@ -62,7 +62,8 @@ spigot.
    the web doesn't crack (especially at its corners), the latches stay closed, and the mouth
    still reads flush with the plug in. Also note which way you naturally grip it.
 6. Squeeze the plug's overmould hard against the face. **Check:** the web doesn't flex.
-7. Open the latches (pull the beam tips outward) and close them 10 times. **Check:** no
+7. Open the latches (the two flat tabs standing up from the ends of the gold top slice; picture:
+   `out/phase1/C2_usb_wall/C2_top_slice_latches_on_plate.png`): pull the tab tips outward and close them 10 times. **Check:** no
    whitening at the beam roots.
 - **Report:** flush (sunk / level / slightly proud / clearly proud), gap even (yes / touches at
   top / bottom / left / right), web (OK / cracked / drooped), board movement on plug-in (none /
