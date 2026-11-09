@@ -279,20 +279,17 @@ def _mic_parts_bf(mic, air=None):
             bb = sol.BoundingBox()
             cands.append(np.array([(x, y, z) for x in (bb.xmin, bb.xmax) for y in (bb.ymin, bb.ymax)
                                    for z in (bb.zmin, min(bb.zmax, 0.0))]))
-    taken = set()
-    for _ in range(8):                                   # enclose neighbours until none sits under the wall
-        grew = False
-        for n, pts in enumerate(cands):
-            if n in taken or pts[:, 2].min() > 0.05:
-                continue
-            fp = MultiPoint(pts[:, :2]).convex_hull
-            if outline.distance(fp) < wl + 0.3:
-                sh, sz = _swept_outline(pts, air)
-                outline = outline.union(sh).convex_hull
-                inner = inner.fuse(_prism(sh, sz - air, 1.0))
-                taken.add(n); grew = True
-        if not grew:
-            break
+    # one pass, direct neighbours only (a cascade spreads over the whole board); keep the real outline shape
+    for pts in cands:
+        if pts[:, 2].min() > 0.05:
+            continue
+        if hole.distance(MultiPoint(pts[:, :2]).convex_hull) < wl + 0.3:
+            sh, sz = _swept_outline(pts, air)
+            outline = outline.union(sh)
+            inner = inner.fuse(_prism(sh, sz - air, 1.0))
+    if outline.geom_type != "Polygon":
+        outline = outline.convex_hull
+    outline = outline.buffer(0.3, join_style=1).buffer(-0.3, join_style=1)   # close slivers between the two
     if outline is not hole:
         inner = inner.fuse(_prism(outline, z_cav, 1.0))
     js = dict(join_style=2, mitre_limit=2.0)
