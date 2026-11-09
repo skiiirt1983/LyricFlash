@@ -22,6 +22,7 @@ class Coupon:
     notes: list = field(default_factory=list)
     board_check: object = None     # callable -> {part: shape in board frame} or None
     checks: dict = field(default_factory=dict)  # extra numbers for the checklist
+    sections: list = field(default_factory=list)  # [(stem, cut angle deg, target xyz, zoom, labels)] assembled renders
 
 
 def deboss(wp_solid: cq.Shape, text: str, at, size=None, depth=None, face_z=None, rot=0.0):
@@ -199,4 +200,62 @@ def snap_latches() -> Coupon:
                f"retention face {P.SNAP_RETAIN_DEG:g} deg. Clearance c = side fit of the spigot AND axial play at the catch.",
                "Printed as 2-D profiles standing on the bed, so the beams bend along the layers (strong direction)."],
         checks={"beam_strain": eps},
+    )
+
+
+# --------------------------------------------------------------- speaker
+def speaker_pocket() -> Coupon:
+    L, W, T = P.SPK_L, P.SPK_W, P.SPK_T
+    c, wall = P.SPK_CLEAR, P.WALL_MIN
+    pl, pw = L + 2 * c, W + 2 * c
+    depth = T + P.SPK_DEPTH_CLEAR
+    ox, oy = pl + 2 * wall, pw + 2 * wall
+    H = wall + depth
+    r = P.SPK_CORNER_R
+    body = cq.Workplane("XY").rect(ox, oy).extrude(H).edges("|Z").fillet(r + wall)
+    body = body.cut(cq.Workplane("XY").workplane(offset=wall).rect(pl, pw).extrude(H).edges("|Z").fillet(r + c))
+    # front seal crush rib on the plate, under the speaker's front frame
+    si = P.SPK_SEAL_INSET
+    rw = P.SPK_SEAL_RIB_W
+    rib = (cq.Workplane("XY").workplane(offset=wall).rect(L - 2 * si + rw, W - 2 * si + rw).extrude(P.SPK_SEAL_RIB_H)
+           .edges("|Z").fillet(max(0.3, r - si + rw / 2))
+           .cut(cq.Workplane("XY").workplane(offset=wall - 0.1).rect(L - 2 * si - rw, W - 2 * si - rw).extrude(1)
+                .edges("|Z").fillet(max(0.2, r - si - rw / 2))))
+    body = body.union(rib)
+    # grille: hex pattern of holes inside the seal
+    gm = P.SPK_GRILLE_MARGIN
+    gx, gy = L / 2 - gm, W / 2 - gm
+    pts = []
+    p = P.SPK_GRILLE_PITCH
+    j = 0
+    y = -gy
+    while y <= gy + 1e-6:
+        x0 = -gx + (p / 2 if j % 2 else 0)
+        x = x0
+        while x <= gx + 1e-6:
+            # stadium-shaped grille area (rounded ends like the cone)
+            rr = gy
+            if abs(x) <= gx - rr or math.hypot(abs(x) - (gx - rr), y) <= rr:
+                pts.append((x, y))
+            x += p
+        y += p * math.sqrt(3) / 2
+        j += 1
+    body = body.cut(cq.Workplane("XY").pushPoints(pts).circle(P.SPK_GRILLE_HOLE_D / 2).extrude(wall + 0.1))
+    # side grip ribs (two per long wall), vertical, interference SPK_GRIP_RIB
+    for sx in (-L / 4, L / 4):
+        for sy in (-1, 1):
+            body = body.union(cq.Workplane("XY").workplane(offset=wall - 0.01)
+                              .center(sx, sy * (pw / 2 - (c + P.SPK_GRIP_RIB) / 2 + 0.01))
+                              .rect(0.8, c + P.SPK_GRIP_RIB).extrude(depth + 0.01))
+    # lead slot in one short end, from the back
+    body = body.cut(cq.Workplane("XY").workplane(offset=wall + 2.0).center(pl / 2 + wall / 2, 0)
+                    .rect(wall * 3, P.SPK_LEAD_SLOT_W).extrude(H))
+    shape = body.val()
+    shape = deboss(shape, "C8", (-pl / 2 - wall / 2, 0), size=1.2, rot=90)
+    return Coupon(
+        "C8_speaker_pocket", "Speaker pocket + grille", {"speaker_pocket": shape},
+        notes=[f"Speaker {L} x {W} x {T} (Paul's listing image). Pocket +{c}/side, {P.SPK_DEPTH_CLEAR} extra depth, "
+               f"corner R{P.SPK_CORNER_R} (TODO, estimated). Front seal rib {P.SPK_SEAL_RIB_H} high on the speaker frame, "
+               f"grille {len(pts)} x D{P.SPK_GRILLE_HOLE_D}. Four side ribs grip it ({P.SPK_GRIP_RIB} interference). "
+               "Printed grille-down; holes are vertical, no support."],
     )

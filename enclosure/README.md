@@ -3,8 +3,8 @@
 A parametric, 3D-printed case for LyricFlash on the Waveshare ESP32-S3-Touch-AMOLED-1.75.
 The design brief is PLAN.md (kept with Paul). All dimensions live in `params.py`.
 
-Status: **Phase 0 done** (board imported, values extracted, labelled renders).
-Phase 1 (fit-test coupons) starts once the open questions below are answered.
+Status: **Phase 1 coupons ready to print** (option A bezel). See `PHASE1_CHECKLIST.md` for what
+to print and what to report, and `USB_STACKUP.md` for the USB-C tolerance stack-up.
 
 ## Setup
 
@@ -30,9 +30,15 @@ component under `enclosure/cache/`.
 ## Run
 
 ```bash
-python phase0.py
-# Headless Linux (no display): xvfb-run -a python phase0.py
+python phase0.py      # board import + params.py + labelled renders
+python phase1.py      # all coupons: checks, STL/STEP, 3MF plate, renders, report
+python phase1.py C2_usb_wall C6_pwr_flexure   # just some coupons
+# Headless Linux (no display): prefix with  xvfb-run -a
 ```
+
+`phase1.py` writes `out/phase1/lyricflash_coupons.3mf` (one P2S plate), per-coupon STL/STEP and
+PNGs, and `out/phase1/report.md`: sizes, watertight check, overhangs, beam strains, and a boolean
+interference check of every board-related coupon against the STEP board.
 
 This rewrites the board block in `params.py` and writes `out/phase0/`:
 
@@ -56,5 +62,9 @@ lfcase/board.py    STEP loader (keeps component names), board frame, cache
 lfcase/extract.py  measures the PLAN section 4 values from the STEP
 lfcase/paramgen.py writes the generated block into params.py
 lfcase/render.py   VTK off-screen renders with labels
+lfcase/coupons.py  board-independent coupons (battery, switch, latches, speaker)
+lfcase/coupons_a.py option-A coupons in the board frame (seat, USB-C, mics, PWR flexure)
+lfcase/interference.py  boolean check against the STEP board
+concepts/          decision aids (bezel option renders)
 out/               generated renders/exports (committed so they can be viewed on GitHub)
 ```

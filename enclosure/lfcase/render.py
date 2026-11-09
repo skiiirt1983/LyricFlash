@@ -25,10 +25,15 @@ VIEWS = {
 }
 
 
-def _actor(shape: cq.Shape, color, opacity=1.0, tol=0.02, edges=False):
+def _actor(shape: cq.Shape, color, opacity=1.0, tol=0.02, edges=False, clip=None):
     poly = shape.toVtkPolyData(tol, 0.2, normals=True)
     mapper = vtk.vtkPolyDataMapper()
     mapper.SetInputData(poly)
+    if clip is not None:
+        pl = vtk.vtkPlane()
+        pl.SetOrigin(*clip[0])
+        pl.SetNormal(*clip[1])
+        mapper.AddClippingPlane(pl)
     mapper.ScalarVisibilityOff()
     a = vtk.vtkActor()
     a.SetMapper(mapper)
@@ -55,8 +60,13 @@ class Scene:
         self.rw.AddRenderer(self.ren)
         self.size = size
 
-    def add(self, shape, color=(0.7, 0.7, 0.7), opacity=1.0, tol=0.02):
-        self.ren.AddActor(_actor(shape, color, opacity, tol))
+    def add(self, shape, color=(0.7, 0.7, 0.7), opacity=1.0, tol=0.02, clip=None):
+        """clip = (origin, normal): keep the side the normal points to (cheap VTK clipping)."""
+        self.ren.AddActor(_actor(shape, color, opacity, tol, clip=clip))
+
+    def close(self):
+        self.rw.Finalize()
+        del self.ren, self.rw
 
     def camera(self, view="iso", target=None, zoom=1.0, parallel=True):
         d, up = VIEWS[view] if isinstance(view, str) else view
@@ -138,3 +148,4 @@ def save_labelled(scene: Scene, path, labels=(), title=None, footer=None, dpi=10
         ax.text(20, h - 20, footer, fontsize=14, va="bottom", color="#333")
     fig.savefig(path, dpi=dpi)
     plt.close(fig)
+    scene.close()

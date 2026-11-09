@@ -154,8 +154,8 @@ MIC2_SIZE = (2.599, 3.399, 0.998)
 MIC2_Z = (-1.1, -0.102)
 # STEP 'MIC2_ASM': footprint rotation (diag. corner to corner) [deg]
 MIC2_ANGLE = -17.601
-# MIC_PORT_SIDE: TODO, NOT IN STEP: mic is a plain box and the PCB has no hole under it. Ask Paul.
-MIC_PORT_SIDE = None
+# ANSWERED: Paul 2026-11-09: both mic lids have a 0.3-0.5 mm hole (top-port, faces away from the PCB)
+MIC_PORT_SIDE = 'top'
 # STEP: J1 MX1.25 2P vertical bbox [mm]
 J1_BBOX = ((-10.631, 15.919, -4.8), (-2.981, 20.119, 0.0))
 # STEP: H3 MX1.25 2P vertical bbox [mm]
@@ -174,6 +174,8 @@ HEADER_PITCH = 2.54
 BOOT_IS = 'KEY1'
 # ANSWERED: Paul's photo 2026-11-09: silkscreen 'SPK' at H3 (nothing plugged in)
 SPEAKER_CONNECTOR = 'H3'
+# ANSWERED: Paul 2026-11-09: option A, PLAN 3.1 lip, board loads from behind, base clamps it forward
+BEZEL_STYLE = 'A'
 # <<< BOARD-FROM-STEP
 
 # ============================================================================
@@ -254,3 +256,77 @@ SNAP_LEADIN_DEG = 30.0               # lead-in ramp, from the beam axis
 SNAP_RETAIN_DEG = 70.0               # retention face (90 = permanent, lower = pull-apart)
 SNAP_EXTRUDE = 6.0                   # beam width (printed as layer height stack)
 STRAIN_LIMIT = {"PLA": 0.015, "PETG": 0.025}   # repeated-use design strain (conservative)
+
+# ============================================================================
+# OPTION A (Paul 2026-11-09): lip bezel, board loads from behind, base clamps
+# ============================================================================
+SHELL_R_OUT = 27.5                   # coupon outer radius (Phase 2 sets the real outer shape)
+LIP_OVERLAP = 1.0                    # lip over the glass edge (PLAN: <= 1.5)
+LIP_T = 1.0                          # lip thickness = how far the rim stands proud of the glass (>= 0.8)
+SEAM_Z = 3.0                         # top shell / base seam (board frame). Port opening top is
+                                     # at ~0.21, so the seam is 2.8 mm above it (Paul: >= 2 mm).
+                                     # Plug overmoulds up to ~9 mm tall fit under the top shell.
+                                     # Spigot top (SEAM_Z + SPIGOT_H = 4.0) stays 0.2 below the
+                                     # display flex folds (STEP: Z 4.2 at Y +24.07 / -23.88).
+BASE_INNER_CLEAR = 0.3               # base wall to PCB/PMMA edge (radial) away from the port
+SPIGOT_H = 1.0                       # base ring that enters the top shell bore (takes plug shear)
+SPIGOT_CLEAR = 0.3                   # radial clearance spigot -> top shell bore (seam float)
+FLOOR_T = 1.6
+FLOOR_CLEAR = 0.3                    # floor top below the lowest board part (header)
+
+# Base registers on the three M2 SMT standoffs (cups). Pattern is isosceles, so the
+# board can only go in one way round.
+CUP_ID_CLEAR = 0.4                   # on diameter: coarse XY only; the port block does the fine location
+CUP_WALL = 1.2
+CUP_DEPTH = 1.5
+
+# USB-C port block (on the base tray)
+USB_PROUD_TARGET = 0.15              # mouth proud of the outer face (Paul: 0..+0.2, fallback <= +0.4).
+                                     # Plugging in pushes the board USB_BACKSTOP_GAP onto the backstop,
+                                     # so it is 0.10 under load and 0.15 unloaded (see STACKUP.md)
+USB_GUIDE_CLEAR = 0.10               # per side, guide land behind the opening (registers Y)
+USB_GUIDE_LEN = 0.9                  # land length along X (stops before the receptacle legs)
+USB_UNDER_GAP = 0.10                 # support pad under the receptacle
+USB_BACKSTOP_GAP = 0.05              # backstop behind the receptacle (Paul: <= 0.1)
+USB_BACKSTOP_TOP_Z = -1.3            # stays below the parts on the PCB just behind the receptacle (to Z -1.0)
+USB_BLOCK_TOP_Z = -0.6               # port block top behind the wall (parts beside the receptacle reach Z -0.35)
+USB_LEADIN = 0.4                     # 45 deg lead-in on the opening sides and bottom only (none on the web)
+USB_PCB_CONTACT_R = 23.014           # web inner face = PCB outline circumradius (zero gap, STEP PCB_D/2)
+USB_FACE_HALF_W = 8.0                # flat port face extends at least this far either side
+
+# Latches between the coupon halves (vertical beam on the top shell, hook into a base pocket)
+LATCH_W = 5.0
+LATCH_T = 1.2
+LATCH_L = 10.0
+LATCH_HOOK = 0.6
+LATCH_SIDE_GAP = 0.5
+LATCH_CLEAR = 0.25                   # axial play at the catch; update from coupon C7
+
+# Mic ducts (top-port mics; Paul 2026-11-09)
+MIC_COLLAR_CLEAR = 0.2               # collar inner wall to the mic package, per side
+MIC_COLLAR_WALL = 0.8
+MIC_CRUSH = 0.12                     # crush rib interference into the PCB (PLAN 0.10-0.15)
+MIC_CRUSH_RIB_W = 0.4
+MIC_CAVITY_H = 0.4                   # air gap over the lid
+MIC_DUCT_D = 1.2                     # PLAN 1.0-1.5, teardrop so it prints without support
+
+# PWR flexure (on the base tray, option A)
+FLEX_REST_GAP = 0.30                 # nub to plunger tip at rest
+FLEX_NUB_W = 1.6
+FLEX_SLOT = 0.6
+FLEX_PAD_RECESS = 1.5                # pad face below the outer surface
+
+# ============================================================================
+# SPEAKER (Paul 2026-11-09, listing image: 30 x 20 x 6.8 mm, plugs into H3 'SPK')
+# ============================================================================
+SPK_L, SPK_W, SPK_T = 30.0, 20.0, 6.8      # source: seller image Paul sent
+SPK_CORNER_R = 3.0                         # TODO verify by test print: estimated from the image
+SPK_CLEAR = 0.3                            # per side in the pocket (generous)
+SPK_DEPTH_CLEAR = 0.4
+SPK_SEAL_INSET = 1.2                       # crush rib sits on the front frame, this far in from the edge
+SPK_SEAL_RIB_W, SPK_SEAL_RIB_H = 0.6, 0.3  # front seal so the back wave can't leak round to the grille
+SPK_GRILLE_HOLE_D = 1.5
+SPK_GRILLE_PITCH = 2.6
+SPK_GRILLE_MARGIN = 3.0                    # grille area = speaker front minus this margin per side
+SPK_GRIP_RIB = 0.25                        # side crush ribs (interference) that hold the speaker
+SPK_LEAD_SLOT_W = 4.0                      # TODO verify: lead exit side not shown in the listing image

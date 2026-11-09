@@ -72,7 +72,7 @@ Board frame: origin = PCB centre on the PCB back face, +Z out of the glass, USB-
 | MIC2_SIZE | `(2.599, 3.399, 0.998)` mm | STEP 'MIC2_ASM': package edge lengths and height |
 | MIC2_Z | `(-1.1, -0.102)` mm | STEP 'MIC2_ASM': Z range (on the PCB back) |
 | MIC2_ANGLE | `-17.601` deg | STEP 'MIC2_ASM': footprint rotation (diag. corner to corner) |
-| MIC_PORT_SIDE | **TODO** | NOT IN STEP: mic is a plain box and the PCB has no hole under it. Ask Paul. |
+| MIC_PORT_SIDE | `top` | ANSWERED: Paul 2026-11-09: both mic lids have a 0.3-0.5 mm hole (top-port, faces away from the PCB) |
 | J1_BBOX | `((-10.631, 15.919, -4.8), (-2.981, 20.119, 0.0))` mm | STEP: J1 MX1.25 2P vertical bbox |
 | H3_BBOX | `((2.67, 15.918, -4.8), (10.32, 20.118, 0.0))` mm | STEP: H3 MX1.25 2P vertical bbox |
 | MICROSD_BBOX | `((7.007, -7.8, 0.6), (22.01, 8.3, 3.05))` mm | STEP: microSD socket (front side, under display) bbox |
@@ -82,3 +82,4 @@ Board frame: origin = PCB centre on the PCB back face, +Z out of the glass, USB-
 | HEADER_PITCH | `2.54` mm | STEP 'BOARD': spacing of the 8 header holes |
 | BOOT_IS | `KEY1` | ANSWERED: Paul's photo 2026-11-09: silkscreen 'BOOT' next to KEY1 |
 | SPEAKER_CONNECTOR | `H3` | ANSWERED: Paul's photo 2026-11-09: silkscreen 'SPK' at H3 (nothing plugged in) |
+| BEZEL_STYLE | `A` | ANSWERED: Paul 2026-11-09: option A, PLAN 3.1 lip, board loads from behind, base clamps it forward |
