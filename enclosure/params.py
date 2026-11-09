@@ -329,5 +329,5 @@ SPK_GRILLE_HOLE_D = 1.5
 SPK_GRILLE_PITCH = 2.6
 SPK_GRILLE_MARGIN = 3.0                    # grille area = speaker front minus this margin per side
 SPK_GRIP_RIB = 0.25                        # side crush ribs (interference) that hold the speaker
-SPK_LEAD_SLOT_W = 4.0                      # Paul 2026-11-09: leads leave from the middle of a 20 mm end (slot is there)
+SPK_LEAD_SLOT_W = 4.0                      # Paul 2026-11-09: leads leave dead centre of a 20 mm end (mid-width, mid-thickness)
 SPK_PLACEMENT = "any secure spot"          # Paul 2026-11-09: speaker only plays while the mics are idle, so no keep-out from the mic holes
