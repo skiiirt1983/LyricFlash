@@ -407,3 +407,11 @@ BOARD_FAR_STOP_SPAN_DEG = 30.0       # +/- around the far side (angle 0)
 PLUG_WIRE_HEIGHT = 7.0               # Paul: PCB back -> top of plugged-in plug with wires bent
 INTERNAL_CLEAR = 0.5
 MIN_DEPTH_BELOW_PCB = PLUG_WIRE_HEIGHT + INTERNAL_CLEAR   # nothing (floor, battery, walls) above Z -7.5 at the plugs
+
+# C7 v3 (Paul round 2: "incredibly loose"; photo: the T rocks in the slot, hook tips out).
+SNAP_HOOK = 1.0                      # was 0.8
+SNAP_RETAIN_DEG = 80.0               # steeper catch (was 70)
+SNAP_GUIDE_DEPTH = 6.0               # guide posts either side of the beam (stop the rocking)
+SNAP_GUIDE_W = 2.4
+SNAP_GUIDE_CLEAR = 0.15              # per side, posts in their channels (slides by hand)
+LABEL_MIN_SIZE = 3.5                 # 10 pt for a 0.4 mm nozzle (Paul); bold

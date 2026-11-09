@@ -264,3 +264,55 @@ def speaker_pocket() -> Coupon:
                f"grille {len(pts)} x D{P.SPK_GRILLE_HOLE_D}. Four side ribs grip it ({P.SPK_GRIP_RIB} interference). "
                "Printed grille-down; holes are vertical, no support."],
     )
+
+
+# --------------------------------------------------------------- C7 v3 (guided)
+def _snap_pair_v3(c_ax: float, label: str):
+    """Guided snap test. Male: base bar + two guide posts + beam with hook. Female: block with two
+    guide channels and the beam slot; the slot only gives the beam room on the side it bends to."""
+    t, hk, L = P.SNAP_BEAM_T, P.SNAP_HOOK, P.SNAP_BEAM_L
+    E = P.SNAP_EXTRUDE
+    gd, gw, gc = P.SNAP_GUIDE_DEPTH, P.SNAP_GUIDE_W, P.SNAP_GUIDE_CLEAR
+    lead = hk / math.tan(math.radians(P.SNAP_LEADIN_DEG))
+    ret = hk / math.tan(math.radians(P.SNAP_RETAIN_DEG))
+    gx = 5.5                                     # guide post centres at +/- gx
+    y_tip = -L
+    y_ret_out = y_tip + lead + 0.3
+    y_ret_in = y_ret_out + ret
+    beam = [(-t / 2, 0.01), (-t / 2, y_tip), (t / 2, y_tip), (t / 2 + hk, y_tip + lead),
+            (t / 2 + hk, y_ret_out), (t / 2, y_ret_in), (t / 2, 0.01)]
+    male = cq.Workplane("XY").polyline(beam).close().extrude(E)
+    for sx in (-gx, gx):
+        male = male.union(cq.Workplane("XY").center(sx, -gd / 2).rect(gw, gd).extrude(E))
+    male = male.union(cq.Workplane("XY").center(0, 2.5).rect(16.0, 5.0).extrude(E))
+    # female
+    fw, fh = 18.0, L + 4.0
+    fem = cq.Workplane("XY").center(0, -fh / 2).rect(fw, fh).extrude(E)
+    for sx in (-gx, gx):
+        fem = fem.cut(cq.Workplane("XY").center(sx, -(gd + 0.4) / 2 + 0.01).rect(gw + 2 * gc, gd + 0.4).extrude(E))
+    x_lip = t / 2 + gc                           # catch side: lip just clears the beam
+    x_recess = t / 2 + hk + 0.2
+    x_far = -(t / 2 + gc)                        # free side: no room, the beam can't drift away
+    y_floor = y_tip - 1.0
+    y_lip_in = y_ret_in + c_ax - (x_lip - t / 2) * (ret / hk)
+    y_lip_out = y_ret_out + c_ax - 0.2 * (ret / hk)
+    slot = [(x_far, 0.1), (x_lip + hk + 0.3, 0.1), (x_lip + hk + 0.3, -1.0), (x_lip, -2.0),
+            (x_lip, y_lip_in), (x_recess, y_lip_out), (x_recess, y_floor), (x_far, y_floor)]
+    fem = fem.cut(cq.Workplane("XY").polyline(slot).close().extrude(E))
+    sz = P.LABEL_MIN_SIZE
+    male_s = deboss(male.val(), label, (0, 2.5), size=sz)
+    fem_s = deboss(fem.val(), label, (-5.5, -fh + 2.6), size=sz)
+    return male_s, fem_s
+
+
+def snap_latches_v3() -> Coupon:
+    parts = {}
+    for i, (ca, lab) in enumerate(zip(P.SNAP_AXIAL_VARIANTS, ("P1", "P0", "L1"))):
+        m, f = _snap_pair_v3(ca, lab)
+        parts[f"snap3_male_{lab}"] = m.moved(cq.Location(cq.Vector((i - 1) * 22.0, 16.0, 0)))
+        parts[f"snap3_female_{lab}"] = f.moved(cq.Location(cq.Vector((i - 1) * 22.0, -2.0, 0)))
+    eps = 1.5 * P.SNAP_BEAM_T * P.SNAP_HOOK / P.SNAP_BEAM_L ** 2
+    return Coupon("C7v3_snap_latches", "Guided snap latch pairs", parts,
+                  notes=[f"Guide posts {P.SNAP_GUIDE_DEPTH} deep stop the rocking; hook {P.SNAP_HOOK}, catch {P.SNAP_RETAIN_DEG:g} deg; "
+                         "P1 = 0.1 preload, P0 = zero play, L1 = 0.1 play."],
+                  checks={"beam_strain": eps})

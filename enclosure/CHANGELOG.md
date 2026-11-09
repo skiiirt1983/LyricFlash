@@ -1,5 +1,16 @@
 # Enclosure changelog
 
+## Round 2 results (2026-11-09, printed after round 3)
+- Paul broke the display during the C9 test by pushing a gauge on: my C9 instructions asked for a
+  press-on that the geometry could not allow. New rule: NO press/force fits anywhere; assembly
+  simulation must also show >= 0.2 mm air along every path (except designed contacts).
+- C1 ring: glass "just slides through" the bore -> open the bore (pending Paul's clarification of
+  the 0.1-0.2 mm gap). C1 locator perfect. C5 good. C6 clicky/responsive. C8 tight but very good.
+  C9: wide enough, not long enough (resolved: no backstop, pocket open at the back).
+- C7 v2: "incredibly loose"; photo shows the T rocking in its shallow 1.5 mm pocket so the hook
+  tips out instead of the beam bending. -> C7 v3: 6 mm guide posts, beam room only on the catch
+  side, hook 1.0, catch 80 deg; labels >= 3.5 mm (10 pt) bold (Paul: v2 text unreadable).
+
 ## Round 3 results (2026-11-09)
 - C10: tilt-in assembly fits on the real board. Key too hard to remove and loose -> Paul: no
   backstop (USB_BACKSTOP_KEY = False); board held firmly instead (port-side web contact, far-side
