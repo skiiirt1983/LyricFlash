@@ -1,5 +1,9 @@
 # Enclosure changelog
 
+## C1 decision (2026-11-09)
+- Paul, looking at C1 v2 from the front: "this look is good" -> lip design final (1.0 over the
+  glass, 1.0 proud, flex-fold notches). Bore clearance 0.3 -> 0.7 on diameter (no force).
+
 ## Round 2 results (2026-11-09, printed after round 3)
 - Paul broke the display during the C9 test by pushing a gauge on: my C9 instructions asked for a
   press-on that the geometry could not allow. New rule: NO press/force fits anywhere; assembly
