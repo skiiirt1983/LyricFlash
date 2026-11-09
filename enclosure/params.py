@@ -448,7 +448,7 @@ LATCH_BEAM_T, LATCH_BEAM_L = 1.2, 10.0   # as tested in C7 (in-plane, bending al
 # World frame: desk at Z = 0, +Y = back, +X = right (USB-C on the left wall).
 # ============================================================================
 TILT_DEG = 12.0
-BOARD_X = -4.6                       # board centre (world X): USB side close to the left wall
+BOARD_X = 0.0                        # layout B (Paul): board centred left-right; the case is as wide as the bezel ring
 CASE_WALL = 2.0
 CASE_FLOOR = 1.6
 CASE_CORNER_R = 8.0                  # 10 cut into the battery corners
@@ -524,3 +524,8 @@ SPEAKER_MASS_G = 4.0                 # 30 x 20 x 6.8 speaker (estimate)
 PETG_DENSITY, PLA_DENSITY = 1.27, 1.24   # g/cm3
 PRINT_FILL = 0.6                     # 4 walls + 15 % gyroid: effective fraction of solid (estimate)
 MIN_TIP_DEG = 30.0                   # PLAN Phase 3
+
+# ---- Layout B (Paul, after v1): battery front-to-back, speaker under the board's right side
+BATTERY_LEAD_GAP = 9.0               # gap in the battery's left low wall at the back corner, for the leads
+SWITCH_CELL_Y = 22.7                 # layout B: switch pocket behind the speaker (back-right), centre Y
+SPK_DIVIDER_H = 16.0                 # layout B: divider height above the floor (full height came 0.01 from a standoff in the swing)

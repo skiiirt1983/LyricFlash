@@ -22,9 +22,9 @@ def designed(pair, where, angle, seam_z_bf=None):
     seam_z_bf: board-frame Z of the contact point with the base moved back to closed (None if unknown)."""
     m, f = pair
     x = where[0]
-    if m == "base" and f in ("pcb", "pmma_frame") and x < -26.0:
+    if m == "base" and f in ("pcb", "pmma_frame") and x < P.BOARD_X - 21.4:
         return "USB-C web on the PCB edge (zero gap by design, separating)"
-    if m == "base" and f == "top_shell" and (angle == 0 or x < -27.8 or
+    if m == "base" and f == "top_shell" and (angle == 0 or x < P.BOARD_X - 23.2 or
                                              (seam_z_bf is not None and abs(seam_z_bf - P.SEAM_Z) < 0.15)):
         return "seam faces opening up about the hinge (separating)"
     if m.startswith("clip_") and f == "top_shell":

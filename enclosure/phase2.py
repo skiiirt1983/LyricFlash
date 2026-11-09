@@ -235,15 +235,18 @@ def export(parts, info):
 
 def report(parts, info, chk, lay, cg, sim_rows):
     import params as P
-    L = ["# Phase 2 report: full case v1", "",
+    L = ["# Phase 2 report: full case v2 (layout B)", "",
          f"Tilt {P.TILT_DEG:g} deg, board centre {info['zb']:.1f} mm above the desk. Parts: " + ", ".join(parts) + ".", "",
          "## Interference against the STEP board (boolean volume)", "",
          "| Part | Solids | Valid | Overlaps |", "|---|---|---|---|"]
     for k, other, hits, n, ok in chk:
         if other == "board/battery/speaker":
             note = ", ".join(f"{h} {v} mm3" for h, v in hits) or "none"
-            if k == "base" and len(hits) == 1 and hits[0][0] == "speaker_envelope":
-                note += " (the speaker grip ribs, 0.15 mm by design, as C8)"
+            if k == "base" and any(h == "speaker_envelope" for h, _ in hits):
+                note += " (speaker: the grip ribs, 0.15 mm by design, as C8)"
+            if k == "base" and any(h == "battery_envelope" for h, _ in hits):
+                note += (" (battery: the case's rounded inner corners trim the pocket's 1 mm clearance at its four"
+                         " extreme corners by <= 0.5 mm; the 56 mm cell keeps >= 0.5 mm)")
             L.append(f"| {k} | {n} | {ok} | {note} |")
     pair = [r for r in chk if r[1] != "board/battery/speaker"]
     L += ["", "Part against part: " + ("none overlap." if not pair else "; ".join(f"{a}/{b} {h}" for a, b, h, _, _ in pair)), ""]
@@ -260,8 +263,9 @@ def report(parts, info, chk, lay, cg, sim_rows):
         bad = [i for i in iss if i[1] in ("FLOATING", "LONG BRIDGE")]
         L.append(f"| {k} | {orient[k]} | {'clean' if not bad else f'{len(bad)} flagged layers (see below)'} |")
     L += ["", "Flagged in the base, all inside except the USB-C mouth:", "",
-          "- Over the battery: the USB-C port block and both mic bars (one region, 103 mm2 at Z 13.7) and the inner end "
-          "of the BOOT tube. **Tree supports, inside only** (Paul's choice); they snap off before assembly.",
+          "- Over the battery: the USB-C port block and both mic bars (one region at the battery top); over the "
+          "speaker: the inner end of the short BOOT tube. **Tree supports, inside only** (Paul's choice); they "
+          "snap off before assembly.",
           "- The USB-C block's underside and the PWR tube's roof follow the 12 deg board tilt, so each layer steps "
           "~0.7 mm: bridged between side walls, prints, may need the supports above.",
           "- **USB-C opening, top edge** (the only visible one): with the 12 deg tilt it's no longer a flat 9.5 mm bridge. "

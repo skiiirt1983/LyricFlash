@@ -1,5 +1,19 @@
 # Enclosure changelog
 
+## Phase 2 v2: layout B (2026-11-09)
+- Paul: v1 looked off-centre and bigger than pictured. v1 was 70.8 x 53.7 with the board 9 mm left of centre
+  (flush USB-C on the left, 58 mm battery longer than the board, speaker at the battery's right end). The
+  65 x 57 quoted at the tilt question came from a layout study that put the speaker above the battery, where
+  it would have hit the top shell; v1 moved it beside the battery without saying so (my miss).
+- Layout B (Paul): battery front-to-back, speaker standing against the right wall under the board's right
+  side, board centred left-right (BOARD_X 0). Case 52.9 x 62.0 (PLAN ~62 x 62), front 28.8 / back 42.0 mm
+  (board 3.4 mm higher so the speaker fits under it). PWR and BOOT guides now 7.7 mm (were ~24).
+- Board height from a new solver (lowest position with 0.5 mm air to battery, speaker and floor).
+- Speaker divider lowered to 16 mm (full height came 0.01 from a standoff in the swing); battery held on its
+  left by a low wall with a 9 mm lead gap at the back corner; switch pocket moved behind the speaker.
+- Ledges and the USB recess floor/cheeks get 45 deg undersides over the battery / cavity.
+- Checks: board interference none; tilt-in swing PASS; tips at 58.1 deg; layer check as before.
+
 ## Phase 2 v1 (2026-11-09)
 - 12 deg tilt, two main parts, internal supports allowed for hidden features (Paul). Speaker beside the battery.
 - USB-C: C10 port geometry set into a recess in the left wall (bay +/-14 mm), tied in with a floor and cheeks.

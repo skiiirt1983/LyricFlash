@@ -22,13 +22,40 @@ T = math.radians(P.TILT_DEG)
 
 
 # ------------------------------------------------------------------ placement
+_ZB = {}
+
+
 def board_z():
-    """Lowest board height that keeps CASE_AIR between the board stack and the battery."""
+    """Lowest board height that keeps CASE_AIR between the board stack (every back-side part as its box,
+    the plug + wire zones, the top shell around the glass) and the battery, the speaker and the floor."""
+    if "zb" in _ZB:
+        return _ZB["zb"]
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "concepts"))
     import layout_study as L
-    return L.study("phase2", P.TILT_DEG, (0.0, 0.0))["board_z"]
+    from lfcase.board import load_board
+    boxes = L.board_boxes(load_board(verbose=False))
+    obst = [battery_box(), speaker_box()]
+    air = P.CASE_AIR
+
+    def ok(zb):
+        for b in boxes:
+            c = L.to_world(L.corners(b), P.TILT_DEG, (P.BOARD_X, 0, zb))
+            mn, mx = c.min(0), c.max(0)
+            if mn[2] < P.CASE_FLOOR + air:
+                return False
+            for lo, hi in obst:
+                if (mn[0] < hi[0] + air and mx[0] > lo[0] - air and mn[1] < hi[1] + air and mx[1] > lo[1] - air
+                        and mn[2] < hi[2] + air):
+                    return False
+        return True
+    lo, hi = 0.0, 80.0
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        lo, hi = (lo, mid) if ok(mid) else (mid, hi)
+    _ZB["zb"] = round(hi + 0.005, 2)
+    return _ZB["zb"]
 
 
 def bf_loc(zb):
@@ -51,29 +78,33 @@ def halfspace_bf(zb, z_bf, above=True, size=400):
 
 
 # ------------------------------------------------------------------ outer body
-def battery_box():
-    x0 = P.BOARD_X - (A.BORE_R + 1.6) + P.CASE_WALL
-    L, W, H = P.BATTERY_POCKET
-    return (x0, -W / 2, P.CASE_FLOOR), (x0 + L, W / 2, P.CASE_FLOOR + H)
+def footprint():
+    """Layout B (Paul): the case is exactly as wide as the bezel ring, the board centred left-right;
+    the battery runs front-to-back and sets the depth."""
+    bez = A.BORE_R + 1.6                                      # bezel ring outer radius (BF)
+    x0, x1 = P.BOARD_X - bez, P.BOARD_X + bez
+    yr = bez * math.cos(T) + 1.0
+    yb = P.BATTERY_POCKET[0] / 2 + P.CASE_WALL
+    y_half = max(yr, yb)
+    return x0, x1, -y_half, y_half
 
 
 def speaker_box():
-    (_, _, _), (bx1, _, _) = battery_box()
+    """Speaker standing against the right wall (cone out through the grille), under the board's right side."""
+    x0, x1, _, _ = footprint()
     t = P.SPK_T + 2 * P.SPK_CLEAR
     l = P.SPK_L + 2 * P.SPK_CLEAR
     h = P.SPK_W + P.SPK_DEPTH_CLEAR
-    x0 = bx1 + P.SPK_DIVIDER
-    return (x0, -l / 2, P.CASE_FLOOR), (x0 + t, l / 2, P.CASE_FLOOR + h)
+    sx1 = x1 - P.CASE_WALL
+    return (sx1 - t, -l / 2, P.CASE_FLOOR), (sx1, l / 2, P.CASE_FLOOR + h)
 
 
-def footprint():
-    bez = A.BORE_R + 1.6                                      # bezel ring outer radius (BF)
-    x0 = P.BOARD_X - bez
-    x1 = speaker_box()[1][0] + P.CASE_WALL
-    yr = bez * math.cos(T) + 1.0
-    yb = P.BATTERY_POCKET[1] / 2 + P.CASE_WALL
-    y_half = max(yr, yb)
-    return x0, x1, -y_half, y_half
+def battery_box():
+    """Battery turned front-to-back (long side along Y), against the speaker divider."""
+    L, W, H = P.BATTERY_POCKET
+    (sx0, _, _), _ = speaker_box()
+    bx1 = sx0 - P.SPK_DIVIDER
+    return (bx1 - W, -L / 2, P.CASE_FLOOR), (bx1, L / 2, P.CASE_FLOOR + H)
 
 
 def outer_body(zb):
@@ -178,14 +209,15 @@ def base_shell(zb):
     body = base_body(zb)
     b = body.intersect(halfspace_bf(zb, P.SEAM_Z, above=False)).cut(_inner_cavity())
     (bx0, by0, bz0), (bx1, by1, bz1) = battery_box()
-    # low walls front/back of the battery (keep it from sliding); wire gap at the back-left corner
-    for sy in (-1, 1):
-        y = by1 if sy > 0 else by0 - 1.2
-        b = b.fuse(_box((bx0, y, bz0 - 0.01), (bx1, y + 1.2, bz0 + P.BATTERY_POCKET_WALL_H)))
-    b = b.cut(_box((bx0, by1 - 0.1, bz0), (bx0 + 9.0, by1 + 1.4, bz0 + P.BATTERY_POCKET_WALL_H + 1)))
+    # low wall along the battery's left long side (front and back are the case walls, right is the
+    # speaker divider); lead gap at the back-left corner, where the cell's leads leave (Paul, C3)
+    b = b.fuse(_box((bx0 - 1.2, by0 - 0.01, bz0 - 0.01), (bx0, by1 + 0.01, bz0 + P.BATTERY_POCKET_WALL_H)))
+    b = b.cut(_box((bx0 - 1.3, by1 - P.BATTERY_LEAD_GAP, bz0), (bx0 + 0.1, by1 + 1, bz0 + P.BATTERY_POCKET_WALL_H + 1)))
     # speaker pocket: divider wall + end walls (speaker stands, fires out the right wall)
     (sx0, sy0, sz0), (sx1, sy1, sz1) = speaker_box()
-    b = b.fuse(_box((bx1, sy0 - 1.2, sz0 - 0.01), (sx0, sy1 + 1.2, sz1)))
+    b = b.fuse(_box((bx1, sy0 - 1.2, sz0 - 0.01), (sx0, sy1 + 1.2, sz0 + P.SPK_DIVIDER_H)))
+    # low wall continuing the divider along the battery's right side (front and back of the speaker)
+    b = b.fuse(_box((bx1, by0 - 0.01, bz0 - 0.01), (bx1 + 1.2, by1 + 0.01, bz0 + P.BATTERY_POCKET_WALL_H)))
     for y in (sy0 - 1.2, sy1):
         b = b.fuse(_box((sx0 - 0.01, y, sz0 - 0.01), (sx1 + 0.01, y + 1.2, sz1)))
     return A.solidify(b)
@@ -246,7 +278,7 @@ def board_ledges(zb, angles=None):
     for a in (angles or P.BOARD_LEDGE_ANGLES):
         sol = _ledge(zb, a)
         out = sol if out is None else out.fuse(sol)
-    return out
+    return out.cut(battery_cut45())                   # layout B: the battery reaches the front/back walls
 
 
 def base(zb, ledge_angles=None):
@@ -281,10 +313,18 @@ def port_features(b, zb):
     blk_w = blk_w.cut(_box(*battery_box()))                       # stays above the battery (support under it)
     # tie the port wall into the case: a floor under the bay and a cheek either side, wall-thick
     t = P.CASE_WALL
-    frame = _box((x0, pc[1] - hw - t, zbot - P.CASE_FLOOR), (fx_w + P.WALL_MIN, pc[1] + hw + t, zbot + 0.01))
+    # bay floor: wall-thick at the wall, then a 45 deg underside where it reaches in over the cavity
+    x_in = x0 + t
+    zf = zbot - P.CASE_FLOOR
+    prof = [(x0, zf), (x_in, zf), (min(x_in + P.CASE_FLOOR, fx_w + P.WALL_MIN), zbot + 0.01), (x0, zbot + 0.01)]
+    wv = cq.Wire.makePolygon([cq.Vector(x, pc[1] - hw - t, z) for x, z in prof], close=True)
+    frame = cq.Solid.extrudeLinear(cq.Face.makeFromWires(wv), cq.Vector(0, 2 * (hw + t), 0))
+    xe = fx_w + P.WALL_MIN
+    cheek = [(x0, zf), (x_in, zf), (xe, zf + (xe - x_in)), (xe, 100), (x0, 100)]     # 45 deg underside inside
     for s in (-1, 1):
         y_a = pc[1] + s * hw
-        frame = frame.fuse(_box((x0, min(y_a, y_a + s * t), zbot - P.CASE_FLOOR), (fx_w + P.WALL_MIN, max(y_a, y_a + s * t), 100)))
+        wv = cq.Wire.makePolygon([cq.Vector(x, min(y_a, y_a + s * t), z) for x, z in cheek], close=True)
+        frame = frame.fuse(cq.Solid.extrudeLinear(cq.Face.makeFromWires(wv), cq.Vector(0, t, 0)))
     frame = frame.intersect(base_body(zb)).intersect(halfspace_bf(zb, P.SEAM_Z, above=False)).cut(_box(*battery_box()))
     return A.solidify(b.fuse(blk_w).fuse(frame))
 
@@ -440,6 +480,7 @@ def pwr_features(b, zb):
     keep = big.moved(cq.Location(pl))
     fin_w = fin_w.intersect(keep).intersect(_inner_cavity().fuse(base_body(zb)))
     shell = base_body(zb)
+    fin_w = fin_w.cut(battery_cut45()).cut(_box(*speaker_box()))
     add = tube_w.fuse(fin_w).intersect(shell).intersect(halfspace_bf(zb, P.SEAM_Z, above=False))
     b = b.fuse(add).cut(bore_w).cut(room_w)
     # finger dimple: shallow cone round the exit
@@ -647,7 +688,8 @@ def build_all(zb=None, log=print):
 # ------------------------------------------------------------------ slide switch: C4 K3 cell in the floor
 def switch_features(b, zb):
     """The C4 pocket (K3) set into the floor, outer face = case bottom, open side toward the battery.
-    Same numbers and print orientation as the coupon Paul tested."""
+    Same numbers and print orientation as the coupon Paul tested. Layout B: it sits behind the speaker
+    (back-right), long axis front-to-back, open toward the battery's right side, which keeps it in."""
     bl, bw, bh = P.SWITCH_BODY
     pl, pw = P.SWITCH_POCKET
     sl, sw = P.SWITCH_KNOB_SLOT
@@ -657,31 +699,30 @@ def switch_features(b, zb):
     plate = P.SWITCH_KNOB_HEIGHT + P.SWITCH_KNOB_TIP_RECESS
     H = plate + cav_h + pin
     (bx0, by0, bz0), (bx1, by1, bz1) = battery_box()
-    cx = P.SWITCH_CELL_X
-    y_open = by1 + P.SWITCH_OPEN_GAP
-    y_closed = y_open + pw
-    yc = y_open + pw / 2
-    cell = _box((cx - pl / 2 - wall, y_open, 0), (cx + pl / 2 + wall, y_closed + wall, H))
-    b = b.fuse(cell.intersect(base_body(zb)))
-    # gap in the battery's low back wall over the pocket (the battery itself closes the pocket)
-    b = b.cut(_box((cx - pl / 2 - wall, by1 - 0.1, bz0), (cx + pl / 2 + wall, y_open + 0.01, bz0 + P.BATTERY_POCKET_WALL_H + 1)))
-    # knob slot through the plate
-    b = b.cut(_box((cx - sl / 2, yc - sw / 2, -1), (cx + sl / 2, yc + sw / 2, plate)))
-    # knob entry channel from the slot to the open side, under a skin on the outer face
+    # build in a local frame: open side at u = 0 facing -u, length along v; then u -> +X, v -> +Y
+    add, cut = [], []
+    add.append(_box((0, -pl / 2 - wall, 0), (pw + wall, pl / 2 + wall, H)))
+    cut.append(_box((pw / 2 - sw / 2, -sl / 2, -1), (pw / 2 + sw / 2, sl / 2, plate)))                 # knob slot
     cw = P.SWITCH_KNOB_CHANNEL_W
-    b = b.cut(_box((cx - cw / 2, y_open - 0.5, P.SWITCH_CHANNEL_SKIN), (cx + cw / 2, yc, plate + 0.01)))
-    # body cavity, open toward the battery and upward (pins)
-    b = b.cut(_box((cx - pl / 2, y_open - 0.5, plate), (cx + pl / 2, y_closed, H + 5)))
-    # lips over both body ends, 45 deg wedge on the underside (as C4)
+    cut.append(_box((-0.5, -cw / 2, P.SWITCH_CHANNEL_SKIN), (pw / 2, cw / 2, plate + 0.01)))            # knob entry channel
+    cut.append(_box((-0.5, -pl / 2, plate), (pw, pl / 2, H + 5)))                                    # body cavity
+    cut.append(_box((-1.5, -pl / 2 - wall, bz0), (0.01, pl / 2 + wall, bz0 + P.BATTERY_POCKET_WALL_H + 1)))  # low-wall gap
     z0 = plate + cav_h - P.SWITCH_LIP
-    for s in (-1, 1):
-        xw = cx + s * pl / 2
-        xi = xw - s * P.SWITCH_LIP
-        prof = [(xw, z0), (xi, z0 + P.SWITCH_LIP), (xi, H), (xw, H)]
-        w = cq.Wire.makePolygon([cq.Vector(x, y_open, z) for x, z in prof], close=True)
-        lip = cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, y_closed - y_open, 0))
-        b = b.fuse(lip)
-    return A.solidify(b), dict(centre=(cx, round(yc, 2)), knob_slot=(sl, sw), plate=plate)
+    for sgn in (-1, 1):
+        vw = sgn * pl / 2
+        vi = vw - sgn * P.SWITCH_LIP
+        prof = [(vw, z0), (vi, z0 + P.SWITCH_LIP), (vi, H), (vw, H)]
+        w = cq.Wire.makePolygon([cq.Vector(0, v, z) for v, z in prof], close=True)
+        add.append(cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(pw, 0, 0)))
+    loc = cq.Location(cq.Vector(bx1 + 1.2 * 0, P.SWITCH_CELL_Y, 0))
+    body = base_body(zb)
+    for a_ in add[:1]:
+        b = b.fuse(a_.moved(loc).intersect(body))
+    for c_ in cut:
+        b = b.cut(c_.moved(loc))
+    for a_ in add[1:]:
+        b = b.fuse(a_.moved(loc))
+    return A.solidify(b), dict(centre=(round(bx1 + pw / 2, 2), P.SWITCH_CELL_Y), knob_slot=(sl, sw), plate=plate)
 
 
 # ------------------------------------------------------------------ BOOT pinhole (KEY1), PLAN 3.5
