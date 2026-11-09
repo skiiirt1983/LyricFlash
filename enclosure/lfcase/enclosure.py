@@ -98,7 +98,31 @@ def top_shell(zb):
     bore = A.cyl(A.BORE_R, P.SEAM_Z - 2, P.GLASS_TOP_Z)
     lip = A.cyl(A.LIP_R, P.SEAM_Z - 2, A.LIP_TOP + 2)
     s = s.cut(to_wf(bore.fuse(lip).fuse(A.fold_reliefs(P.SEAM_Z - 2, P.GLASS_BOTTOM_Z - 0.05)), zb))
+    s = s.cut(hinge_relief(zb))
     return A.solidify(s)
+
+
+def hinge_axis(zb):
+    H = bf_point_to_wf((P.TILT_HINGE[0], 0, P.TILT_HINGE[1]), zb)
+    ax = bf_point_to_wf((P.TILT_HINGE[0], 1, P.TILT_HINGE[1]), zb) - H
+    return H, ax / np.linalg.norm(ax)
+
+
+def hinge_relief(zb, step=1.0):
+    """The base's wall outboard of the hinge line rises as the base swings open. Sweep that strip
+    (grown by HINGE_RELIEF_AIR) over the whole swing; the top shell is cut back by it."""
+    x0, x1, y0, y1 = footprint()
+    air = P.HINGE_RELIEF_AIR
+    x0_bf = x0 - P.BOARD_X
+    strip = to_wf(cq.Solid.makeBox(P.TILT_HINGE[0] + 0.5 - (x0_bf - air - 3), 140, 6 + air,
+                                   pnt=cq.Vector(x0_bf - air - 3, -70, P.SEAM_Z - 6)), zb)
+    H, ax = hinge_axis(zb)
+    parts = [strip.rotate(cq.Vector(*H), cq.Vector(*(H + ax)), float(a))
+             for a in np.arange(0.0, P.TILT_SWEEP_DEG + air * 10 + 1e-9, step)]
+    out = parts[0]
+    for p in parts[1:]:
+        out = out.fuse(p)
+    return out.clean()
 
 
 # ------------------------------------------------------------------ base
@@ -143,7 +167,7 @@ def _ledge(zb, a):
             .extrude(P.BOARD_LEDGE_W).val())
 
 
-def pick_ledge_angles(zb, board_wf):
+def pick_ledge_angles(zb, board_wf, targets=(-50.0, -110.0, 135.0)):  # noqa: B006
     """Two front and two back ledge positions that touch nothing but the PCB back."""
     from lfcase.interference import check
     obst = {k: v for k, v in board_wf.items() if k != "pcb"}
@@ -153,11 +177,27 @@ def pick_ledge_angles(zb, board_wf):
         g = P.PLUG_KEEPOUT_GROW
         obst[nm] = to_wf(cq.Solid.makeBox(px1 - px0 + 2 * g, py1 - py0 + 2 * g, P.MIN_DEPTH_BELOW_PCB,
                                           pnt=cq.Vector(px0 - g, py0 - g, -P.MIN_DEPTH_BELOW_PCB)), zb)
+    H, ax = hinge_axis(zb)
+    from lfcase.interference import check as _chk
+
+    def clear(led):
+        for ang in (0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 13.0, 16.0, 20.0, 24.0):
+            l = led.rotate(cq.Vector(*H), cq.Vector(*(H + ax)), ang)
+            lb = l.BoundingBox()
+            for o in obst.values():
+                for so in (o.Solids() or [o]):
+                    ob = so.BoundingBox()
+                    if (ob.xmin > lb.xmax + 1 or lb.xmin > ob.xmax + 1 or ob.ymin > lb.ymax + 1 or lb.ymin > ob.ymax + 1
+                            or ob.zmin > lb.zmax + 1 or lb.zmin > ob.zmax + 1):
+                        continue
+                    if l.distance(so) < P.LEDGE_AIR:
+                        return False
+        return True
     chosen = []
-    for target in (-60, -120, 60, 120):
-        for d in (0, 5, -5, 10, -10, 15, -15, 20, -20, 25, -25):
+    for target in targets:
+        for d in (0, 5, -5, 10, -10, 15, -15, 20, -20, 25, -25, 30, -30):
             a = target + d
-            if not check(_ledge(zb, a), obst):
+            if not _chk(_ledge(zb, a), obst) and clear(_ledge(zb, a)):
                 chosen.append(a)
                 break
     return chosen
@@ -201,7 +241,14 @@ def port_features(b, zb):
     # keep the PCB/PMMA outline clear: the web touches it, nothing may enter it
     blk_w = blk_w.cut(to_wf(A.cyl(P.USB_PCB_CONTACT_R, -0.05, P.SEAM_Z + 2), zb))
     blk_w = blk_w.cut(_box(*battery_box()))                       # stays above the battery (support under it)
-    return A.solidify(b.fuse(blk_w))
+    # tie the port wall into the case: a floor under the bay and a cheek either side, wall-thick
+    t = P.CASE_WALL
+    frame = _box((x0, pc[1] - hw - t, zbot - P.CASE_FLOOR), (fx_w + P.WALL_MIN, pc[1] + hw + t, zbot + 0.01))
+    for s in (-1, 1):
+        y_a = pc[1] + s * hw
+        frame = frame.fuse(_box((x0, min(y_a, y_a + s * t), zbot - P.CASE_FLOOR), (fx_w + P.WALL_MIN, max(y_a, y_a + s * t), 100)))
+    frame = frame.intersect(outer_body(zb)).intersect(halfspace_bf(zb, P.SEAM_Z, above=False)).cut(_box(*battery_box()))
+    return A.solidify(b.fuse(blk_w).fuse(frame))
 
 
 # ------------------------------------------------------------------ mics (C5 geometry, looser collar for tilt-in)
@@ -300,7 +347,7 @@ def _pin_dims():
     l1 = l0 + P.PWR_PIN_W
     z1 = P.PWR_PIN_TOP
     z0 = z1 - P.PWR_PIN_H
-    g0 = P.FLEX_REST_GAP
+    g0 = P.PWR_PIN_REST_GAP
     s_col0 = g0 + nl
     s_col1 = s_col0 + P.PWR_COLLAR_LEN
     return dict(nw=nw, nh=nh, zc=zc, l0=l0, l1=l1, z0=z0, z1=z1, g0=g0, s_col0=s_col0, s_col1=s_col1)
@@ -523,3 +570,20 @@ def latch_features(b, top, zb):
         b = b.fuse(bs).cut(ch)
         top = top.cut(_poly_solid(pocket, -E_ / 2 - ct, E_ / 2 + ct).moved(loc))
     return A.solidify(b), A.solidify(top), dict(a_tip=round(pr["a_tip"], 2), a_root=round(pr["a_root"], 2))
+
+
+# ------------------------------------------------------------------ everything
+def build_all(zb=None, log=print):
+    """All Phase 2 parts in the world (assembled) frame."""
+    zb = zb or board_z()
+    log("base shell + ledges")
+    b = base(zb)
+    log("USB-C bay"); b = port_features(b, zb)
+    log("mic ducts"); b, mic = mic_features(b, zb)
+    log("PWR pin tube"); b, pwr = pwr_features(b, zb)
+    log("speaker"); b, spk = speaker_features(b, zb)
+    log("top shell"); top = top_shell(zb)
+    log("latches"); b, top, lat = latch_features(b, top, zb)
+    parts = {"top_shell": top, "base": b, "pwr_pin": pwr_pin(zb)}
+    parts.update(latch_clips(zb))
+    return parts, dict(mic=mic, pwr=pwr, speaker=spk, latch=lat, zb=zb)

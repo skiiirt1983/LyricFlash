@@ -460,7 +460,7 @@ BOTTOM_RIM_W = 3.0
 # Speaker can't sit over the battery (unsupported shelf in a floor-down print) -> it stands beside
 # the battery on the right, firing out the right wall. Case grows to ~70 x 54.
 SPK_DIVIDER = 1.2                    # wall between battery and speaker
-BOARD_LEDGE_ANGLES = (-50.0, -110.0, 135.0)   # auto-picked: clear of every part + plug zones (3-point support)
+BOARD_LEDGE_ANGLES = (-70.0, -110.0, 135.0)   # auto-picked: clear of every part + plug zones, LEDGE_AIR along the whole swing (was -50: 0.06 from a standoff)
 BOARD_LEDGE_W = 5.0
 BOARD_LEDGE_REACH = 1.5              # how far under the PCB edge (radially)
 BOARD_FAR_STOP_GAP = 0.30            # far-side stop (tilt-in sim decides the final gap)
@@ -490,3 +490,7 @@ LATCH_CLIP_LIP_MIN = 1.0             # lid material between the seam and the cat
 LATCH_CLIP_BAR_H = 4.0
 LATCH_CLIP_FIT = 0.25                # clip in its base channel, per side (slides in by hand)
 LATCH_POCKET_T_CLEAR = 0.5           # lid pocket, either side of the clip width
+TILT_SWEEP_DEG = 26.0                # swing range checked / relieved (base comes free by ~22 deg)
+HINGE_RELIEF_AIR = 0.2               # top shell cut back along the path of the base's left wall
+LEDGE_AIR = 0.25                     # ledges keep this from every board part along the whole swing
+PWR_PIN_REST_GAP = 0.35              # pin tip to plunger at rest (pin is loose, no preload; swing came 0.11 close at 0.2)

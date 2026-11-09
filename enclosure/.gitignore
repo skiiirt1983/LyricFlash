@@ -5,3 +5,4 @@ board/*.step
 cache/
 __pycache__/
 .venv/
+out/phase2/brep/
