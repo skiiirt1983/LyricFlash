@@ -414,7 +414,7 @@ SNAP_RETAIN_DEG = 80.0               # steeper catch (was 70)
 SNAP_GUIDE_DEPTH = 6.0               # guide posts either side of the beam (stop the rocking)
 SNAP_GUIDE_W = 2.4
 SNAP_GUIDE_CLEAR = 0.15              # per side, posts in their channels (slides by hand)
-LABEL_MIN_SIZE = 3.5                 # 10 pt for a 0.4 mm nozzle (Paul); bold
+LABEL_MIN_SIZE = 3.5                 # superseded below (Paul: 10 mm text for the 0.4 mm nozzle)
 
 # C1 decision (Paul 2026-11-09): "this look is good" -> keep the lip (1.0 over glass, 1.0 proud).
 # Bore opened so the glass drops in freely (no-force rule; v2 "just slides through").
