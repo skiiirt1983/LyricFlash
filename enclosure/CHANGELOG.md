@@ -8,7 +8,8 @@
   -> Phase 2: latches become separate clips printed flat in PETG (layers along the beam).
 - C3 battery tray: cell fits flat with room to spare; finger notch works. Leads leave the cell at
   one corner of the 34.5 mm end (that orientation lets the cell lie flattest) and went over the
-  wall there, not through the centred slot -> Phase 2: wire exit at that corner. Thickness gauge: pending.
+  wall there, not through the centred slot -> Phase 2: wire exit at that corner. Thickness gauge
+  (12.0 gap): cell fits perfectly -> BATTERY_POCKET thickness 12.0 confirmed. C3 done.
 
 ## Acceptance criterion (Paul 2026-11-09)
 - A ~100 g device can't take a 5-20 N USB-C insertion one-handed on a desk. C2 test now plugs in
