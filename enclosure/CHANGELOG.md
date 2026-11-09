@@ -1,5 +1,11 @@
 # Enclosure changelog
 
+## Round 3 results (2026-11-09)
+- C10: tilt-in assembly fits on the real board. Key too hard to remove and loose -> Paul: no
+  backstop (USB_BACKSTOP_KEY = False); board held firmly instead (port-side web contact, far-side
+  PCB-edge stop 0.10, Z clamp, latches).
+- Plugs + bent wires need 7 mm below the PCB back (Paul) -> MIN_DEPTH_BELOW_PCB 7.5 for Phase 2.
+
 ## Tilt-in assembly (2026-11-09)
 - Assembly-path simulation (lfcase/assembly.py, simulate_assembly.py): straight-up base collides
   with the USB-C after 0.5 mm (= the C2/C9 misfit). A swinging base can't carry a rigid backstop

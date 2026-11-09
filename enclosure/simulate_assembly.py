@@ -45,7 +45,7 @@ def main():
         run(f"base swung open {a} deg", hinge_pose(base, a, H), obst)
     ob2 = dict(obst)
     ob2["base"] = base
-    for d in (12, 8, 4, 2, 1, 0.3, 0):
+    for d in ((12, 8, 4, 2, 1, 0.3, 0) if getattr(P, "USB_BACKSTOP_KEY", True) else ()):
         run(f"key {d} mm below its final position", key.moved(cq.Location(cq.Vector(0, 0, -d))), ob2)
     text = ["# Assembly-path simulation", "",
             f"Hinge line X {P.TILT_HINGE[0]}, Z {P.TILT_HINGE[1]} (board frame), along Y. "

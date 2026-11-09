@@ -399,3 +399,11 @@ USB_KEY_RIB_REACH = 0.1              # key crush ribs reach to 0.1 behind the ST
 USB_KEY_SLOT_CLEAR = 0.2             # key in its floor slot / against the buttress
 USB_KEY_TOP_Z = -1.4                 # stays under the parts behind the receptacle (Z -1.0)
 USB_BUTTRESS_T = 1.8                 # fixed wall on the base behind the key
+
+# Round 3 results (Paul 2026-11-09): C10 tilt-in assembly fits. Key hard to remove and loose.
+USB_BACKSTOP_KEY = False             # Paul: no backstop; port's 4 through-hole legs + a firmly held board
+BOARD_FAR_STOP_GAP = 0.10            # Phase 2: base touches the PCB edge opposite the port (no +X shift)
+BOARD_FAR_STOP_SPAN_DEG = 30.0       # +/- around the far side (angle 0)
+PLUG_WIRE_HEIGHT = 7.0               # Paul: PCB back -> top of plugged-in plug with wires bent
+INTERNAL_CLEAR = 0.5
+MIN_DEPTH_BELOW_PCB = PLUG_WIRE_HEIGHT + INTERNAL_CLEAR   # nothing (floor, battery, walls) above Z -7.5 at the plugs

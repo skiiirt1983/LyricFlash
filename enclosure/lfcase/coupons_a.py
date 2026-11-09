@@ -572,6 +572,11 @@ def tilt_base(a0=None, a1=None, cups=None):
     base = _usb_port_block(base_sector(a0, a1, cups, ()))
     k = usb_key_geometry()
     W, c = P.USB_KEY_W, P.USB_KEY_SLOT_CLEAR
+    if not getattr(P, "USB_BACKSTOP_KEY", True):
+        rel = P.SEAM_RELIEF_NEAR_PORT
+        base = base.cut(cyl(R_OUT + 1, P.SEAM_Z - rel, P.SEAM_Z + P.SPIGOT_H + 1).cut(cyl(SPIG_OUT + 0.01, P.SEAM_Z - rel - 1, P.SEAM_Z + 5))
+                        .intersect(wedge(180 - P.SPIGOT_PORT_GAP_DEG, 180 + P.SPIGOT_PORT_GAP_DEG, P.SEAM_Z - rel, P.SEAM_Z + 5)))
+        return solidify(base)
     # buttress behind the key
     bx0 = k["x1"] + c
     base = base.fuse(cq.Solid.makeBox(P.USB_BUTTRESS_T, W + 2.4, P.USB_KEY_TOP_Z - FLOOR_TOP + 0.01,
