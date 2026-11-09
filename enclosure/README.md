@@ -68,3 +68,15 @@ lfcase/interference.py  boolean check against the STEP board
 concepts/          decision aids (bezel option renders)
 out/               generated renders/exports (committed so they can be viewed on GitHub)
 ```
+
+## Bambu Studio project files
+
+`lfcase/export.py: write_3mf_project()` writes one 3MF where every part is **separate and flat
+on the plate** (print orientation) and **assembled in Bambu Studio's Assembly view**. Each part is
+pre-tagged with its material (gold PLA Metal / black PETG), which Bambu maps to filament slots.
+Rules it follows (from Bambu Studio's loader, confirmed on Paul's machine 2026-11-09):
+- assembled poses go in `Metadata/model_settings.config` as `<assemble_item>`;
+- each mesh is stored centred on its bounding box (Bambu re-centres objects on import);
+- every object's lowest point is exactly z = 0, otherwise Bambu merges the objects into one
+  multi-part object and drops the assembled poses.
+Trial: `concepts/assembled_trial.py` -> `out/concepts/assembled_trial_v2.3mf`.
