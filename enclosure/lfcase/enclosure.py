@@ -174,3 +174,30 @@ def board_ledges(zb, angles=None):
 def base(zb, ledge_angles=None):
     b = base_shell(zb).fuse(board_ledges(zb, ledge_angles))
     return A.solidify(b)
+
+
+# ------------------------------------------------------------------ USB-C port (C10 geometry)
+def _bf_inverse(zb):
+    return bf_loc(zb).inverse
+
+
+def port_features(b, zb):
+    """Bay in the left wall + the proven C10 port wall/opening/pad, built in the board frame."""
+    g = A.usb_geometry()
+    fx_bf = g["face_x"]
+    fx_w = P.BOARD_X + fx_bf
+    pc = bf_point_to_wf((P.USB_MOUTH_X, g["yc"], g["zc"]), zb)
+    x0, x1, y0, y1 = footprint()
+    hw = P.PORT_BAY_HALF_W
+    zbot = pc[2] - P.PORT_BAY_BELOW
+    bay = _box((x0 - 5, pc[1] - hw, zbot), (fx_w, pc[1] + hw, 100))
+    b = b.cut(bay)
+    # seed in the board frame: a slab at the port face, the C10 block builder does the rest
+    seed_w = _box((fx_w - 0.01, pc[1] - hw, zbot), (fx_w + P.WALL_MIN, pc[1] + hw, 100)).intersect(
+        halfspace_bf(zb, P.SEAM_Z, above=False)).intersect(_inner_cavity().fuse(_box((fx_w - 1, -100, 0), (fx_w + 3, 100, 100))))
+    seed_bf = seed_w.moved(_bf_inverse(zb))
+    blk = A._usb_port_block(seed_bf)
+    blk_w = blk.moved(bf_loc(zb)).intersect(halfspace_bf(zb, P.SEAM_Z, above=False))
+    # keep the PCB/PMMA outline clear: the web touches it, nothing may enter it
+    blk_w = blk_w.cut(to_wf(A.cyl(P.USB_PCB_CONTACT_R, -0.05, P.SEAM_Z + 2), zb))
+    return A.solidify(b.fuse(blk_w))
