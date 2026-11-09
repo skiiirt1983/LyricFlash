@@ -167,9 +167,15 @@ def base_sector(a0, a1, cups, latch_angles=(), inner_r=BASE_IN):
     floor = cyl(R_OUT, FLOOR_BOT, FLOOR_TOP)
     wall = ring(inner_r, R_OUT, FLOOR_TOP - 0.01, P.SEAM_Z)
     spig = ring(inner_r, SPIG_OUT, P.SEAM_Z - 0.01, P.SEAM_Z + P.SPIGOT_H)
+    gap_deg = getattr(P, "SPIGOT_PORT_GAP_DEG", 0.0)     # tilt-in: no spigot beside the port
+    if gap_deg:
+        spig = spig.cut(wedge(180 - gap_deg, 180 + gap_deg, P.SEAM_Z - 1, P.SEAM_Z + P.SPIGOT_H + 1))
     body = floor.fuse(wall).fuse(spig).intersect(w)
     for x, y in cups:
-        ped = cyl(CUP_ID / 2 + P.CUP_WALL, FLOOR_BOT, CUP_TOP, x, y).cut(cyl(CUP_ID / 2, SEAT_Z, CUP_TOP + 1, x, y))
+        ct = SEAT_Z + P.CUP_DEPTH                          # CUP_DEPTH 0 = flat seat (tilt-in)
+        ped = cyl(CUP_ID / 2 + P.CUP_WALL, FLOOR_BOT, max(ct, SEAT_Z), x, y)
+        if P.CUP_DEPTH > 0:
+            ped = ped.cut(cyl(CUP_ID / 2, SEAT_Z, ct + 1, x, y))
         body = body.fuse(ped)
     for la in latch_angles:
         body = body.cut(at_angle(_latch_base_cut_local(), la))
@@ -242,7 +248,8 @@ def _usb_port_block(base, relief_only=False):
     if not relief_only:
         base = base.fuse(contact)
     # 3. solid port block under the PCB: from the face back to the backstop
-    blk_x1 = rear + P.USB_BACKSTOP_GAP + 1.6
+    on_base = getattr(P, "USB_BACKSTOP_ON_BASE", True)
+    blk_x1 = rear + (P.USB_BACKSTOP_GAP + 1.6 if on_base else 0.6)
     blk = cq.Solid.makeBox(blk_x1 - fx, 2 * (W / 2 + c + P.WALL_MIN), -0.05 - FLOOR_TOP,
                            pnt=cq.Vector(fx, yc - (W / 2 + c + P.WALL_MIN), FLOOR_TOP))
     base = base.fuse(blk)
@@ -255,11 +262,21 @@ def _usb_port_block(base, relief_only=False):
         return base.clean()
     # 4. pocket for the receptacle body (legs/tabs region wider), open to the PCB above
     env_w = 2 * max(abs(P.USB_ENVELOPE[0][1]), abs(P.USB_ENVELOPE[1][1]))
-    pocket = cq.Solid.makeBox(rear + P.USB_BACKSTOP_GAP - (fx + P.WALL_MIN), env_w + 2 * c, 10,
+    pocket_end = rear + P.USB_BACKSTOP_GAP if on_base else blk_x1 + 1.0
+    pocket = cq.Solid.makeBox(pocket_end - (fx + P.WALL_MIN), env_w + 2 * c, 10,
                               pnt=cq.Vector(fx + P.WALL_MIN, yc - env_w / 2 - c, g["z_bot"] - P.USB_UNDER_GAP))
     base = base.cut(pocket)
     # backstop: only up to USB_BACKSTOP_TOP_Z (parts on the PCB behind the receptacle)
-    base = base.cut(cq.Solid.makeBox(4, env_w + 2 * c, 5, pnt=cq.Vector(rear + P.USB_BACKSTOP_GAP - 0.01, yc - env_w / 2 - c, P.USB_BACKSTOP_TOP_Z)))
+    if on_base:
+        base = base.cut(cq.Solid.makeBox(4, env_w + 2 * c, 5, pnt=cq.Vector(rear + P.USB_BACKSTOP_GAP - 0.01, yc - env_w / 2 - c, P.USB_BACKSTOP_TOP_Z)))
+    # crush ribs on the backstop face (reach to USB_BACKSTOP_RIB_REACH behind the STEP rear)
+    reach = getattr(P, "USB_BACKSTOP_RIB_REACH", None)
+    if on_base and reach is not None and reach < P.USB_BACKSTOP_GAP:
+        for ry in P.USB_BACKSTOP_RIB_Y:
+            rib = cq.Solid.makeBox(P.USB_BACKSTOP_GAP - reach + 0.01, P.USB_BACKSTOP_RIB_W,
+                                   P.USB_BACKSTOP_TOP_Z - (g["z_bot"] - P.USB_UNDER_GAP),
+                                   pnt=cq.Vector(rear + reach, yc + ry - P.USB_BACKSTOP_RIB_W / 2, g["z_bot"] - P.USB_UNDER_GAP))
+            base = base.fuse(rib)
     # 5. guide land (tight) right behind the opening part of the wall
     land_x0 = fx + P.WALL_MIN - P.USB_GUIDE_LEN
     gc = P.USB_GUIDE_CLEAR
@@ -488,7 +505,7 @@ def c6_flexure() -> Coupon:
 
 def print_orientation(name, shape):
     """Board frame -> print frame for each part."""
-    if name in ("seat_ring", "usb_top_slice"):
+    if name in ("seat_ring", "usb_top_slice", "tilt_top_slice"):
         return flip_for_print(shape)
     return shape
 
@@ -518,3 +535,66 @@ def c9_usb_gauge():
                   notes=notes + ["Bare board glass-down on the table; press each gauge straight down over the USB-C "
                                  "(floor up). It should slide on by hand and sit with its inner face against the PCB edge."],
                   board_check=lambda: dict(parts))
+
+
+# -------------------------------------------------------------- tilt-in port + key
+
+
+def usb_key_geometry():
+    rear = P.USB_SHELL_REAR_X
+    g = usb_geometry()
+    x0 = rear + P.USB_KEY_FRONT_GAP
+    x1 = x0 + P.USB_KEY_T
+    z_pad = g["z_bot"] - P.USB_UNDER_GAP
+    return dict(rear=rear, x0=x0, x1=x1, yc=g["yc"], z_pad=z_pad)
+
+
+def usb_key():
+    """Separate backstop key: pushed up from under the base after it is closed."""
+    k = usb_key_geometry()
+    W, top = P.USB_KEY_W, P.USB_KEY_TOP_Z
+    key = cq.Solid.makeBox(k["x1"] - k["x0"], W, top - FLOOR_BOT, pnt=cq.Vector(k["x0"], k["yc"] - W / 2, FLOOR_BOT))
+    # crush ribs on the front face, over the height of the receptacle rear face
+    for ry in P.USB_BACKSTOP_RIB_Y:
+        key = key.fuse(cq.Solid.makeBox(k["x0"] - (k["rear"] + P.USB_KEY_RIB_REACH) + 0.01, P.USB_BACKSTOP_RIB_W,
+                                        top - k["z_pad"], pnt=cq.Vector(k["rear"] + P.USB_KEY_RIB_REACH, k["yc"] + ry - P.USB_BACKSTOP_RIB_W / 2, k["z_pad"])))
+    # fingernail groove on the bottom face (to pull it out)
+    key = key.cut(cq.Solid.makeBox(k["x1"] - k["x0"] + 1, 1.2, 0.6, pnt=cq.Vector(k["x0"] - 0.5, k["yc"] - 0.6, FLOOR_BOT - 0.01)))
+    return solidify(key)
+
+
+def tilt_base(a0=None, a1=None, cups=None):
+    """Port base for tilt-in assembly: flat seats, no spigot by the port, no backstop on it,
+    buttress wall + floor slot for the key, top edge relieved near the port."""
+    a0 = USB_A0 if a0 is None else a0
+    a1 = USB_A1 if a1 is None else a1
+    cups = USB_CUPS if cups is None else cups
+    base = _usb_port_block(base_sector(a0, a1, cups, ()))
+    k = usb_key_geometry()
+    W, c = P.USB_KEY_W, P.USB_KEY_SLOT_CLEAR
+    # buttress behind the key
+    bx0 = k["x1"] + c
+    base = base.fuse(cq.Solid.makeBox(P.USB_BUTTRESS_T, W + 2.4, P.USB_KEY_TOP_Z - FLOOR_TOP + 0.01,
+                                      pnt=cq.Vector(bx0, k["yc"] - W / 2 - 1.2, FLOOR_TOP - 0.01)))
+    # slot through the floor for the key (and the space it slides up into)
+    # slot front edge also clears the crush ribs on the key's front face (they rise through it)
+    sx0 = k["rear"] + P.USB_KEY_RIB_REACH - c
+    base = base.cut(cq.Solid.makeBox(k["x1"] + c - sx0, W + 2 * c, P.USB_KEY_TOP_Z - FLOOR_BOT + 1,
+                                     pnt=cq.Vector(sx0, k["yc"] - W / 2 - c, FLOOR_BOT - 0.5)))
+    # 0.2 mm relief on the base top edge near the port
+    rel = P.SEAM_RELIEF_NEAR_PORT
+    base = base.cut(cyl(R_OUT + 1, P.SEAM_Z - rel, P.SEAM_Z + P.SPIGOT_H + 1).cut(cyl(SPIG_OUT + 0.01, P.SEAM_Z - rel - 1, P.SEAM_Z + 5))
+                    .intersect(wedge(180 - P.SPIGOT_PORT_GAP_DEG, 180 + P.SPIGOT_PORT_GAP_DEG, P.SEAM_Z - rel, P.SEAM_Z + 5)))
+    return solidify(base)
+
+
+def c10_tilt_port():
+    top = top_shell_slice(USB_A0, USB_A1, ())
+    base = tilt_base()
+    key = usb_key()
+    base = deboss(base, "C10", (-12.0, 6.0), size=3.0, face_z=FLOOR_TOP)
+    return Coupon("C10_tilt_port", "Tilt-in USB-C port base + backstop key",
+                  {"tilt_top_slice": top, "tilt_base": base, "usb_key": key},
+                  notes=["Hook the base onto the USB-C at an angle, swing it closed, then push the key up "
+                         "through the slot in the floor until it is flush. Proven collision-free by simulate_assembly.py."],
+                  board_check=lambda: {"tilt_top_slice": top, "tilt_base": base, "usb_key": key})

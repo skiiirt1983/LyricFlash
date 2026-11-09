@@ -367,6 +367,35 @@ PLUG_KEEPOUT_GROW = 1.0              # XY grow around the socket footprints
 SNAP_LATERAL_CLEAR = 0.15
 SNAP_AXIAL_VARIANTS = (-0.10, 0.00, 0.10)   # negative = preload (pulls tight)
 
-# C9 result (Paul 2026-11-09): gauge C is "perfectly sized" once on (A, B way too tight).
+# C9 result (Paul 2026-11-09): gauge C's OPENING (hole in the wall) is perfectly sized; the
+# pocket behind it ("the box it snaps into") is still too tight. A and B way too tight.
 # It only went on by angling/twisting: a straight-up base can't pass the web over the port.
-USB_GUIDE_CLEAR, USB_UNDER_GAP, USB_BACKSTOP_GAP, USB_OPENING_CLEAR = USB_GAUGE_VARIANTS["C"]
+USB_OPENING_CLEAR = 0.55             # C, confirmed
+USB_GUIDE_CLEAR, USB_UNDER_GAP = USB_GAUGE_VARIANTS["C"][:2]
+# Paul: the box pinched at the LENGTH / back end -> real port longer (or further back) than the STEP.
+# Backstop face moves back; crush ribs reach to 0.1 behind the STEP rear so the backstop still
+# touches (Paul's condition 3) whatever the real length: they squash on first assembly.
+USB_BACKSTOP_GAP = 0.60              # backstop face behind the STEP receptacle rear
+USB_BACKSTOP_RIB_REACH = 0.10        # rib tips: 0.1 behind the STEP rear
+USB_BACKSTOP_RIB_W = 0.5
+USB_BACKSTOP_RIB_Y = (-3.0, 0.0, 3.0)
+
+# ============================================================================
+# TILT-IN ASSEMBLY (proven by assembly-path simulation, 2026-11-09)
+# Base hooks onto the USB-C first, then swings closed about a hinge line just outside the port.
+# A rigid backstop can't be on the swinging base (it would have to pass through the port), so
+# it is a separate KEY pushed up through a floor slot after closing.
+# ============================================================================
+USB_BACKSTOP_ON_BASE = False
+CUP_DEPTH = 0.0                      # flat seats on the standoffs (cups drag during the swing)
+SPIGOT_PORT_GAP_DEG = 45.0           # no spigot within +/-45 deg of the port (35 left a 0.003 mm3 rub at 13 deg)
+TILT_HINGE = (-24.2, 5.5)            # hinge line (X, Z), along Y, board frame
+TILT_OPEN_DEG = 20.0                 # opened enough for the base to come free
+SEAM_RELIEF_NEAR_PORT = 0.2          # base top edge dropped near the port (cleared a 13 deg rub)
+USB_KEY_T = 2.4                      # key thickness (X)
+USB_KEY_W = 7.6                      # key width (Y)
+USB_KEY_FRONT_GAP = 0.5              # key body face behind the STEP receptacle rear
+USB_KEY_RIB_REACH = 0.1              # key crush ribs reach to 0.1 behind the STEP rear
+USB_KEY_SLOT_CLEAR = 0.2             # key in its floor slot / against the buttress
+USB_KEY_TOP_Z = -1.4                 # stays under the parts behind the receptacle (Z -1.0)
+USB_BUTTRESS_T = 1.8                 # fixed wall on the base behind the key

@@ -1,8 +1,17 @@
 # Enclosure changelog
 
+## Tilt-in assembly (2026-11-09)
+- Assembly-path simulation (lfcase/assembly.py, simulate_assembly.py): straight-up base collides
+  with the USB-C after 0.5 mm (= the C2/C9 misfit). A swinging base can't carry a rigid backstop
+  (it would pass through the port). Solution: base hooks onto the port and swings closed about a
+  hinge line just outside it (X -24.2, Z 5.5); flat seats on the standoffs; no spigot within
+  +/-45 deg of the port; backstop = separate key pushed up through a floor slot, bearing on a
+  buttress wall. Every step 0..25 deg + key insertion: zero collision. Coupon C10.
+- Paul: C9 box pinched at the back end -> key ribs reach 0.1 behind the STEP rear, key face 0.5.
+
 ## C9 result (2026-11-09)
-- Gauge C (0.40 side / 0.70 under / 0.15 behind / 0.55 opening) is perfectly sized; A and B way
-  too tight. It only goes on angled: with the web above the opening, a base moving straight up
+- Gauge C: the opening (0.55/side) is perfectly sized; the pocket behind it is still too tight.
+  A and B way too tight. It only goes on angled: with the web above the opening, a base moving straight up
   must pass the web over the port (root cause of the C2 misfit too). -> tilt-in (hinge) assembly,
   proven with an assembly-path simulation before printing.
 
