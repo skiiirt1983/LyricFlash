@@ -464,6 +464,6 @@ BOARD_LEDGE_ANGLES = (-50.0, -110.0, 135.0)   # auto-picked: clear of every part
 BOARD_LEDGE_W = 5.0
 BOARD_LEDGE_REACH = 1.5              # how far under the PCB edge (radially)
 BOARD_FAR_STOP_GAP = 0.30            # far-side stop (tilt-in sim decides the final gap)
-PORT_BAY_HALF_W = 11.0               # recess in the left wall around the USB-C (world Y, each side)
+PORT_BAY_HALF_W = 14.0               # recess in the left wall around the USB-C (world Y, each side); 14 so both mic ducts exit inside it
 PORT_BAY_BELOW = 7.0                 # bay goes this far below the port centre
 MIC_COLLAR_CLEAR_CASE = 1.0          # tilt-in: the collar arrives with ~0.9 mm sideways motion

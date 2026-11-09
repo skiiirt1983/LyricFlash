@@ -201,3 +201,129 @@ def port_features(b, zb):
     # keep the PCB/PMMA outline clear: the web touches it, nothing may enter it
     blk_w = blk_w.cut(to_wf(A.cyl(P.USB_PCB_CONTACT_R, -0.05, P.SEAM_Z + 2), zb))
     return A.solidify(b.fuse(blk_w))
+
+
+# ------------------------------------------------------------------ mics (C5 geometry, looser collar for tilt-in)
+def _swept_outline(pts, air=0.2, top=None, step=0.25, a_max=30.0):
+    """XY outline (board frame) of a board part as the base swings closed about the tilt hinge.
+
+    pts: (N,3) points on the part, board frame. In the base's frame the part moves along the hinge arc;
+    for each step the footprint of the points below `top` is taken, the steps are unioned, then grown by
+    `air`. Returns (shapely polygon, lowest Z reached)."""
+    import numpy as np
+    from shapely.geometry import MultiPoint
+    from shapely.ops import unary_union
+    top = P.MIC_CRUSH if top is None else top
+    hx, hz = P.TILT_HINGE
+    keep, zmin = [], pts[:, 2].min()
+    for ang in np.arange(0.0, a_max + 1e-9, step):
+        t = math.radians(-ang)                      # base opened by +ang == board rotated by -ang in the base frame
+        dx, dz = pts[:, 0] - hx, pts[:, 2] - hz
+        # right-handed rotation about +Y: x' = x cos + z sin, z' = -x sin + z cos
+        X = hx + dx * math.cos(t) + dz * math.sin(t)
+        Z = hz - dx * math.sin(t) + dz * math.cos(t)
+        m = Z <= top
+        if m.sum() >= 3:
+            keep.append(MultiPoint(np.c_[X[m], pts[m, 1]]).convex_hull)
+            zmin = min(zmin, Z[m].min())
+    return unary_union(keep).buffer(air, join_style=2), zmin
+
+
+def _mic_points(mic):
+    import numpy as np
+    cx, cy = getattr(P, f"{mic}_CENTER")
+    a, bb, _ = getattr(P, f"{mic}_SIZE")
+    z0 = getattr(P, f"{mic}_Z")[0]
+    rot = math.radians(A._mic_edge_angle(mic))
+    u = np.linspace(-0.5, 0.5, 9)
+    p = np.array([(x * bb, y * a, z) for x in u for y in u for z in np.linspace(z0, 0.0, 6)])
+    c, s_ = math.cos(rot), math.sin(rot)
+    return np.c_[cx + p[:, 0] * c - p[:, 1] * s_, cy + p[:, 0] * s_ + p[:, 1] * c, p[:, 2]]
+
+
+def _standoff_points(xy):
+    import numpy as np
+    r = P.STANDOFF_OD / 2
+    return np.array([(xy[0] + r * math.cos(t), xy[1] + r * math.sin(t), z)
+                     for t in np.linspace(0, 2 * math.pi, 48, endpoint=False) for z in np.linspace(P.STANDOFF_Z[0], 0, 8)])
+
+
+def _mic_swept_outline(mic, air=0.2):
+    return _swept_outline(_mic_points(mic), air)
+
+
+def _prism(poly, z0, z1):
+    pts = [cq.Vector(x, y, 0) for x, y in list(poly.exterior.coords)[:-1]]
+    w = cq.Wire.makePolygon(pts, close=True)
+    return cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, 0, z1 - z0)).moved(cq.Location(cq.Vector(0, 0, z0)))
+
+
+def _mic_parts_bf(mic, air=None):
+    """Collar (with crush rib) and its pocket, board frame. Pocket = package swept along the tilt-in arc + air.
+
+    Same wall / rib / cavity numbers as C5. If a standoff is too close for a wall between them (MIC2), the
+    collar wraps round the standoff too: its pocket also takes the standoff's swept footprint, deeper."""
+    from shapely.geometry import Point
+    air = P.MIC_COLLAR_CLEAR if air is None else air
+    wl = P.MIC_COLLAR_WALL
+    hole, zmin = _mic_swept_outline(mic, air)
+    z_cav = min(getattr(P, f"{mic}_Z")[0], zmin) - P.MIC_CAVITY_H
+    inner = _prism(hole, z_cav, 1.0)
+    outline = hole
+    import numpy as np
+    from shapely.geometry import MultiPoint
+    from lfcase.board import load_board
+    cands = [_standoff_points(xy) for xy in P.MOUNT_HOLES_XY]
+    for grp in ("misc_back", "microsd", "h3", "header", "j1", "key1", "key2", "usb_c"):
+        for sol in load_board(verbose=False)[grp].Solids():
+            bb = sol.BoundingBox()
+            cands.append(np.array([(x, y, z) for x in (bb.xmin, bb.xmax) for y in (bb.ymin, bb.ymax)
+                                   for z in (bb.zmin, min(bb.zmax, 0.0))]))
+    taken = set()
+    for _ in range(8):                                   # enclose neighbours until none sits under the wall
+        grew = False
+        for n, pts in enumerate(cands):
+            if n in taken or pts[:, 2].min() > 0.05:
+                continue
+            fp = MultiPoint(pts[:, :2]).convex_hull
+            if outline.distance(fp) < wl + 0.3:
+                sh, sz = _swept_outline(pts, air)
+                outline = outline.union(sh).convex_hull
+                inner = inner.fuse(_prism(sh, sz - air, 1.0))
+                taken.add(n); grew = True
+        if not grew:
+            break
+    if outline is not hole:
+        inner = inner.fuse(_prism(outline, z_cav, 1.0))
+    js = dict(join_style=2, mitre_limit=2.0)
+    outer = _prism(outline.buffer(wl, **js), -40.0, 0.0)
+    k = wl / 2
+    rib = _prism(outline.buffer(k + P.MIC_CRUSH_RIB_W / 2, **js), -0.01, P.MIC_CRUSH).cut(
+        _prism(outline.buffer(k - P.MIC_CRUSH_RIB_W / 2, **js), -0.1, 1.0))
+    return outer.fuse(rib), inner, z_cav
+
+
+def mic_features(b, zb):
+    """Collar + crush rib on each mic, duct straight out through the USB bay's back wall (world -X)."""
+    fx_w = P.BOARD_X + A.usb_geometry()["face_x"]
+    d = P.MIC_DUCT_D
+    cav = _inner_cavity().fuse(_box((fx_w - 0.01, -100, P.CASE_FLOOR - 0.01), (fx_w + 5, 100, 100)))
+    info = {}
+    for mic in ("MIC1", "MIC2"):
+        cx, cy = getattr(P, f"{mic}_CENTER")
+        collar, inner, z_cav = _mic_parts_bf(mic)
+        collar_w = to_wf(collar, zb).intersect(cav)
+        inner_w = to_wf(inner, zb)
+        # duct: horizontal in the world (prints as a teardrop, point up), from the pocket out through the bay wall
+        c = bf_point_to_wf((cx, cy, z_cav - d / 2 + 0.05), zb)
+        x_in, x_out = c[0], fx_w - 1.0
+        L = x_in - x_out
+        s = d / 2 * math.sqrt(2) / 2
+        tear = (cq.Workplane("YZ").workplane(offset=x_out).center(c[1], c[2]).circle(d / 2).extrude(L).val()
+                .fuse(cq.Solid.makeBox(L, d / 2 * math.sqrt(2), d / 2 * math.sqrt(2), pnt=cq.Vector(x_out, c[1] - s, c[2] - s))
+                      .rotate(cq.Vector(0, c[1], c[2]), cq.Vector(1, c[1], c[2]), 45)))
+        # solid sleeve from the floor to above the duct, between the collar and the bay wall
+        sleeve = _box((fx_w - 0.01, c[1] - d / 2 - 0.8, P.CASE_FLOOR - 0.01), (x_in, c[1] + d / 2 + 0.8, c[2] + d / 2 + 0.8))
+        b = b.fuse(collar_w).fuse(sleeve).cut(inner_w).cut(tear)
+        info[mic] = dict(duct_len=round(x_in - fx_w, 2), exit=(round(x_out, 2), round(c[1], 2), round(c[2], 2)))
+    return A.solidify(b), info
