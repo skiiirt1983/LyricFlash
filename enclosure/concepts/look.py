@@ -144,6 +144,21 @@ def main():
     fig.tight_layout()
     fig.savefig(OUT / "look_views.png")
     plt.close(fig)
+    # gold / black (Paul: Iridium Gold PLA Metal + black PETG)
+    gold, black = (0.80, 0.62, 0.30), (0.08, 0.08, 0.09)
+    combos = [("Gold top / Black base", gold, black), ("Black top / Gold base", black, gold)]
+    fig, axs = plt.subplots(2, 3, figsize=(18, 12.4), dpi=100)
+    for r, (name, ct, cb) in enumerate(combos):
+        for c, vn in enumerate(("front", "left", "back")):
+            s = scene_for(top, base, board, ct, cb, views[vn], zoom=1.05)
+            axs[r, c].imshow(s.image())
+            s.close()
+            axs[r, c].axis("off")
+            axs[r, c].set_title(f"{name} - {vn}", fontsize=15, fontweight="bold")
+    fig.suptitle("Iridium Gold + Black (concept shape)", fontsize=20)
+    fig.tight_layout()
+    fig.savefig(OUT / "look_gold_black.png")
+    plt.close(fig)
     print("wrote", OUT)
 
 
