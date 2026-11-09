@@ -1,5 +1,13 @@
 # Enclosure changelog
 
+## Phase 1 v2, 2026-11-09 (Paul: non-manifold 3MF, C6 floating regions)
+- 3MF writer welds each part into one connected mesh; every object checked: 0 non-manifold edges.
+- C6 flexure redesigned: beam stands on the plate (full-height inner wall layer, gap behind,
+  nothing above, slot through the floor); pad and nub grow out with 45 deg undersides.
+- New layer-by-layer check in report.md (floating islands, cantilevered overhangs, bridges);
+  it flags the old C6 and passes all 15 v2 parts.
+- USB opening top corners R0.5 (Paul's web-corner fillet); the top edge is one 8.7 mm bridge.
+
 ## Phase 1 (coupons), 2026-11-09
 - Bezel option A chosen (lip, board loads from behind, base clamps it on the M2 standoffs).
 - Board facts from Paul: PWR = KEY2, BOOT = KEY1, BAT = J1, SPK = H3, both mics top-port.

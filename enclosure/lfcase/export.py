@@ -49,9 +49,19 @@ def pack(shapes: dict, gap=6.0, bed=BED):
 
 def write_3mf(shapes: dict, path: Path):
     """Minimal 3MF core spec: one object per part, each with a build item."""
+    import tempfile
+
+    import trimesh
     objs, items = [], []
     for i, (name, s) in enumerate(shapes.items(), 1):
-        v, t = to_mesh(s)
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / "p.stl"
+            write_stl(s, f)
+            m = trimesh.load(f)            # merges coincident vertices -> one connected surface
+        m.merge_vertices()
+        if not m.is_watertight:
+            raise RuntimeError(f"{name}: mesh is not watertight / manifold")
+        v, t = m.vertices, m.faces
         vs = "".join(f'<vertex x="{a:.4f}" y="{b:.4f}" z="{c:.4f}"/>' for a, b, c in v)
         ts = "".join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>' for a, b, c in t)
         objs.append(f'<object id="{i}" name="{name}" type="model"><mesh><vertices>{vs}</vertices>'

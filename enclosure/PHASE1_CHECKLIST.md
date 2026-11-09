@@ -1,7 +1,8 @@
 # Phase 1: print and check
 
 **Plate:** `out/phase1/lyricflash_coupons.3mf` (everything already laid flat in print
-orientation). Single STLs/STEPs are in `out/phase1/<coupon>/`.
+orientation). v2: every object is one welded, watertight mesh (0 non-manifold edges), so no repair
+should be needed. Single STLs/STEPs are in `out/phase1/<coupon>/`.
 
 `out/phase1/report.md` lists two small overhangs on `usb_base`, both expected: the 9.5 mm bridge that forms the top edge of the opening, and the 0.4 mm ledge where the side lead-in chamfers stop. Both print without support.
 
@@ -102,8 +103,13 @@ through the wall. Use the **C2 top slice** to clamp the board.
 
 ## C6: PWR flexure (base)
 
-Base sector around KEY2 (PWR) with a 10 mm flexure beam, a nub on the plunger, and a diamond pad
-sunk 1.5 mm in a finger recess.
+Base sector around KEY2 (PWR). The beam is the inner 1.2 mm of the wall, 10 mm long, standing on
+the build plate, with a 0.5 mm gap behind it and nothing above it, so no part of it prints in
+mid-air (v2: the first version had floating strips). You press it through a window in the outer
+skin on a pad sunk 1.5 mm, and a nub on its inside pushes the button.
+
+The full-height beam is stiffer than a short one: estimated **~8 N** to click (beam ~6 N + switch).
+If that's too hard, the fix is one number: `FLEXURE_THK` 1.2 -> 1.0 gives ~5 N.
 
 1. Board glass-down on the table, press the coupon onto its back (two cups on the standoffs).
 2. **Check:** at rest the nub doesn't press the button (the board doesn't power on or off by

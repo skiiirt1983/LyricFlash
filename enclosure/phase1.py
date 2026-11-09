@@ -103,6 +103,14 @@ def main(only=None):
             bb = sh.BoundingBox()
             lines.append(f"- `{pn}`: {bb.xlen:.1f} x {bb.ylen:.1f} x {bb.zlen:.1f} mm, volume {sh.Volume()/1000:.2f} cm3, "
                          f"{ntri} triangles, mesh: {"watertight" if bad == 0 else bad}, unsupported overhang (>45 deg, off-bed): {ov_area:.1f} mm2")
+            from lfcase.layers import check as layer_check
+            lay = layer_check(d / f"{pn}.stl")
+            fl = [x for x in lay if x[1] not in ("bridge", "short overhang")]
+            br = [x for x in lay if x[1] in ("bridge", "short overhang")]
+            lines.append(f"- `{pn}` layer check: {'**no floating regions**' if not fl else f'**{len(fl)} FLOATING / long-bridge patches**'}"
+                         f", {len(br)} bridge / short-overhang patches (bridges <= 10 mm supported both ends, overhangs <= 0.3 mm past 45 deg)")
+            for z, kind, area, ln, bb, reach in (fl + br)[:8]:
+                lines.append(f"    - {kind} at print z {z}: {area} mm2, {ln} mm long, reaches {reach} mm past support, XY {bb}")
             if ov_area > 0:
                 for lo, hi, n in overhang_clusters(ov_cen):
                     lines.append(f"    - overhang at print X[{lo[0]:.1f},{hi[0]:.1f}] Y[{lo[1]:.1f},{hi[1]:.1f}] Z {lo[2]:.1f}..{hi[2]:.1f}")

@@ -242,8 +242,12 @@ def _usb_port_block(base, relief_only=False):
             .fuse(cq.Solid.makeBox(P.USB_GUIDE_LEN + 0.01, W + 2 * gc, 2.0, pnt=cq.Vector(land_x0, yc - W / 2 - gc, zc))))
     base = base.cut(land)
     # 6. opening through the outer part of the wall (+0.3 per side, stadium)
+    # bottom corners follow the shell (R1.28 + c); top corners = Paul's 0.3-0.5 fillet where the web meets
+    # the side walls (a small radius also keeps the overhang at the top corners tiny)
+    osk = (cq.Sketch().rect(W + 2 * c, H + 2 * c).vertices(">Y").fillet(P.USB_WEB_CORNER_R)
+           .reset().vertices("<Y").fillet(g["r_shell"] + c))
     opening = (cq.Workplane("YZ", origin=(fx - 0.1, 0, 0)).center(yc, zc)
-               .placeSketch(_stadium(W + 2 * c, H + 2 * c, g["r_shell"] + c)).extrude(P.WALL_MIN - P.USB_GUIDE_LEN + 0.2).val())
+               .placeSketch(osk).extrude(P.WALL_MIN - P.USB_GUIDE_LEN + 0.2).val())
     base = base.cut(opening)
     # 7. 45 deg lead-in on the sides and bottom only (top edge = web stays full thickness)
     li = P.USB_LEADIN
@@ -387,47 +391,51 @@ def c6_flexure() -> Coupon:
     base = base_sector(a0, a1, cups)
     r_in, t = BASE_IN, P.FLEXURE_THK
     r_out_b = r_in + t
+    g = P.FLEX_GAP
     L = P.FLEXURE_LEN
     r_mid = r_in + t / 2
     nub_from_free = 1.5
     free_a = ang_out + math.degrees(nub_from_free / r_mid)
     root_a = free_a - math.degrees(L / r_mid)
-    zb_in, zt_in = -2.2, -0.1                        # beam Z at its inner face
     s = P.FLEX_SLOT
-    # outside recess (45 deg ceiling so it prints without support)
-    rec = rz_profile_solid([(r_out_b, -4.6), (R_OUT + 1, -4.6), (R_OUT + 1, 0.3 + (R_OUT + 1 - r_out_b)), (r_out_b, 0.3)],
-                           root_a - 3, free_a + 3)
-    base = base.cut(rec)
-    # sloped slots above and below the beam (45 deg, rising inward)
-    def slot(z_in):
-        return rz_profile_solid([(r_in - 0.5, z_in + 0.5), (r_out_b + 0.05, z_in - t - 0.05), (r_out_b + 0.05, z_in - t - 0.05 + s),
-                                 (r_in - 0.5, z_in + 0.5 + s)], root_a, free_a + math.degrees(s / r_mid))
-    base = base.cut(slot(zb_in - s)).cut(slot(zt_in))
-    # free-end slot (radial)
-    fe = rz_profile_solid([(r_in - 0.5, zb_in - s - 2), (r_out_b + 0.05, zb_in - s - 2), (r_out_b + 0.05, zt_in + s + 1), (r_in - 0.5, zt_in + s + 1)],
-                          free_a, free_a + math.degrees(s / r_mid))
-    base = base.cut(fe)
-    # nub: along the press axis, from the beam inner face to the rest gap
-    ux, uy = math.cos(math.radians(ang_out)), math.sin(math.radians(ang_out))
-    s0 = tip_dist + P.FLEX_REST_GAP
-    nub_len = r_in + 0.2 - s0
-    nub = (cq.Workplane("XY").workplane(offset=tz0 + 0.05).center(0, 0)
-           .rect(nub_len, P.FLEX_NUB_W).extrude(tz1 - tz0 - 0.1).val()
-           .moved(cq.Location(cq.Vector(s0 + nub_len / 2, 0, 0))))
-    nub = at_angle(nub, ang_out)
-    # shift sideways so the nub axis passes through the plunger tip centre
-    px, py = tip[0], tip[1]
-    off = -uy * px + ux * py
-    nub = nub.moved(cq.Location(cq.Vector(-uy * off, ux * off, 0)))
-    base = base.fuse(nub)
-    # pad: diamond boss on the beam's outer face (45 deg faces, prints clean)
-    pad_r0 = r_out_b - 0.05
-    pad_len = (R_OUT - P.FLEX_PAD_RECESS) - pad_r0
-    pz = (zb_in + zt_in) / 2 - t                     # beam centre on its outer face (45 deg section)
-    pad = (cq.Workplane("YZ").center(0, pz).rect(1.4, 1.4).extrude(pad_len).val()
-           .rotate(cq.Vector(0, 0, pz), cq.Vector(1, 0, pz), 45)
-           .moved(cq.Location(cq.Vector(pad_r0, 0, 0))))
-    base = base.fuse(at_angle(pad, ang_out))
+    slot_a = math.degrees(s / r_mid)
+    z_beam_top = P.FLEX_BEAM_TOP_Z
+    z_all = (FLOOR_BOT - 1, P.SEAM_Z + P.SPIGOT_H + 1)
+    # The beam is the inner 1.2 mm of the wall. It stands on the build plate (its bottom IS the
+    # bed face), so nothing is ever printed in mid-air:
+    #   gap behind it (full height), radial slot at the free end (full height), the inner layer
+    #   removed above the beam (open to the seam, so no bridge), a slot through the floor in front.
+    cuts = [
+        ([(r_out_b, z_all[0]), (r_out_b + g, z_all[0]), (r_out_b + g, z_all[1]), (r_out_b, z_all[1])], root_a, free_a + slot_a),
+        ([(r_in - 0.7, z_all[0]), (r_out_b + g, z_all[0]), (r_out_b + g, z_all[1]), (r_in - 0.7, z_all[1])], free_a, free_a + slot_a),
+        ([(r_in - 0.7, z_beam_top), (r_out_b + 0.01, z_beam_top), (r_out_b + 0.01, z_all[1]), (r_in - 0.7, z_all[1])], root_a, free_a + slot_a),
+        ([(r_in - P.FLEX_FLOOR_SLOT, z_all[0]), (r_in + 0.001, z_all[0]), (r_in + 0.001, FLOOR_TOP + 0.01), (r_in - P.FLEX_FLOOR_SLOT, FLOOR_TOP + 0.01)],
+         root_a, free_a + slot_a),
+    ]
+    for prof, x0, x1 in cuts:
+        base = base.cut(rz_profile_solid(prof, x0, x1))
+    # plunger tip, polar
+    tip_r = math.hypot(tip[0], tip[1])
+    tip_a = math.degrees(math.atan2(tip[1], tip[0]))
+    zc = (tz0 + tz1) / 2
+    # pad: grows out of the beam's outer face with a 45 deg underside, through a window in the skin
+    pad_out = R_OUT - P.FLEX_PAD_RECESS
+    pl = pad_out - (r_out_b - 0.05)
+    pw_a = math.degrees(P.FLEX_PAD_W / 2 / r_out_b)
+    pad_prof = [(r_out_b - 0.05, zc - 1.0 - pl), (pad_out, zc - 1.0), (pad_out, zc + 1.0), (r_out_b - 0.05, zc + 1.0)]
+    win_a = math.degrees((P.FLEX_PAD_W / 2 + P.FLEX_WINDOW_CLEAR) / (r_out_b + g))
+    win = rz_profile_solid([(r_out_b + g - 0.01, zc - 1.0 - pl - P.FLEX_WINDOW_CLEAR), (R_OUT + 1, zc - 1.0 - pl - P.FLEX_WINDOW_CLEAR),
+                            (R_OUT + 1, zc + 1.0 + P.FLEX_WINDOW_CLEAR), (r_out_b + g - 0.01, zc + 1.0 + P.FLEX_WINDOW_CLEAR)],
+                           tip_a - win_a, tip_a + win_a)
+    base = base.cut(win)
+    base = base.fuse(rz_profile_solid(pad_prof, tip_a - pw_a, tip_a + pw_a))
+    # nub on the inner face, 45 deg underside, stops FLEX_REST_GAP short of the plunger tip
+    s0 = tip_r + P.FLEX_REST_GAP
+    nh = (tz1 - tz0 - 0.1) / 2
+    nub_prof = [(s0, zc - nh), (r_in + 0.2, zc - nh - (r_in + 0.2 - s0)), (r_in + 0.2, zc + nh), (s0, zc + nh)]
+    nw_a = math.degrees(P.FLEX_NUB_W / 2 / r_in)
+    base = base.fuse(rz_profile_solid(nub_prof, tip_a - nw_a, tip_a + nw_a))
+    base = solidify(base)
     base = deboss(base, "C6 PWR", (BASE_IN * 0.55 * math.cos(math.radians(ang_out - 5)), BASE_IN * 0.55 * math.sin(math.radians(ang_out - 5))),
                   size=2.8, face_z=FLOOR_TOP)
     a_load = L - nub_from_free
@@ -436,17 +444,17 @@ def c6_flexure() -> Coupon:
     return Coupon(
         "C6_pwr_flexure", "PWR flexure button (base)",
         {"pwr_base": base.clean()},
-        notes=[f"PWR = {key} (Paul's photo). Tangential beam {L} long x {t} thick (PLAN 3.5), bends along the layers. "
+        notes=[f"PWR = {key} (Paul's photo). Tangential beam {L} long x {t} thick (PLAN 3.5), standing on the plate, bends along the layers. "
                f"Nub {P.FLEX_REST_GAP} from the plunger at rest; switch travel {P.KEY_TRAVEL} (TODO, not in the STEP). "
                f"Pad sits {P.FLEX_PAD_RECESS} below the outer surface so it can't be bumped in a pocket.",
-               "Slots above/below the beam are 45 deg so the base prints with no support. Test on the bare board: "
+               "Beam bottom = bed face, gap behind it, nothing above it, so no part of it is printed in mid-air. Test on the bare board: "
                "board glass-down on the table, press the coupon onto its back (cups on the standoffs)."],
         checks={"flex_strain": strain},
         board_check=lambda: {"pwr_base": base},
         sections=[("section_pwr", ang_out, (tip[0] * 1.12, tip[1] * 1.12, -1.2), 3.4,
                    [((tip[0], tip[1], tip[2]), "KEY2 (PWR) plunger", (-280, -170)),
-                    ((tip[0] * 1.075, tip[1] * 1.075, -1.6), "beam 1.2 + nub", (240, -200)),
-                    ((tip[0] * 1.12, tip[1] * 1.12, -2.4), "pad (1.5 recessed)", (260, 170))])],
+                    ((tip[0] * 1.045, tip[1] * 1.045, -3.5), "beam 1.2, stands on plate", (240, -200)),
+                    ((tip[0] * 1.115, tip[1] * 1.115, -1.6), "pad (1.5 recessed)", (260, 170))])],
     )
 
 

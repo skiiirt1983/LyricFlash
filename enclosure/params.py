@@ -291,6 +291,7 @@ USB_BACKSTOP_GAP = 0.05              # backstop behind the receptacle (Paul: <= 
 USB_BACKSTOP_TOP_Z = -1.3            # stays below the parts on the PCB just behind the receptacle (to Z -1.0)
 USB_BLOCK_TOP_Z = -0.6               # port block top behind the wall (parts beside the receptacle reach Z -0.35)
 USB_LEADIN = 0.4                     # 45 deg lead-in on the opening sides and bottom only (none on the web)
+USB_WEB_CORNER_R = 0.5              # Paul: 0.3-0.5 fillet where the web meets the side walls
 USB_PCB_CONTACT_R = 23.014           # web inner face = PCB outline circumradius (zero gap, STEP PCB_D/2)
 USB_FACE_HALF_W = 8.0                # flat port face extends at least this far either side
 
@@ -315,6 +316,11 @@ FLEX_REST_GAP = 0.30                 # nub to plunger tip at rest
 FLEX_NUB_W = 1.6
 FLEX_SLOT = 0.6
 FLEX_PAD_RECESS = 1.5                # pad face below the outer surface
+FLEX_PAD_W = 3.0                     # pad width (tangential)
+FLEX_WINDOW_CLEAR = 0.5              # window in the outer skin around the pad
+FLEX_GAP = 0.5                       # radial gap between the beam and the outer skin
+FLEX_FLOOR_SLOT = 0.6                # slot through the floor in front of the beam
+FLEX_BEAM_TOP_Z = -0.1               # beam top: stays below the PCB so it can't hit the PCB/PMMA edge when pressed
 
 # ============================================================================
 # SPEAKER (Paul 2026-11-09, listing image: 30 x 20 x 6.8 mm, plugs into H3 'SPK')
