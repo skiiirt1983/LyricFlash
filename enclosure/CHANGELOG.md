@@ -1,5 +1,10 @@
 # Enclosure changelog
 
+## Latches (2026-11-09)
+- C7 v3 (hook 1.0, 80 deg, guides 0.15): needed pliers / wouldn't assemble.
+- C7 v4 (hook 0.8, 45/55/65 deg, guides 0.3): 65 deg tightest but very little resistance; same
+  after 50 pulls (durable). -> C7 v5: hook 1.0, 70/74/78 deg, guides 0.3, play 0.1.
+
 ## Labels (2026-11-09)
 - Paul: 3.5 mm text unreadable; ~10 mm is legible with a 0.4 mm nozzle (depth 0.4). Small parts get countable edge
   notches instead; matching halves placed next to each other on the plate.

@@ -278,10 +278,10 @@ def id_notches(shape: cq.Shape, n: int, x_edge: float, y_c: float, side: int = -
     return shape
 
 
-def _snap_pair_v3(c_ax: float, label: str, retain_deg: float | None = None):
+def _snap_pair_v3(c_ax: float, label: str, retain_deg: float | None = None, hook: float | None = None):
     """Guided snap test. Male: base bar + two guide posts + beam with hook. Female: block with two
     guide channels and the beam slot; the slot only gives the beam room on the side it bends to."""
-    t, hk, L = P.SNAP_BEAM_T, P.SNAP_HOOK, P.SNAP_BEAM_L
+    t, hk, L = P.SNAP_BEAM_T, (hook or P.SNAP_HOOK), P.SNAP_BEAM_L
     E = P.SNAP_EXTRUDE
     gd, gw, gc = P.SNAP_GUIDE_DEPTH, P.SNAP_GUIDE_W, P.SNAP_GUIDE_CLEAR
     lead = hk / math.tan(math.radians(P.SNAP_LEADIN_DEG))
@@ -343,3 +343,16 @@ def snap_latches_v4() -> Coupon:
     return Coupon("C7v4_snap_latches", "Guided snap latches, 3 release strengths", parts,
                   notes=["1 notch = 45 deg catch (easiest to pull apart), 2 = 55 deg, 3 = 65 deg (firmest). "
                          f"Guide clearance {P.SNAP_GUIDE_CLEAR}/side, hook {P.SNAP_HOOK}, play {P.SNAP_AXIAL_PLAY_V4}."])
+
+
+def snap_latches_v5() -> Coupon:
+    parts = {}
+    for i, (hk, ang) in enumerate(P.SNAP_V5_VARIANTS):
+        m, f = _snap_pair_v3(P.SNAP_AXIAL_PLAY_V4, "", retain_deg=ang, hook=hk)
+        m = id_notches(m, i + 1, -8.0, 2.5)
+        f = id_notches(f, i + 1, -9.0, -7.0)
+        x = i * 42.0
+        parts[f"snap5_{i+1}notch_{int(ang)}deg_hook"] = m.moved(cq.Location(cq.Vector(x, 0, 0)))
+        parts[f"snap5_{i+1}notch_{int(ang)}deg_socket"] = f.moved(cq.Location(cq.Vector(x + 20.0, 0, 0)))
+    return Coupon("C7v5_snap_latches", "Guided snap latches between v3 and v4", parts,
+                  notes=["Hook 1.0; catch 1 notch = 70 deg, 2 = 74 deg, 3 = 78 deg. Guides 0.3/side, play 0.1."])

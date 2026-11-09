@@ -431,3 +431,7 @@ SNAP_GUIDE_CLEAR = 0.30              # PETG sliding fit: ~0.3/side (v3 0.15 too 
 SNAP_HOOK = 0.8                      # back from 1.0
 SNAP_AXIAL_PLAY_V4 = 0.10            # the L1 socket setting that worked
 SNAP_RETAIN_VARIANTS = (45.0, 55.0, 65.0)   # release force: easy / medium / firm (notches 1/2/3)
+
+# C7 v4 result (Paul): 3-notch (65 deg, hook 0.8) tightest but "very little resistance";
+# unchanged over 50 pulls. v3 (hook 1.0, 80 deg) needed pliers. -> v5 brackets in between:
+SNAP_V5_VARIANTS = ((1.0, 70.0), (1.0, 74.0), (1.0, 78.0))   # (hook, catch deg), notches 1/2/3
