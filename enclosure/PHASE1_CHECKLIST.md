@@ -125,7 +125,7 @@ sunk 1.5 mm in a finger recess.
 1. Press the speaker in, cone down onto the grille. **Check:** it goes in by hand and the side
    ribs hold it (turn it over: it stays).
 2. **Check:** the front frame sits on the seal rib all the way round (no rocking).
-3. **Check:** the leads exit through the end slot. If they come out somewhere else, tell me where.
+3. **Check:** the leads come out of the middle of the 20 mm end and through the end slot without being pinched.
 4. Plug the speaker into **H3 (SPK)** and play something. **Check:** no buzz or rattle at higher
    volume.
 - **Report:** fit (loose / good / tight), corners (OK / the speaker corners are rounder or
