@@ -180,7 +180,9 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0):
         if p.get("flip_x_deg", 0.0):
             sh = sh.rotate(cq.Vector(0, 0, 0), cq.Vector(1, 0, 0), p["flip_x_deg"])
         bb = sh.BoundingBox()
-        d = np.array([-(bb.xmin + bb.xmax) / 2, -(bb.ymin + bb.ymax) / 2, -bb.zmin])   # local origin: centre, on the bed
+        # local origin = bounding-box centre in X, Y AND Z. Bambu Studio re-centres every object on
+        # its bbox centre at import; if we already are, its move is zero and the assemble pose holds.
+        d = np.array([-(bb.xmin + bb.xmax) / 2, -(bb.ymin + bb.ymax) / 2, -(bb.zmin + bb.zmax) / 2])
         local = sh.moved(cq.Location(cq.Vector(*d)))
         locals_[p["name"]] = local
         # local = R*S + d  ->  S = R^T (local - d); assembled world = S + a_shift
@@ -202,8 +204,8 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0):
         objs.append(f'<object id="{i}" name="{n}" type="model" pid="1" pindex="{mats.index(p["material"])}">'
                     f'<mesh><vertices>{vs}</vertices><triangles>{ts}</triangles></mesh></object>')
         pb, lb = placed[n].BoundingBox(), locals_[n].BoundingBox()
-        tx, ty = pb.xmin - lb.xmin, pb.ymin - lb.ymin
-        items.append(f'<item objectid="{i}" transform="1 0 0 0 1 0 0 0 1 {tx:.4f} {ty:.4f} 0"/>')
+        tx, ty, tz = pb.xmin - lb.xmin, pb.ymin - lb.ymin, -lb.zmin      # flat on the bed
+        items.append(f'<item objectid="{i}" transform="1 0 0 0 1 0 0 0 1 {tx:.4f} {ty:.4f} {tz:.4f}"/>')
         Rt, t = mats_asm[n]
         vals = [Rt[r, c] for c in range(3) for r in range(3)] + list(t)
         asm.append(f'   <assemble_item object_id="{i}" instance_id="0" transform="{" ".join(f"{v:.6g}" for v in vals)}" offset="0 0 0" />')

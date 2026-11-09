@@ -17,7 +17,7 @@ c7 = C.snap_latches().parts
 male, fem = c7["snap_male_0.25"], c7["snap_female_0.25"]
 mb, fb = male.BoundingBox(), fem.BoundingBox()
 male_asm = male.moved(cq.Location(cq.Vector(fb.xmin - mb.xmin + (fb.xlen - mb.xlen) / 2, fb.ymax - (mb.ymin + 5.5), 0)))
-off = cq.Location(cq.Vector(45, 0, 0))   # put the latch pair beside the C2 assembly
+off = cq.Location(cq.Vector(45, 0, A.FLOOR_BOT))   # beside the C2 assembly, standing on the same floor level
 parts = [
     dict(name="C2 top slice (gold)", shape_assembled=c2["usb_top_slice"], flip_x_deg=180, material="gold"),
     dict(name="C2 base (black)", shape_assembled=c2["usb_base"], material="black"),
