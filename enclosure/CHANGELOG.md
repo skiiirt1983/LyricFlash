@@ -1,5 +1,13 @@
 # Enclosure changelog
 
+## Phase 2 in progress (2026-11-09)
+- 12 deg tilt, two main parts, internal supports allowed (Paul). Speaker beside the battery.
+- USB-C: C10 port geometry set into a recess in the left wall (bay +/-14 mm). 0 overlap with the board.
+- Mics: open ducts, no collar or crush rib (Paul). The tilt-in swing moves each collar ~1.4 mm
+  sideways, so a C5-style sealed collar would sit on a standoff / small parts. Instead a bar under
+  each mic (top 0.4 below the lid), a vertical hole under the port, and a D1.2 teardrop duct that
+  exits inside the USB bay. Duct length 7.7 / 7.9 mm (PLAN <= 8).
+
 ## Phase 1 complete (2026-11-09)
 - C7 v5: 1 notch (hook 1.0, 70 deg catch, guides 0.3, play 0.1) = best snap -> LATCH_* params.
 - All coupon questions answered; see params.py for the confirmed values. Next: Phase 2 (full case).
