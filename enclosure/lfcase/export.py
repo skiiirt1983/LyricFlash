@@ -144,3 +144,85 @@ def write_3mf_assembled(parts: dict, path: Path, colors: dict | None = None):
         z.writestr("[Content_Types].xml", ct)
         z.writestr("_rels/.rels", rels)
         z.writestr("3D/3dmodel.model", model)
+
+
+MATERIALS = {"gold": ("Iridium Gold PLA Metal", "#C99E4C"), "black": ("Black PETG", "#151517")}
+
+
+def _xyz_mat(rot_deg_x=0.0):
+    """3x3 rotation about X (only flips are used for print orientation)."""
+    import math
+    c, s_ = math.cos(math.radians(rot_deg_x)), math.sin(math.radians(rot_deg_x))
+    return np.array([[1, 0, 0], [0, c, -s_], [0, s_, c]])
+
+
+def write_3mf_project(parts: list, path: Path, gap: float = 6.0):
+    """One 3MF with every part laid flat on the plate (print orientation) AND an assembled
+    pose for Bambu Studio's Assembly view (Metadata/model_settings.config <assemble>).
+
+    parts: [dict(name, shape_assembled (board/world frame), flip_x_deg (print orientation), material)]
+    Colours/filament slots come from 3MF base materials, one entry per material.
+    """
+    import math
+    import tempfile
+
+    import trimesh
+    mats = list(dict.fromkeys(p["material"] for p in parts))
+    # assembled poses: centre the assembly over the plate, lowest point on z = 0
+    bbs = [p["shape_assembled"].BoundingBox() for p in parts]
+    a_shift = np.array([BED[0] / 2 - (min(b.xmin for b in bbs) + max(b.xmax for b in bbs)) / 2,
+                        BED[1] / 2 - (min(b.ymin for b in bbs) + max(b.ymax for b in bbs)) / 2,
+                        -min(b.zmin for b in bbs)])
+    locals_, mats_asm = {}, {}
+    for p in parts:
+        R = _xyz_mat(p.get("flip_x_deg", 0.0))
+        sh = p["shape_assembled"]
+        if p.get("flip_x_deg", 0.0):
+            sh = sh.rotate(cq.Vector(0, 0, 0), cq.Vector(1, 0, 0), p["flip_x_deg"])
+        bb = sh.BoundingBox()
+        d = np.array([-(bb.xmin + bb.xmax) / 2, -(bb.ymin + bb.ymax) / 2, -bb.zmin])   # local origin: centre, on the bed
+        local = sh.moved(cq.Location(cq.Vector(*d)))
+        locals_[p["name"]] = local
+        # local = R*S + d  ->  S = R^T (local - d); assembled world = S + a_shift
+        Rt = R.T
+        mats_asm[p["name"]] = (Rt, Rt @ (-d) + a_shift)
+    placed = pack(dict(locals_), gap=gap)          # only used for the plate positions
+    objs, items, asm = [], [], []
+    for i, p in enumerate(parts, 2):
+        n = p["name"]
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / "p.stl"
+            write_stl(locals_[n], f)
+            m = trimesh.load(f)
+        m.merge_vertices()
+        if not m.is_watertight:
+            raise RuntimeError(f"{n}: not watertight")
+        vs = "".join(f'<vertex x="{a:.4f}" y="{b:.4f}" z="{c:.4f}"/>' for a, b, c in m.vertices)
+        ts = "".join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>' for a, b, c in m.faces)
+        objs.append(f'<object id="{i}" name="{n}" type="model" pid="1" pindex="{mats.index(p["material"])}">'
+                    f'<mesh><vertices>{vs}</vertices><triangles>{ts}</triangles></mesh></object>')
+        pb, lb = placed[n].BoundingBox(), locals_[n].BoundingBox()
+        tx, ty = pb.xmin - lb.xmin, pb.ymin - lb.ymin
+        items.append(f'<item objectid="{i}" transform="1 0 0 0 1 0 0 0 1 {tx:.4f} {ty:.4f} 0"/>')
+        Rt, t = mats_asm[n]
+        vals = [Rt[r, c] for c in range(3) for r in range(3)] + list(t)
+        asm.append(f'   <assemble_item object_id="{i}" instance_id="0" transform="{" ".join(f"{v:.6g}" for v in vals)}" offset="0 0 0" />')
+    base = "".join(f'<base name="{MATERIALS[k][0]}" displaycolor="{MATERIALS[k][1]}FF"/>' for k in mats)
+    model = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+             '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
+             '<metadata name="Title">LyricFlash</metadata>'
+             f'<resources><basematerials id="1">{base}</basematerials>{"".join(objs)}</resources>'
+             f'<build>{"".join(items)}</build></model>')
+    config = '<?xml version="1.0" encoding="UTF-8"?>\n<config>\n  <assemble>\n' + "\n".join(asm) + '\n  </assemble>\n</config>\n'
+    ct = ('<?xml version="1.0" encoding="UTF-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+          '<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>'
+          '<Default Extension="config" ContentType="text/xml"/></Types>')
+    rels = ('<?xml version="1.0" encoding="UTF-8"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>')
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", ct)
+        z.writestr("_rels/.rels", rels)
+        z.writestr("3D/3dmodel.model", model)
+        z.writestr("Metadata/model_settings.config", config)
+    return placed
