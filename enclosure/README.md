@@ -73,7 +73,9 @@ out/               generated renders/exports (committed so they can be viewed on
 
 `lfcase/export.py: write_3mf_project()` writes one 3MF where every part is **separate and flat
 on the plate** (print orientation) and **assembled in Bambu Studio's Assembly view**. Each part is
-pre-tagged with its material (gold PLA Metal / black PETG), which Bambu maps to filament slots.
+assigned to a filament slot (1 = gold PLA Metal, 2 = black PETG) in `model_settings.config`;
+no 3MF colour tags, because with a settings file present Bambu's colour-preview path would erase
+the slot assignment.
 Rules it follows (from Bambu Studio's loader, confirmed on Paul's machine 2026-11-09):
 - assembled poses go in `Metadata/model_settings.config` as `<assemble_item>`;
 - each mesh is stored centred on its bounding box (Bambu re-centres objects on import);

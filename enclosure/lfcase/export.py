@@ -147,6 +147,7 @@ def write_3mf_assembled(parts: dict, path: Path, colors: dict | None = None):
 
 
 MATERIALS = {"gold": ("Iridium Gold PLA Metal", "#C99E4C"), "black": ("Black PETG", "#151517")}
+FILAMENT_SLOT = {"gold": 1, "black": 2}     # Bambu filament slot per material
 
 
 def _xyz_mat(rot_deg_x=0.0):
@@ -189,7 +190,7 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0):
         Rt = R.T
         mats_asm[p["name"]] = (Rt, Rt @ (-d) + a_shift)
     placed = pack(dict(locals_), gap=gap)          # only used for the plate positions
-    objs, items, asm = [], [], []
+    objs, items, asm, slots = [], [], [], []
     for i, p in enumerate(parts, 2):
         n = p["name"]
         with tempfile.TemporaryDirectory() as td:
@@ -206,21 +207,26 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0):
         # when the objects' lowest points differ by > 1e-4 mm. Lift each object by exactly
         # -(lowest written z), so every object's lowest point is exactly 0.
         z_lift = -float(V[:, 2].min())
-        objs.append(f'<object id="{i}" name="{n}" type="model" pid="1" pindex="{mats.index(p["material"])}">'
+        # No colour tags: with a model_settings.config Bambu treats the file as a project, and its
+        # colour-preview path would erase the filament assignment. Slots are set per object below.
+        objs.append(f'<object id="{i}" name="{n}" type="model">'
                     f'<mesh><vertices>{vs}</vertices><triangles>{ts}</triangles></mesh></object>')
         pb, lb = placed[n].BoundingBox(), locals_[n].BoundingBox()
         tx, ty = pb.xmin - lb.xmin, pb.ymin - lb.ymin
         items.append(f'<item objectid="{i}" transform="1 0 0 0 1 0 0 0 1 {tx:.4f} {ty:.4f} {z_lift:.4f}"/>')
         Rt, t = mats_asm[n]
         vals = [Rt[r, c] for c in range(3) for r in range(3)] + list(t)
+        slots.append(f'  <object id="{i}">\n    <metadata key="name" value="{n}"/>\n'
+                     f'    <metadata key="extruder" value="{FILAMENT_SLOT[p["material"]]}"/>\n  </object>')
         asm.append(f'   <assemble_item object_id="{i}" instance_id="0" transform="{" ".join(f"{v:.6g}" for v in vals)}" offset="0 0 0" />')
     base = "".join(f'<base name="{MATERIALS[k][0]}" displaycolor="{MATERIALS[k][1]}FF"/>' for k in mats)
     model = ('<?xml version="1.0" encoding="UTF-8"?>\n'
              '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
              '<metadata name="Title">LyricFlash</metadata>'
-             f'<resources><basematerials id="1">{base}</basematerials>{"".join(objs)}</resources>'
+             f'<resources>{"".join(objs)}</resources>'
              f'<build>{"".join(items)}</build></model>')
-    config = '<?xml version="1.0" encoding="UTF-8"?>\n<config>\n  <assemble>\n' + "\n".join(asm) + '\n  </assemble>\n</config>\n'
+    config = ('<?xml version="1.0" encoding="UTF-8"?>\n<config>\n' + "\n".join(slots) +
+              '\n  <assemble>\n' + "\n".join(asm) + '\n  </assemble>\n</config>\n')
     ct = ('<?xml version="1.0" encoding="UTF-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
           '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
           '<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>'
