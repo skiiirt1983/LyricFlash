@@ -239,7 +239,9 @@ def _usb_port_block(base, relief_only=False):
     gc = P.USB_GUIDE_CLEAR
     land = (cq.Workplane("YZ", origin=(land_x0, 0, 0)).center(yc, zc)
             .placeSketch(_stadium(W + 2 * gc, H + 2 * gc, g["r_shell"] + gc)).extrude(P.USB_GUIDE_LEN + 0.01).val()
-            .fuse(cq.Solid.makeBox(P.USB_GUIDE_LEN + 0.01, W + 2 * gc, 2.0, pnt=cq.Vector(land_x0, yc - W / 2 - gc, zc))))
+            .fuse(cq.Solid.makeBox(P.USB_GUIDE_LEN + 0.01, W + 2 * gc,
+                                   max(2.0, g["z_top"] + max(gc, c) + 0.01 - zc),   # never lower than the opening top
+                                   pnt=cq.Vector(land_x0, yc - W / 2 - gc, zc))))
     base = base.cut(land)
     # 6. opening through the outer part of the wall (+0.3 per side, stadium)
     # bottom corners follow the shell (R1.28 + c); top corners = Paul's 0.3-0.5 fillet where the web meets
@@ -463,3 +465,30 @@ def print_orientation(name, shape):
     if name in ("seat_ring", "usb_top_slice"):
         return flip_for_print(shape)
     return shape
+
+
+# -------------------------------------------------------------- C9 USB fit gauge
+
+
+def c9_usb_gauge():
+    """Just the port block (flush wall, web, opening, guide land, pad, backstop) at three
+    clearances. Press it onto the back of the bare board over the USB-C."""
+    import importlib
+    parts, notes = {}, []
+    saved = (P.USB_GUIDE_CLEAR, P.USB_UNDER_GAP, P.USB_BACKSTOP_GAP, P.USB_OPENING_CLEAR)
+    keep = cq.Solid.makeBox(12.5, 22.0, P.SEAM_Z - FLOOR_BOT, pnt=cq.Vector(-24.5, P.USB_CENTER_Y - 11.0, FLOOR_BOT))
+    try:
+        for tag, (g, u, b, o) in P.USB_GAUGE_VARIANTS.items():
+            P.USB_GUIDE_CLEAR, P.USB_UNDER_GAP, P.USB_BACKSTOP_GAP, P.USB_OPENING_CLEAR = g, u, b, o
+            base = base_sector(USB_A0, USB_A1, [])
+            base = _usb_port_block(base).intersect(keep)
+            base = solidify(base)
+            base = deboss(base, tag, (-15.0, P.USB_CENTER_Y + 8.0), size=3.0, face_z=FLOOR_TOP)
+            parts[f"usb_gauge_{tag}"] = base
+            notes.append(f"{tag}: guide land {g}/side, pad {u} under, backstop {b} behind, opening {o}/side")
+    finally:
+        P.USB_GUIDE_CLEAR, P.USB_UNDER_GAP, P.USB_BACKSTOP_GAP, P.USB_OPENING_CLEAR = saved
+    return Coupon("C9_usb_gauge", "USB-C fit gauge (3 clearances)", parts,
+                  notes=notes + ["Bare board glass-down on the table; press each gauge straight down over the USB-C "
+                                 "(floor up). It should slide on by hand and sit with its inner face against the PCB edge."],
+                  board_check=lambda: dict(parts))

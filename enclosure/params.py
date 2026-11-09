@@ -345,3 +345,9 @@ MATERIAL_TOP = "PLA Metal, Iridium Gold"   # top shell (bezel ring): rigid only,
 MATERIAL_BASE = "PETG, black"              # base tray: carries every springy feature (PWR flexure, latch beams)
 # Phase 2 note: move the latch beams from the top shell to the PETG base, so the gold PLA part
 # has nothing that bends. PLA softens at ~55-60 C (fine indoors / pocket, not a hot car dashboard).
+
+# USB fit gauge (C9), after Paul 2026-11-09: "the usb box doesn't fit inside the receiver box"
+# (C2 used guide 0.10 / pad 0.10 / backstop 0.05: too tight as printed). Variants A/B/C:
+#   (guide land per side, pad gap under, backstop gap behind, opening per side)
+# Paul 2026-11-09 also: "the foot pad it sits on isn't deep enough" -> pad gap varies most.
+USB_GAUGE_VARIANTS = {"A": (0.20, 0.25, 0.10, 0.35), "B": (0.30, 0.45, 0.10, 0.45), "C": (0.40, 0.70, 0.15, 0.55)}

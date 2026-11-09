@@ -1,5 +1,12 @@
 # Enclosure changelog
 
+## Phase 1 print results, round 1 (Paul 2026-11-09, gold PLA Metal)
+- C2: USB-C receptacle does not fit in its base pocket; the support pad under it is not deep
+  enough (C2 clearances 0.10 side / 0.10 under / 0.05 behind were too tight as printed).
+  -> C9 USB fit gauge, three variants A/B/C (see params USB_GAUGE_VARIANTS).
+- C2: one latch beam broke ("pretty flimsy"): upright PLA beam, bending across the layers.
+  -> Phase 2: latches become separate clips printed flat in PETG (layers along the beam).
+
 ## Acceptance criterion (Paul 2026-11-09)
 - A ~100 g device can't take a 5-20 N USB-C insertion one-handed on a desk. C2 test now plugs in
   while holding the coupon. Proposed PLAN 7 wording: "USB-C plugs in fully while the case is held;

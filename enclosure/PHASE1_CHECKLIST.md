@@ -143,3 +143,22 @@ If that's too hard, the fix is one number: `FLEXURE_THK` 1.2 -> 1.0 gives ~5 N.
    volume.
 - **Report:** fit (loose / good / tight), corners (OK / the speaker corners are rounder or
   sharper than the pocket), lead exit side, any buzz.
+
+## C9: USB-C fit gauge (A / B / C), added after round 1
+
+Three small blocks: the port wall + receptacle pocket from C2 at three clearances. The letter is
+on the floor inside.
+
+| | side gap | gap under (pad) | gap behind (backstop) | opening |
+|---|---|---|---|---|
+| A | 0.20 | 0.25 | 0.10 | 0.35 |
+| B | 0.30 | 0.45 | 0.10 | 0.45 |
+| C | 0.40 | 0.70 | 0.15 | 0.55 |
+
+1. Bare board glass-down on the table. Press each gauge straight down onto the back of the board
+   over the USB-C, floor up, so the port goes into the pocket and out through the opening.
+2. **Check:** it goes on by hand. Its inner face should touch the edge of the PCB, and the port
+   should be roughly centred in the opening.
+- **Report:** which letters go on (and which is the tightest that still goes on without force),
+  and for that one: is the port centred, and is the metal mouth level with the outside face?
+  Print in the base material (black PETG) if you can.
