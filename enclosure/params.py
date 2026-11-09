@@ -442,3 +442,25 @@ LATCH_CATCH_DEG = 70.0
 LATCH_GUIDE_CLEAR = 0.30             # per side, PETG
 LATCH_AXIAL_PLAY = 0.10
 LATCH_BEAM_T, LATCH_BEAM_L = 1.2, 10.0   # as tested in C7 (in-plane, bending along the layers)
+
+# ============================================================================
+# PHASE 2: FULL CASE (Paul 2026-11-09: tilt 12 deg; layout study B)
+# World frame: desk at Z = 0, +Y = back, +X = right (USB-C on the left wall).
+# ============================================================================
+TILT_DEG = 12.0
+BOARD_X = -4.6                       # board centre (world X): USB side close to the left wall
+CASE_WALL = 2.0
+CASE_FLOOR = 1.6
+CASE_CORNER_R = 8.0                  # 10 cut into the battery corners
+CASE_AIR = 0.5                       # minimum air battery -> board stack
+CASE_RIGHT_ROOM = 9.0                # right side room (speaker standing) beyond the bezel
+BATTERY_POCKET_WALL_H = 4.0          # low walls around the battery (keeps it from sliding)
+BOTTOM_RECESS = 0.5                  # recessed bottom: the case sits on a rim (no rocking)
+BOTTOM_RIM_W = 3.0
+# Speaker can't sit over the battery (unsupported shelf in a floor-down print) -> it stands beside
+# the battery on the right, firing out the right wall. Case grows to ~70 x 54.
+SPK_DIVIDER = 1.2                    # wall between battery and speaker
+BOARD_LEDGE_ANGLES = (-50.0, -110.0, 135.0)   # auto-picked: clear of every part + plug zones (3-point support)
+BOARD_LEDGE_W = 5.0
+BOARD_LEDGE_REACH = 1.5              # how far under the PCB edge (radially)
+BOARD_FAR_STOP_GAP = 0.30            # far-side stop (tilt-in sim decides the final gap)
