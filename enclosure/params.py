@@ -490,6 +490,7 @@ LATCH_CLIP_LIP_MIN = 1.0             # lid material between the seam and the cat
 LATCH_CLIP_BAR_H = 4.0
 LATCH_CLIP_FIT = 0.25                # clip in its base channel, per side (slides in by hand)
 LATCH_POCKET_T_CLEAR = 0.5           # lid pocket, either side of the clip width
+LATCH_CLIP_SHOULDER = 1.8            # clip bar shoulders rise 1.8:1 (~61 deg), so the base channel prints
 TILT_SWEEP_DEG = 26.0                # swing range checked / relieved (base comes free by ~22 deg)
 HINGE_RELIEF_AIR = 0.2               # top shell cut back along the path of the base's left wall
 LEDGE_AIR = 0.25                     # ledges keep this from every board part along the whole swing
@@ -503,12 +504,23 @@ SWITCH_OPEN_GAP = 0.0                # open side flush with the battery box: the
 BOOT_HOLE_D = 1.6                    # paperclip guide (a 1 mm paperclip slides freely)
 BOOT_TUBE_START = 1.5                # tube starts this far out from the plunger tip (clear of the PCB edge)
 
-# ---- Phase 2: cable clip (separate part) on a dovetail rail, left face, at desk height
-CABLE_RAIL_Y = (-8.0, 14.0)          # world Y span of the rail (clip slides on from the front)
-CABLE_RAIL_Z = 4.0                   # rail centre height
-CABLE_RAIL_W = 3.0                   # rail width at the wall
-CABLE_RAIL_PROUD = 1.0               # rail stands this far off the left face (45 deg flanks)
+# ---- Phase 2: cable clip (separate part) on a vertical dovetail, left face, at desk height
+CABLE_RAIL_YC = 6.0                  # world Y of the rail centre (behind the port: cable loops down and runs back)
+CABLE_RAIL_W = 3.0                   # dovetail width at the wall
+CABLE_RAIL_PROUD = 1.2               # dovetail stands this far off the left face (45 deg flanks, vertical faces)
+CABLE_STOP_H = 1.5                   # stop block at the bottom; the clip rests on it
+CABLE_CLIP_H = 8.0                   # clip height
+CABLE_CLIP_LEN = 14.0                # clip length along the cable
 CABLE_CLIP_FIT = 0.25                # clip on the rail, per side (slides on by hand)
 CABLE_CLIP_WALL = 1.6
-CABLE_CLIP_MOUTH = 0.75              # channel opening, fraction of the cable OD (cable pops in/out by hand)
-CABLE_CLIP_FLOOR_GAP = 0.5           # clip bottom stays off the desk
+CABLE_CLIP_MOUTH = 0.85              # channel opening, fraction of the cable OD: jaws open ~0.29 each (~1.9 % strain, PETG)
+TOP_EDGE_CHAMFER = 1.5               # top shell, outer top edge (bed side when printed face-down: 45 deg prints, a fillet wouldn't)
+BOTTOM_EDGE_CHAMFER = 1.0            # base, outer bottom edge (bed side; also eats elephant's foot)
+
+# ---- Phase 2: masses for the CG / tip check (assumptions, not from the STEP)
+BOARD_MASS_G = 20.0                  # board + AMOLED + PMMA frame (estimate)
+BATTERY_MASS_G = 38.0                # LP103454 2000 mAh class (typical datasheet value)
+SPEAKER_MASS_G = 4.0                 # 30 x 20 x 6.8 speaker (estimate)
+PETG_DENSITY, PLA_DENSITY = 1.27, 1.24   # g/cm3
+PRINT_FILL = 0.6                     # 4 walls + 15 % gyroid: effective fraction of solid (estimate)
+MIN_TIP_DEG = 30.0                   # PLAN Phase 3

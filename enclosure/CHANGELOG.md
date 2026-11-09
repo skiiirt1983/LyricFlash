@@ -1,12 +1,31 @@
 # Enclosure changelog
 
-## Phase 2 in progress (2026-11-09)
-- 12 deg tilt, two main parts, internal supports allowed (Paul). Speaker beside the battery.
-- USB-C: C10 port geometry set into a recess in the left wall (bay +/-14 mm). 0 overlap with the board.
-- Mics: open ducts, no collar or crush rib (Paul). The tilt-in swing moves each collar ~1.4 mm
-  sideways, so a C5-style sealed collar would sit on a standoff / small parts. Instead a bar under
-  each mic (top 0.4 below the lid), a vertical hole under the port, and a D1.2 teardrop duct that
-  exits inside the USB bay. Duct length 7.7 / 7.9 mm (PLAN <= 8).
+## Phase 2 v1 (2026-11-09)
+- 12 deg tilt, two main parts, internal supports allowed for hidden features (Paul). Speaker beside the battery.
+- USB-C: C10 port geometry set into a recess in the left wall (bay +/-14 mm), tied in with a floor and cheeks.
+- Mics: open ducts, no collar or crush rib (Paul). The tilt-in swing moves each collar ~1.4 mm sideways, so a
+  C5-style sealed collar would sit on a standoff / small parts. A bar under each mic (top 0.4 below the lid),
+  a vertical hole under the port, and a D1.2 teardrop duct that exits inside the USB bay. 7.7 / 7.9 mm long.
+- PWR: KEY2 is ~14 mm inside the case wall, so a separate gold push pin in a guide tube (rest gap 0.35, loose,
+  no preload), exits the back-right corner in a finger dimple.
+- BOOT: D1.6 paperclip guide on KEY1's axis, exits the front-right corner (PLAN 3.5).
+- Speaker: C8 numbers, standing, fires out the right wall (53 teardrop holes), seal rib, grip ribs on the
+  end walls, lead slot toward H3.
+- Switch: underside pocket (Paul), the C4 K3 cell in the floor at the back-left, open toward the battery.
+- Latches: two separate PETG clips with the C7 v5 notch-1 geometry (hook 1.0, 70 deg, guides 0.3, play
+  0.1), printed flat (layers along the beam, as promised after C2's latch broke). Each slides sideways into
+  a channel on the front / back wall; the gold top has a bridged catch. At X 12.5, clear of the PWR/BOOT
+  paths and the plug zones.
+- Cable: separate clip on a vertical dovetail on the left face at desk height (PLAN 3.2 clip; no underside
+  channel: the battery fills the floor). U-channel opening up, mouth 0.85 x OD.
+- Board ledges at -70 / -110 / 135 deg, picked so they keep 0.25 mm off every part along the whole swing
+  (-50 came 0.06 from a standoff).
+- Hinge relief: the base wall outboard of the hinge line rises as the base swings, so the top shell is cut
+  back along that path with 0.2 mm air (a small shadow line along the left seam).
+- Edges: 45 deg chamfers on the top edge (1.5) and bottom edge (1.0): both are on the print bed, where a
+  3 mm fillet (PLAN 3.1) would overhang. Vertical corners R8.
+- Checks: 0 board interference (except the C8 grip ribs on the speaker, by design); tilt-in swing PASS
+  (mesh-sample check, 0.2 mm air rule, designed contacts labelled); layer check; CG/tip 59.6 deg.
 
 ## Phase 1 complete (2026-11-09)
 - C7 v5: 1 notch (hook 1.0, 70 deg catch, guides 0.3, play 0.1) = best snap -> LATCH_* params.

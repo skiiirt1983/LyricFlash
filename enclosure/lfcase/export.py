@@ -162,7 +162,7 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0, keep_order: boo
     """One 3MF with every part laid flat on the plate (print orientation) AND an assembled
     pose for Bambu Studio's Assembly view (Metadata/model_settings.config <assemble>).
 
-    parts: [dict(name, shape_assembled (board/world frame), flip_x_deg (print orientation), material)]
+    parts: [dict(name, shape_assembled (board/world frame), flip_x_deg or R (3x3, print orientation), material)]
     Colours/filament slots come from 3MF base materials, one entry per material.
     """
     import math
@@ -177,10 +177,14 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0, keep_order: boo
                         -min(b.zmin for b in bbs)])
     locals_, mats_asm = {}, {}
     for p in parts:
-        R = _xyz_mat(p.get("flip_x_deg", 0.0))
         sh = p["shape_assembled"]
-        if p.get("flip_x_deg", 0.0):
-            sh = sh.rotate(cq.Vector(0, 0, 0), cq.Vector(1, 0, 0), p["flip_x_deg"])
+        if p.get("R") is not None:                      # general print orientation (3x3 rotation)
+            R = np.asarray(p["R"], float)
+            sh = p["rotate"](sh, R)
+        else:
+            R = _xyz_mat(p.get("flip_x_deg", 0.0))
+            if p.get("flip_x_deg", 0.0):
+                sh = sh.rotate(cq.Vector(0, 0, 0), cq.Vector(1, 0, 0), p["flip_x_deg"])
         bb = sh.BoundingBox()
         # local origin = bounding-box centre in X, Y AND Z. Bambu Studio re-centres every object on
         # its bbox centre at import; if we already are, its move is zero and the assemble pose holds.

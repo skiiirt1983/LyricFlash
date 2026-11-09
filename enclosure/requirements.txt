@@ -3,3 +3,5 @@ cadquery==2.8.0
 numpy
 matplotlib
 trimesh
+scipy
+shapely

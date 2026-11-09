@@ -17,14 +17,16 @@ from lfcase import enclosure as E  # noqa: E402
 from lfcase.board import load_board  # noqa: E402
 from lfcase.meshsim import Cloud, clearance, rot_matrix  # noqa: E402
 
-def designed(pair, where, angle):
-    """Contacts that are meant to be there and only open up as the base swings away."""
+def designed(pair, where, angle, seam_z_bf=None):
+    """Contacts that are meant to be there and only open up as the base swings away.
+    seam_z_bf: board-frame Z of the contact point with the base moved back to closed (None if unknown)."""
     m, f = pair
     x = where[0]
     if m == "base" and f in ("pcb", "pmma_frame") and x < -26.0:
         return "USB-C web on the PCB edge (zero gap by design, separating)"
-    if m == "base" and f == "top_shell" and (angle == 0 or x < -27.8):
-        return "seam faces at the hinge line (separating)"
+    if m == "base" and f == "top_shell" and (angle == 0 or x < -27.8 or
+                                             (seam_z_bf is not None and abs(seam_z_bf - P.SEAM_Z) < 0.15)):
+        return "seam faces opening up about the hinge (separating)"
     if m.startswith("clip_") and f == "top_shell":
         return "latch hook riding over its catch (the snap)"
     return None
@@ -47,13 +49,16 @@ def run(moving_shapes: dict, zb=None, spacing=0.12, out=None, top=None):
     for a in ANGLES:
         R, t = rot_matrix(H, ax, a)
         res = {}
+        seamz = {}
         for mk, mc in mov.items():
             for fk, fc in fixed.items():
                 d, where = clearance(mc, R, t, fc)
                 if d < 1.0:
                     res[(mk, fk)] = (round(d, 2), tuple(round(float(v), 1) for v in where))
-        tight = {k: v for k, v in res.items() if v[0] < AIR and not designed(k, v[1], a)}
-        des = {k: designed(k, v[1], a) for k, v in res.items() if v[0] < AIR and designed(k, v[1], a)}
+                    p0 = R.T @ (np.asarray(where) - t)            # the same point with the base closed
+                    seamz[(mk, fk)] = -p0[1] * np.sin(np.radians(P.TILT_DEG)) + (p0[2] - zb) * np.cos(np.radians(P.TILT_DEG))
+        tight = {k: v for k, v in res.items() if v[0] < AIR and not designed(k, v[1], a, seamz.get(k))}
+        des = {k: designed(k, v[1], a, seamz.get(k)) for k, v in res.items() if v[0] < AIR and designed(k, v[1], a, seamz.get(k))}
         rows.append((a, res, tight, des))
         print(f"{a:5.2f} deg  tight={tight}", flush=True)
     if out:

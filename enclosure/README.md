@@ -3,8 +3,9 @@
 A parametric, 3D-printed case for LyricFlash on the Waveshare ESP32-S3-Touch-AMOLED-1.75.
 The design brief is PLAN.md (kept with Paul). All dimensions live in `params.py`.
 
-Status: **Phase 1 complete** (all fit tests answered, values in `params.py`, history in `CHANGELOG.md`). Next: Phase 2, the full case. See `PHASE1_CHECKLIST.md` for what
-to print and what to report, and `USB_STACKUP.md` for the USB-C tolerance stack-up.
+Status: **Phase 2 v1 built** (full case, all checks in `out/phase2/report.md`). Print and assembly steps:
+`PHASE2_CHECKLIST.md`. Phase 1 (fit tests) is in `PHASE1_CHECKLIST.md`, the USB-C tolerance stack-up in
+`USB_STACKUP.md`, and every decision in `CHANGELOG.md`.
 
 ## Setup
 
@@ -33,6 +34,7 @@ component under `enclosure/cache/`.
 python phase0.py      # board import + params.py + labelled renders
 python phase1.py      # all coupons: checks, STL/STEP, 3MF plate, renders, report
 python phase1.py C2_usb_wall C6_pwr_flexure   # just some coupons
+python phase2.py      # full case: build, board check, tilt-in swing, layer check, CG, renders, 3MF
 # Headless Linux (no display): prefix with  xvfb-run -a
 ```
 
@@ -47,6 +49,12 @@ This rewrites the board block in `params.py` and writes `out/phase0/`:
 | `board_values.md` | every extracted value with the STEP feature it came from |
 | `board_back.png` | component side, oriented like Waveshare's drawing, key parts labelled |
 | `board_front.png`, `board_side_usb.png`, `board_side_buttons.png`, `board_iso_back.png` | other views |
+
+`phase2.py` writes `out/phase2/lyricflash_case_project.3mf` (Bambu project: flat on the plate and
+assembled in the Assembly view, gold = slot 1, black PETG = slot 2), STLs in print orientation
+(`out/phase2/stl/`), assembled STEPs (`out/phase2/step/`), renders and sections, `assembly_sim.md` and
+`report.md`. The swing check (`simulate_case.py`, `lfcase/meshsim.py`) measures distances on dense
+surface samples (k-d trees) instead of BRep booleans, so a full run takes a few minutes.
 
 ## Board frame
 
