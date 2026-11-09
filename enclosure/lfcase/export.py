@@ -199,13 +199,18 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0):
         m.merge_vertices()
         if not m.is_watertight:
             raise RuntimeError(f"{n}: not watertight")
-        vs = "".join(f'<vertex x="{a:.4f}" y="{b:.4f}" z="{c:.4f}"/>' for a, b, c in m.vertices)
+        V = np.round(m.vertices, 4)
+        vs = "".join(f'<vertex x="{a:.4f}" y="{b:.4f}" z="{c:.4f}"/>' for a, b, c in V)
         ts = "".join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>' for a, b, c in m.faces)
+        # Bambu merges a non-Bambu multi-object 3MF into ONE object (losing the assemble poses)
+        # when the objects' lowest points differ by > 1e-4 mm. Lift each object by exactly
+        # -(lowest written z), so every object's lowest point is exactly 0.
+        z_lift = -float(V[:, 2].min())
         objs.append(f'<object id="{i}" name="{n}" type="model" pid="1" pindex="{mats.index(p["material"])}">'
                     f'<mesh><vertices>{vs}</vertices><triangles>{ts}</triangles></mesh></object>')
         pb, lb = placed[n].BoundingBox(), locals_[n].BoundingBox()
-        tx, ty, tz = pb.xmin - lb.xmin, pb.ymin - lb.ymin, -lb.zmin      # flat on the bed
-        items.append(f'<item objectid="{i}" transform="1 0 0 0 1 0 0 0 1 {tx:.4f} {ty:.4f} {tz:.4f}"/>')
+        tx, ty = pb.xmin - lb.xmin, pb.ymin - lb.ymin
+        items.append(f'<item objectid="{i}" transform="1 0 0 0 1 0 0 0 1 {tx:.4f} {ty:.4f} {z_lift:.4f}"/>')
         Rt, t = mats_asm[n]
         vals = [Rt[r, c] for c in range(3) for r in range(3)] + list(t)
         asm.append(f'   <assemble_item object_id="{i}" instance_id="0" transform="{" ".join(f"{v:.6g}" for v in vals)}" offset="0 0 0" />')
