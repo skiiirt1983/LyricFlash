@@ -435,3 +435,10 @@ SNAP_RETAIN_VARIANTS = (45.0, 55.0, 65.0)   # release force: easy / medium / fir
 # C7 v4 result (Paul): 3-notch (65 deg, hook 0.8) tightest but "very little resistance";
 # unchanged over 50 pulls. v3 (hook 1.0, 80 deg) needed pliers. -> v5 brackets in between:
 SNAP_V5_VARIANTS = ((1.0, 70.0), (1.0, 74.0), (1.0, 78.0))   # (hook, catch deg), notches 1/2/3
+
+# LATCH RESULT (Paul 2026-11-09): C7 v5 1-notch = best snap.
+LATCH_HOOK = 1.0
+LATCH_CATCH_DEG = 70.0
+LATCH_GUIDE_CLEAR = 0.30             # per side, PETG
+LATCH_AXIAL_PLAY = 0.10
+LATCH_BEAM_T, LATCH_BEAM_L = 1.2, 10.0   # as tested in C7 (in-plane, bending along the layers)

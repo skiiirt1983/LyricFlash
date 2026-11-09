@@ -1,5 +1,9 @@
 # Enclosure changelog
 
+## Phase 1 complete (2026-11-09)
+- C7 v5: 1 notch (hook 1.0, 70 deg catch, guides 0.3, play 0.1) = best snap -> LATCH_* params.
+- All coupon questions answered; see params.py for the confirmed values. Next: Phase 2 (full case).
+
 ## Latches (2026-11-09)
 - C7 v3 (hook 1.0, 80 deg, guides 0.15): needed pliers / wouldn't assemble.
 - C7 v4 (hook 0.8, 45/55/65 deg, guides 0.3): 65 deg tightest but very little resistance; same
