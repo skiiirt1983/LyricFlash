@@ -468,3 +468,16 @@ PORT_BAY_HALF_W = 14.0               # recess in the left wall around the USB-C 
 PORT_BAY_BELOW = 7.0                 # bay goes this far below the port centre
 MIC_DUCT_COVER = 1.0                 # Phase 2 open duct: plastic between the duct and the bar top
 MIC_BAR_SIDE = 0.8                   # bar wall either side of the duct
+
+# ---- Phase 2: PWR push pin (KEY2 sits ~14 mm inside the case wall, so a separate pin in a guide tube)
+PWR_PIN_W = 3.0                      # shaft, across (board plane)
+PWR_PIN_H = 2.4                      # shaft, board-normal; top 0.2 under the PCB back
+PWR_PIN_TOP = -0.2                   # board frame Z of the shaft top
+PWR_NUB = (1.4, 0.7, 1.2)            # tip nub w x h x length (fits under the PCB, centred on the plunger)
+PWR_COLLAR = (1.2, 1.2)              # collar: extra width (one side) x extra depth (down), length below
+PWR_COLLAR_LEN = 1.2
+PWR_PIN_CLEAR = 0.25                 # bore clearance per side
+PWR_TUBE_WALL = 1.2
+PWR_PIN_RECESS = 0.3                 # outer end below the case surface at rest
+PWR_DIMPLE_D = 7.0                   # finger dimple round the pin end
+PWR_DIMPLE_DEPTH = 1.2

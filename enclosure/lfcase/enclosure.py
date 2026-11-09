@@ -200,6 +200,7 @@ def port_features(b, zb):
     blk_w = blk.moved(bf_loc(zb)).intersect(halfspace_bf(zb, P.SEAM_Z, above=False))
     # keep the PCB/PMMA outline clear: the web touches it, nothing may enter it
     blk_w = blk_w.cut(to_wf(A.cyl(P.USB_PCB_CONTACT_R, -0.05, P.SEAM_Z + 2), zb))
+    blk_w = blk_w.cut(_box(*battery_box()))                       # stays above the battery (support under it)
     return A.solidify(b.fuse(blk_w))
 
 
@@ -262,7 +263,8 @@ def mic_features(b, zb):
         c = bf_point_to_wf((cx, cy, z_top - d / 2 - P.MIC_DUCT_COVER), zb)     # duct centre under the port
         hw = d / 2 + P.MIC_BAR_SIDE
         bar = (_box((fx_w - 0.01, c[1] - hw, P.CASE_FLOOR - 0.01), (c[0] + hw, c[1] + hw, 100))
-               .intersect(halfspace_bf(zb, z_top, above=False)).intersect(cav))
+               .intersect(halfspace_bf(zb, z_top, above=False)).intersect(cav)
+               .cut(_box(*battery_box())))                                      # hangs over the battery: support
         x_out, x_in = fx_w - 1.0, c[0]
         L = x_in - x_out
         q = d / 2 * math.sqrt(2)
@@ -273,3 +275,143 @@ def mic_features(b, zb):
         b = b.fuse(bar).cut(tear).cut(riser)
         info[mic] = dict(duct_len=round(x_in - fx_w + port[2] - c[2], 2), exit=(round(x_out, 2), round(c[1], 2), round(c[2], 2)))
     return A.solidify(b), info
+
+
+# ------------------------------------------------------------------ PWR push pin (KEY2)
+def _pin_frame():
+    key = P.PWR_IS
+    a = math.radians(getattr(P, f"{key}_PRESS_ANGLE"))
+    tip = getattr(P, f"{key}_TIP_CENTER")
+    tz = getattr(P, f"{key}_TIP_Z")
+    return a, tip, (tz[0] + tz[1]) / 2
+
+
+def _local_box(s0, s1, l0, l1, z0, z1):
+    """Box in the pin frame (s outward along the press axis from the plunger tip face, l across, BF z)."""
+    a, tip, _ = _pin_frame()
+    b = cq.Solid.makeBox(s1 - s0, l1 - l0, z1 - z0, pnt=cq.Vector(s0, l0, z0))
+    return b.rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), math.degrees(a)).moved(cq.Location(cq.Vector(tip[0], tip[1], 0)))
+
+
+def _pin_dims():
+    nw, nh, nl = P.PWR_NUB
+    _, _, zc = _pin_frame()
+    l0 = -nw / 2                                       # face A (print bed side) flush with the nub
+    l1 = l0 + P.PWR_PIN_W
+    z1 = P.PWR_PIN_TOP
+    z0 = z1 - P.PWR_PIN_H
+    g0 = P.FLEX_REST_GAP
+    s_col0 = g0 + nl
+    s_col1 = s_col0 + P.PWR_COLLAR_LEN
+    return dict(nw=nw, nh=nh, zc=zc, l0=l0, l1=l1, z0=z0, z1=z1, g0=g0, s_col0=s_col0, s_col1=s_col1)
+
+
+def _pin_exit_s(zb):
+    """Distance along the axis (shaft centre line) where it leaves the case outer surface."""
+    d = _pin_dims()
+    a, tip, _ = _pin_frame()
+    lc, zc = (d["l0"] + d["l1"]) / 2, (d["z0"] + d["z1"]) / 2
+    body = outer_body(zb)
+    s = d["s_col1"]
+    while s < 80:
+        p = (tip[0] + s * math.cos(a) - lc * math.sin(a), tip[1] + s * math.sin(a) + lc * math.cos(a), zc)
+        if not body.isInside(cq.Vector(*bf_point_to_wf(p, zb)), 1e-4):
+            return s
+        s += 0.05
+    raise RuntimeError("pin axis never leaves the case")
+
+
+def pwr_pin(zb):
+    """The separate pin, assembled position (world). Rest: collar against the tube's inner end."""
+    d = _pin_dims()
+    s_out = _pin_exit_s(zb) - P.PWR_PIN_RECESS - P.PWR_DIMPLE_DEPTH
+    nub = _local_box(d["g0"], d["s_col0"] + 0.01, d["l0"], d["l0"] + d["nw"], d["zc"] - d["nh"] / 2, d["zc"] + d["nh"] / 2)
+    col = _local_box(d["s_col0"], d["s_col1"], d["l0"], d["l1"] + P.PWR_COLLAR[0], d["z0"] - P.PWR_COLLAR[1], d["z1"])
+    shaft = _local_box(d["s_col1"] - 0.01, s_out, d["l0"], d["l1"], d["z0"], d["z1"])
+    return to_wf(nub.fuse(col).fuse(shaft).clean(), zb)
+
+
+def pwr_features(b, zb):
+    """Guide tube from the collar stop to the outer wall, a fin under it (45 deg underside), finger dimple."""
+    d = _pin_dims()
+    c, w = P.PWR_PIN_CLEAR, P.PWR_TUBE_WALL
+    s_t0 = d["s_col1"] + 0.0
+    s_x = _pin_exit_s(zb)
+    tube = _local_box(s_t0, s_x + 5, d["l0"] - c - w, d["l1"] + c + w, d["z0"] - c - w, d["z1"] + c + w)
+    bore = _local_box(s_t0 - 1, s_x + 6, d["l0"] - c, d["l1"] + c, d["z0"] - c, d["z1"] + c)
+    # room for the collar to move in when pressed
+    col_room = _local_box(d["s_col0"] - 1.5, s_t0, d["l0"] - c, d["l1"] + P.PWR_COLLAR[0] + c, d["z0"] - P.PWR_COLLAR[1] - c, d["z1"] + c)
+    fin = _local_box(s_t0, s_x + 5, d["l0"] - c - w, d["l1"] + c + w, -60, d["z0"] - c - w + 0.01)
+    tube_w, bore_w, fin_w, room_w = (to_wf(x, zb) for x in (tube, bore, fin, col_room))
+    # fin underside: 45 deg in the world, rising toward the inner end of the tube
+    a, tip, _ = _pin_frame()
+    p_in = bf_point_to_wf((tip[0] + s_t0 * math.cos(a), tip[1] + s_t0 * math.sin(a), d["z0"] - c - w), zb)
+    u = bf_point_to_wf((tip[0] + math.cos(a), tip[1] + math.sin(a), 0), zb) - bf_point_to_wf((tip[0], tip[1], 0), zb)
+    uh = np.array([u[0], u[1], 0.0]); uh /= np.linalg.norm(uh)
+    # half-space z >= p_in.z - (x - p_in).uh  ->  normal (uh_x, uh_y, 1)/sqrt2 pointing up-outward
+    nrm = cq.Vector(uh[0], uh[1], 1.0).normalized()
+    big = cq.Solid.makeBox(400, 400, 400, pnt=cq.Vector(-200, -200, 0))
+    pl = cq.Plane(origin=cq.Vector(*p_in), xDir=cq.Vector(-uh[1], uh[0], 0), normal=nrm)
+    keep = big.moved(cq.Location(pl))
+    fin_w = fin_w.intersect(keep).intersect(_inner_cavity().fuse(outer_body(zb)))
+    shell = outer_body(zb)
+    add = tube_w.fuse(fin_w).intersect(shell).intersect(halfspace_bf(zb, P.SEAM_Z, above=False))
+    b = b.fuse(add).cut(bore_w).cut(room_w)
+    # finger dimple: shallow cone round the exit
+    lc, zc = (d["l0"] + d["l1"]) / 2, (d["z0"] + d["z1"]) / 2
+    ex = bf_point_to_wf((tip[0] + s_x * math.cos(a) - lc * math.sin(a), tip[1] + s_x * math.sin(a) + lc * math.cos(a), zc), zb)
+    cone = cq.Solid.makeCone(P.PWR_DIMPLE_D / 2 - P.PWR_DIMPLE_DEPTH, P.PWR_DIMPLE_D / 2 + 2, P.PWR_DIMPLE_DEPTH + 2,
+                             pnt=cq.Vector(*(ex - uh * (P.PWR_DIMPLE_DEPTH + 0.0))), dir=cq.Vector(*uh))
+    b = b.cut(cone)
+    return A.solidify(b), dict(exit=tuple(round(float(v), 2) for v in ex), s_exit=round(s_x, 2))
+
+
+# ------------------------------------------------------------------ speaker (C8 numbers, standing, fires out the right wall)
+def _teardrop_x(x0, x1, y, z, d):
+    """Horizontal hole along X, teardrop point up (prints without support)."""
+    q = d / 2 * math.sqrt(2)
+    return (cq.Workplane("YZ").workplane(offset=x0).center(y, z).circle(d / 2).extrude(x1 - x0).val()
+            .fuse(cq.Solid.makeBox(x1 - x0, q, q, pnt=cq.Vector(x0, y - q / 2, z - q / 2))
+                  .rotate(cq.Vector(0, y, z), cq.Vector(1, y, z), 45)))
+
+
+def speaker_features(b, zb):
+    """Grille through the right wall, seal rib on its inner face, grip ribs on the end walls, lead slot (+Y end, toward H3)."""
+    (sx0, sy0, sz0), (sx1, sy1, sz1) = speaker_box()
+    L, W = P.SPK_L, P.SPK_W
+    yc, zc = 0.0, sz0 + W / 2                      # speaker stands on the floor
+    x_out = footprint()[1]
+    # seal rib on the wall face (speaker front frame presses on it)
+    si, rw, rh = P.SPK_SEAL_INSET, P.SPK_SEAL_RIB_W, P.SPK_SEAL_RIB_H
+    a0, b0 = L / 2 - si + rw / 2, W / 2 - si + rw / 2
+    a1, b1 = L / 2 - si - rw / 2, W / 2 - si - rw / 2
+    rib = _box((sx1 - rh, yc - a0, zc - b0), (sx1 + 0.01, yc + a0, zc + b0)).cut(
+        _box((sx1 - rh - 1, yc - a1, zc - b1), (sx1 + 1, yc + a1, zc + b1)))
+    b = b.fuse(rib)
+    # grille: same hex / stadium pattern as C8, now in the YZ plane
+    gm, p = P.SPK_GRILLE_MARGIN, P.SPK_GRILLE_PITCH
+    gx, gy = L / 2 - gm, W / 2 - gm
+    pts, j, v = [], 0, -gy
+    while v <= gy + 1e-6:
+        u = -gx + (p / 2 if j % 2 else 0)
+        while u <= gx + 1e-6:
+            if abs(u) <= gx - gy or math.hypot(abs(u) - (gx - gy), v) <= gy:
+                pts.append((yc + u, zc + v))
+            u += p
+        v += p * math.sqrt(3) / 2
+        j += 1
+    holes = [_teardrop_x(sx1 - rh - 0.1, x_out + 1, y, z, P.SPK_GRILLE_HOLE_D) for y, z in pts]
+    b = b.cut(cq.Compound.makeCompound(holes))
+    # grip ribs on the two end walls (the speaker's 20 mm ends), C8 interference, centred on its thickness
+    gr = P.SPK_CLEAR + P.SPK_GRIP_RIB
+    xm = sx1 - rh - P.SPK_T / 2
+    for y0_, y1_ in ((sy0 - 0.01, sy0 + gr), (sy1 - gr, sy1 + 0.01)):
+        b = b.fuse(_box((xm - 0.4, y0_, sz0 + 2.0), (xm + 0.4, y1_, sz1 - 1.0)))
+    # lead slot: +Y end wall (H3 is on the +Y side of the board), from mid-height to the top
+    b = b.cut(_box((xm - P.SPK_LEAD_SLOT_W / 2, sy1 - 0.1, zc - P.SPK_LEAD_SLOT_W / 2), (xm + P.SPK_LEAD_SLOT_W / 2, sy1 + 1.4, sz1 + 1)))
+    return A.solidify(b), dict(holes=len(pts), centre=(round(xm, 2), yc, round(zc, 2)))
+
+
+def speaker_dummy():
+    (sx0, sy0, sz0), (sx1, sy1, sz1) = speaker_box()
+    return _box((sx1 - P.SPK_SEAL_RIB_H - P.SPK_T, -P.SPK_L / 2, sz0), (sx1 - P.SPK_SEAL_RIB_H, P.SPK_L / 2, sz0 + P.SPK_W))
