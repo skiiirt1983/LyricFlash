@@ -1,6 +1,10 @@
 # Phase 1: print and check
 
-**Plate:** `out/phase1/lyricflash_coupons.3mf` (everything already laid flat in print
+**Print each piece in the colour of the case part it tests** (colours shrink differently):
+- `out/phase1/plate_TOP_colour.3mf`: top-shell colour (C1 seat ring, C2 top slice, C7 hooks)
+- `out/phase1/plate_BASE_colour.3mf`: base-tray colour (everything else)
+
+**All-in-one plate (one colour):** `out/phase1/lyricflash_coupons.3mf` (everything already laid flat in print
 orientation). v2: every object is one welded, watertight mesh (0 non-manifold edges), so no repair
 should be needed. Single STLs/STEPs are in `out/phase1/<coupon>/`.
 
