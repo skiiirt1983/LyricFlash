@@ -63,7 +63,7 @@ Board frame: origin = PCB centre on the PCB back face, +Z out of the glass, USB-
 | KEY2_TIP_Z | `(-1.3, -0.5)` mm | STEP 'KEY2': plunger tip Z range |
 | KEY2_TIP_W | `1.8` mm | STEP 'KEY2': plunger tip width in the board plane |
 | KEY_TRAVEL | `0.25` mm | TODO verify by test print: not in the STEP (static model); 0.25 mm default for a side tact switch |
-| PWR_IS | **TODO** | NOT IN STEP: no silkscreen/ref-des text for PWR vs BOOT. Ask Paul (KEY1 or KEY2). |
+| PWR_IS | `KEY2` | ANSWERED: Paul's photo 2026-11-09: silkscreen 'BOOT' is next to KEY1, so PWR = KEY2 |
 | MIC1_CENTER | `(-17.54, 10.959)` mm | STEP 'MIC1_ASM': centre of the package footprint |
 | MIC1_SIZE | `(2.599, 3.4, 0.998)` mm | STEP 'MIC1_ASM': package edge lengths and height |
 | MIC1_Z | `(-1.1, -0.102)` mm | STEP 'MIC1_ASM': Z range (on the PCB back) |
@@ -78,5 +78,7 @@ Board frame: origin = PCB centre on the PCB back face, +Z out of the glass, USB-
 | MICROSD_BBOX | `((7.007, -7.8, 0.6), (22.01, 8.3, 3.05))` mm | STEP: microSD socket (front side, under display) bbox |
 | HEADER_BBOX | `((-10.428, -19.88, -5.8), (10.422, -17.479, 3.0))` mm | STEP: 8-pin 2.54 female header bbox |
 | DISPLAY_FPC_BBOX | `((-18.9, -0.423, 1.6), (-1.699, 9.177, 3.7))` mm | STEP: display FPC bbox |
-| BATTERY_CONNECTOR | **TODO** | NOT IN STEP: J1 and H3 are identical MX1.25 parts. Ask Paul which is BAT. |
+| BATTERY_CONNECTOR | `J1` | ANSWERED: Paul's photo 2026-11-09: silkscreen 'BAT' at J1, 'SPK' at H3 |
 | HEADER_PITCH | `2.54` mm | STEP 'BOARD': spacing of the 8 header holes |
+| BOOT_IS | `KEY1` | ANSWERED: Paul's photo 2026-11-09: silkscreen 'BOOT' next to KEY1 |
+| SPEAKER_CONNECTOR | `H3` | ANSWERED: Paul's photo 2026-11-09: silkscreen 'SPK' at H3 (nothing plugged in) |

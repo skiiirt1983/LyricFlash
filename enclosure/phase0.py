@@ -54,6 +54,17 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     groups = load_board()
     values = extract(groups)
+    from lfcase.answers import ANSWERS
+    from lfcase.extract import Value
+    seen = set()
+    for v in values:
+        if v.name in ANSWERS:
+            v.value, v.source = ANSWERS[v.name][0], "ANSWERED: " + ANSWERS[v.name][1]
+            v.unit = ""
+            seen.add(v.name)
+    for k, (val, src) in ANSWERS.items():
+        if k not in seen:
+            values.append(Value(k, val, "ANSWERED: " + src, ""))
     V = {v.name: v.value for v in values}
     write_board_block(values, HERE / "params.py", DEFAULT_STEP.name, _step_hash(DEFAULT_STEP))
     (OUT / "board_values.md").write_text(
@@ -85,7 +96,7 @@ def main():
     save_labelled(
         s, OUT / "board_back.png",
         title="Back (component side), oriented like Waveshare's drawing",
-        footer="Open questions: which KEY is PWR? Which of J1/H3 is the battery plug? Mic sound-port side?",
+        footer="KEY/J1/H3 roles from Paul's photo (silkscreen). Mic sound-port side: pending.",
         labels=[
             (usb, "USB-C (H1)", complex(150, 12), "tab:blue"),
             (k1, "KEY1\nPWR or BOOT?", 230, "tab:orange"),

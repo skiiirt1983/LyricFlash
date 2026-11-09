@@ -136,8 +136,8 @@ KEY2_TIP_Z = (-1.3, -0.5)
 KEY2_TIP_W = 1.8
 # TODO verify by test print: not in the STEP (static model); 0.25 mm default for a side tact switch [mm]
 KEY_TRAVEL = 0.25
-# PWR_IS: TODO, NOT IN STEP: no silkscreen/ref-des text for PWR vs BOOT. Ask Paul (KEY1 or KEY2).
-PWR_IS = None
+# ANSWERED: Paul's photo 2026-11-09: silkscreen 'BOOT' is next to KEY1, so PWR = KEY2
+PWR_IS = 'KEY2'
 # STEP 'MIC1_ASM': centre of the package footprint [mm]
 MIC1_CENTER = (-17.54, 10.959)
 # STEP 'MIC1_ASM': package edge lengths and height [mm]
@@ -166,10 +166,14 @@ MICROSD_BBOX = ((7.007, -7.8, 0.6), (22.01, 8.3, 3.05))
 HEADER_BBOX = ((-10.428, -19.88, -5.8), (10.422, -17.479, 3.0))
 # STEP: display FPC bbox [mm]
 DISPLAY_FPC_BBOX = ((-18.9, -0.423, 1.6), (-1.699, 9.177, 3.7))
-# BATTERY_CONNECTOR: TODO, NOT IN STEP: J1 and H3 are identical MX1.25 parts. Ask Paul which is BAT.
-BATTERY_CONNECTOR = None
+# ANSWERED: Paul's photo 2026-11-09: silkscreen 'BAT' at J1, 'SPK' at H3
+BATTERY_CONNECTOR = 'J1'
 # STEP 'BOARD': spacing of the 8 header holes [mm]
 HEADER_PITCH = 2.54
+# ANSWERED: Paul's photo 2026-11-09: silkscreen 'BOOT' next to KEY1
+BOOT_IS = 'KEY1'
+# ANSWERED: Paul's photo 2026-11-09: silkscreen 'SPK' at H3 (nothing plugged in)
+SPEAKER_CONNECTOR = 'H3'
 # <<< BOARD-FROM-STEP
 
 # ============================================================================
@@ -217,3 +221,36 @@ OUTER_FILLET_MIN = 3.0
 TILT_DEG = 17.5                      # PLAN 3.1: 15-20 deg, "similar to PrintSphere"
 NOZZLE = 0.4
 LAYER = 0.2
+
+# ============================================================================
+# PHASE 1 COUPON VALUES
+# ============================================================================
+COUPON_FLOOR = 1.2                   # 6 layers
+COUPON_LABEL_SIZE = 4.0              # text height for debossed labels
+COUPON_LABEL_DEPTH = 0.4             # 2 layers
+
+# Battery pocket coupon (PLAN 5 Phase 1: low wall tray ~3 mm)
+BATTERY_COUPON_WALL_H = 3.0          # wall height above the floor
+BATTERY_POCKET_CORNER_R = 2.0        # PLAN 3.7: round the pocket corners
+BATTERY_FINGER_NOTCH_W = 16.0        # PLAN 3.7: finger notch to lift the cell out
+BATTERY_WIRE_SLOT_W = 5.0            # lead exit through the lead-end wall
+BATTERY_GAUGE_LEN = 10.0             # thickness gauge: how far the cell edge slides in
+
+# Switch pocket coupon (PLAN 3.7)
+# TODO verify by test print: the SS-12D00 knob length above the body is not in PLAN.md.
+# The coupon has one pocket per common variant (G3/G4/G5 = 3/4/5 mm knob).
+SWITCH_KNOB_HEIGHTS = (3.0, 4.0, 5.0)
+SWITCH_KNOB_TIP_RECESS = 0.4         # PLAN 3.7: 0.3-0.5 below the outer surface
+SWITCH_POCKET_H_CLEAR = 0.4          # body height clearance in the pocket
+SWITCH_LIP = 0.6                     # 45-deg wedge lips under the body ends keep it in the pocket
+SWITCH_KNOB_CHANNEL_W = 1.9          # knob 1.5 + 0.4: entry channel from the open side
+SWITCH_CHANNEL_SKIN = 0.6            # plate skin left over the knob entry channel (3 layers)
+
+# Snap-fit latch coupon (PLAN 3.6 / 3.7)
+SNAP_BEAM_L = 10.0
+SNAP_BEAM_T = 1.2                    # 3 perimeters
+SNAP_HOOK = 0.8                      # hook overhang (beam deflection during snap)
+SNAP_LEADIN_DEG = 30.0               # lead-in ramp, from the beam axis
+SNAP_RETAIN_DEG = 70.0               # retention face (90 = permanent, lower = pull-apart)
+SNAP_EXTRUDE = 6.0                   # beam width (printed as layer height stack)
+STRAIN_LIMIT = {"PLA": 0.015, "PETG": 0.025}   # repeated-use design strain (conservative)
