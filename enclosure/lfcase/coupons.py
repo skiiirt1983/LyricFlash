@@ -149,7 +149,10 @@ def snap_strain(t=None, y=None, L=None):
     return 1.5 * t * y / (L * L)
 
 
-def _snap_pair(c: float, x_off: float):
+def _snap_pair(c: float, x_off: float, c_ax: float | None = None, label: str | None = None):
+    """c = lateral clearance (spigot); c_ax = axial play at the catch (negative = preload)."""
+    c_ax = c if c_ax is None else c_ax
+    label = label or f"{c:.2f}"
     t, hk, L = P.SNAP_BEAM_T, P.SNAP_HOOK, P.SNAP_BEAM_L
     E = P.SNAP_EXTRUDE
     lead = hk / math.tan(math.radians(P.SNAP_LEADIN_DEG))
@@ -172,8 +175,8 @@ def _snap_pair(c: float, x_off: float):
     fw, fh = 16.0, L + spig_h + 3.5
     fem = cq.Workplane("XY").center(0, -fh / 2).rect(fw, fh).extrude(E)
     pocket = cq.Workplane("XY").center(0, -(spig_h + 0.3) / 2 + 0.01).rect(spig_w + 2 * c, spig_h + 0.3).extrude(E)
-    y_lip_bot_out = y_ret_out + c                  # catch face, offset by c (axial play)
-    y_lip_bot_in = y_ret_in + c
+    y_lip_bot_out = y_ret_out + c_ax               # catch face, offset by the axial play
+    y_lip_bot_in = y_ret_in + c_ax
     x_lip = t / 2 + c
     x_recess = t / 2 + hk + c
     x_far = -(t / 2 + hk + c + 0.2)
@@ -181,23 +184,25 @@ def _snap_pair(c: float, x_off: float):
     slot = [(x_far, -spig_h - 0.29), (x_lip, -spig_h - 0.29), (x_lip, y_lip_bot_in - (x_lip - t / 2) * (ret / hk)),
             (x_recess, y_lip_bot_out), (x_recess, y_floor), (x_far, y_floor)]
     fem = fem.cut(pocket).cut(cq.Workplane("XY").polyline(slot).close().extrude(E))
-    male_s = deboss(male.val(), f"{c:.2f}", (0, 2.0), size=2.6)
-    fem_s = deboss(fem.val(), f"{c:.2f}", (-4.6, -fh + 3.0), size=2.6)
-    fem_s = deboss(fem_s, f"{c:.2f}", (4.6, -fh + 3.0), size=2.6)
+    male_s = deboss(male.val(), label, (0, 2.0), size=2.6)
+    fem_s = deboss(fem.val(), label, (-4.6, -fh + 3.0), size=2.6)
+    fem_s = deboss(fem_s, label, (4.6, -fh + 3.0), size=2.6)
     return male_s.moved(cq.Location(cq.Vector(x_off, 16.0, 0))), fem_s.moved(cq.Location(cq.Vector(x_off, -2.0, 0)))
 
 
 def snap_latches() -> Coupon:
     parts = {}
-    for i, c in enumerate(P.SNAP_CLEARANCES):
-        m, f = _snap_pair(c, (i - 1) * 20.0)
-        parts[f"snap_male_{c:.2f}"] = m
-        parts[f"snap_female_{c:.2f}"] = f
+    for i, ca in enumerate(P.SNAP_AXIAL_VARIANTS):
+        lab = {-0.10: "P1", 0.0: "P0", 0.10: "L1"}.get(round(ca, 2), f"{ca:+.2f}")
+        m, f = _snap_pair(P.SNAP_LATERAL_CLEAR, (i - 1) * 20.0, c_ax=ca, label=lab)
+        parts[f"snap_male_{lab}"] = m
+        parts[f"snap_female_{lab}"] = f
     eps = snap_strain()
     return Coupon(
         "C7_snap_latches", "Snap-fit latch pairs", parts,
         notes=[f"Beam {P.SNAP_BEAM_L} long x {P.SNAP_BEAM_T} thick, hook {P.SNAP_HOOK}, lead-in {P.SNAP_LEADIN_DEG:g} deg, "
-               f"retention face {P.SNAP_RETAIN_DEG:g} deg. Clearance c = side fit of the spigot AND axial play at the catch.",
+               f"retention face {P.SNAP_RETAIN_DEG:g} deg. v2: side fit {P.SNAP_LATERAL_CLEAR} for all; axial play at the catch "
+               "P1 = 0.10 preload (pulls tight), P0 = zero play, L1 = 0.10 play.",
                "Printed as 2-D profiles standing on the bed, so the beams bend along the layers (strong direction)."],
         checks={"beam_strain": eps},
     )

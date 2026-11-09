@@ -213,7 +213,7 @@ MIC_DUCT_MAX_LEN = 8.0
 MIC_COLLAR_CRUSH = (0.10, 0.15)
 
 # --- PWR flexure (PLAN 3.5) ---
-FLEXURE_LEN, FLEXURE_THK = 10.0, 1.2
+FLEXURE_LEN, FLEXURE_THK = 10.0, 0.9    # round 2: 1.2 was too hard to press (Paul); stiffness ~ t^3 -> ~0.4x
 BOOT_PINHOLE_D = 1.5
 
 # --- Shell / print (PLAN 3.1, 5, 6) ---
@@ -242,6 +242,7 @@ BATTERY_GAUGE_LEN = 10.0             # thickness gauge: how far the cell edge sl
 # TODO verify by test print: the SS-12D00 knob length above the body is not in PLAN.md.
 # The coupon has one pocket per common variant (G3/G4/G5 = 3/4/5 mm knob).
 SWITCH_KNOB_HEIGHTS = (3.0, 4.0, 5.0)
+SWITCH_KNOB_HEIGHT = 3.0            # Paul round 1: the K3 pocket fits (tight, good)
 SWITCH_KNOB_TIP_RECESS = 0.4         # PLAN 3.7: 0.3-0.5 below the outer surface
 SWITCH_POCKET_H_CLEAR = 0.4          # body height clearance in the pocket
 SWITCH_LIP = 0.6                     # 45-deg wedge lips under the body ends keep it in the pocket
@@ -306,13 +307,13 @@ LATCH_CLEAR = 0.25                   # axial play at the catch; update from coup
 # Mic ducts (top-port mics; Paul 2026-11-09)
 MIC_COLLAR_CLEAR = 0.2               # collar inner wall to the mic package, per side
 MIC_COLLAR_WALL = 0.8
-MIC_CRUSH = 0.12                     # crush rib interference into the PCB (PLAN 0.10-0.15)
-MIC_CRUSH_RIB_W = 0.4
+MIC_CRUSH = 0.35                     # round 2: 0.12 left a gap (Paul); taller, thinner rib that can squash
+MIC_CRUSH_RIB_W = 0.35
 MIC_CAVITY_H = 0.4                   # air gap over the lid
 MIC_DUCT_D = 1.2                     # PLAN 1.0-1.5, teardrop so it prints without support
 
 # PWR flexure (on the base tray, option A)
-FLEX_REST_GAP = 0.30                 # nub to plunger tip at rest
+FLEX_REST_GAP = 0.20                 # round 2: 0.30 felt mushy (Paul)
 FLEX_NUB_W = 1.6
 FLEX_SLOT = 0.6
 FLEX_PAD_RECESS = 1.5                # pad face below the outer surface
@@ -327,14 +328,14 @@ FLEX_BEAM_TOP_Z = -0.1               # beam top: stays below the PCB so it can't
 # ============================================================================
 SPK_L, SPK_W, SPK_T = 30.0, 20.0, 6.8      # source: seller image Paul sent
 SPK_CORNER_R = 3.0                         # TODO verify by test print: estimated from the image
-SPK_CLEAR = 0.3                            # per side in the pocket (generous)
+SPK_CLEAR = 0.4                            # round 2: 0.3 was too tight (Paul)
 SPK_DEPTH_CLEAR = 0.4
 SPK_SEAL_INSET = 1.2                       # crush rib sits on the front frame, this far in from the edge
 SPK_SEAL_RIB_W, SPK_SEAL_RIB_H = 0.6, 0.3  # front seal so the back wave can't leak round to the grille
 SPK_GRILLE_HOLE_D = 1.5
 SPK_GRILLE_PITCH = 2.6
 SPK_GRILLE_MARGIN = 3.0                    # grille area = speaker front minus this margin per side
-SPK_GRIP_RIB = 0.25                        # side crush ribs (interference) that hold the speaker
+SPK_GRIP_RIB = 0.15                        # round 2 (was 0.25)
 SPK_LEAD_SLOT_W = 4.0                      # Paul 2026-11-09: leads leave dead centre of a 20 mm end (mid-width, mid-thickness)
 SPK_PLACEMENT = "any secure spot"          # Paul 2026-11-09: speaker only plays while the mics are idle, so no keep-out from the mic holes
 
@@ -351,3 +352,17 @@ MATERIAL_BASE = "PETG, black"              # base tray: carries every springy fe
 #   (guide land per side, pad gap under, backstop gap behind, opening per side)
 # Paul 2026-11-09 also: "the foot pad it sits on isn't deep enough" -> pad gap varies most.
 USB_GAUGE_VARIANTS = {"A": (0.20, 0.25, 0.10, 0.35), "B": (0.30, 0.45, 0.10, 0.45), "C": (0.40, 0.70, 0.15, 0.55)}
+
+# ============================================================================
+# ROUND 2 (Paul's round-1 results, 2026-11-09)
+# ============================================================================
+# Display flex folds stick out further than the STEP (C1 glass never reached the lip; the C2
+# slice, on the USB side with no fold, seated fine). Relief notches in the top-shell bore:
+FOLD_RELIEF_ANGLES = (90.0, 270.0)   # STEP folds at Y +24.07 and Y -23.88 (green flex = header side)
+FOLD_RELIEF_W = 16.0                 # tangential width
+FOLD_RELIEF_DEPTH = 1.2              # beyond the bore radius
+# Mated battery/speaker plugs (J1/H3) + wires: keep-out around both sockets, down to the floor.
+PLUG_KEEPOUT_GROW = 1.0              # XY grow around the socket footprints
+# C7 v2: Paul "no tension, rattles": v1 had 0.15-0.35 axial play by design. Now:
+SNAP_LATERAL_CLEAR = 0.15
+SNAP_AXIAL_VARIANTS = (-0.10, 0.00, 0.10)   # negative = preload (pulls tight)

@@ -1,5 +1,16 @@
 # Enclosure changelog
 
+## Round 2 (after Paul's round-1 table, 2026-11-09)
+- Results: C1 glass didn't reach the lip (flex folds stick out past the STEP: bore had 0.13 on
+  paper), lip too much to swipe, locator rocks (top cup 0.08 mm from the SPK socket; plugs in);
+  C2 doesn't fit; C3 good; C4 K3 pocket good -> knob 3 mm; C5 collar gap (song ID OK); C6 mushy +
+  too hard; C7 no tension + rattle (v1 had 0.15-0.35 axial play by design); C8 too tight.
+- C2 gold top + C5 base (loose USB relief) "fits nice": lip OK when seated -> keep lip, add
+  flex-fold reliefs. Fallback if C1 v2 still bad: PrintSphere-style flush glass (Paul).
+- microSD stays inside (no slot).
+- Changes: fold reliefs (FOLD_RELIEF_*), plug keep-out (PLUG_KEEPOUT_GROW) on all base parts,
+  MIC_CRUSH 0.35, FLEXURE_THK 0.9 + FLEX_REST_GAP 0.2, C7 axial play P1/P0/L1, SPK_CLEAR 0.4.
+
 ## Phase 1 print results, round 1 (Paul 2026-11-09, gold PLA Metal)
 - C2: USB-C receptacle does not fit in its base pocket; the support pad under it is not deep
   enough (C2 clearances 0.10 side / 0.10 under / 0.05 behind were too tight as printed).

@@ -139,6 +139,29 @@ def top_shell_slice(a0, a1, latch_angles=()):
     return solidify(body)
 
 
+def plug_keepout():
+    """J1 (battery) and H3 (speaker) sockets with plugs + wires in: XY grown, from the PCB down
+    through the floor."""
+    out = None
+    g = P.PLUG_KEEPOUT_GROW
+    for bb in (P.J1_BBOX, P.H3_BBOX):
+        (x0, y0, _), (x1, y1, _) = bb
+        b = cq.Solid.makeBox(x1 - x0 + 2 * g, y1 - y0 + 2 * g, 30, pnt=cq.Vector(x0 - g, y0 - g, FLOOR_BOT - 5))
+        out = b if out is None else out.fuse(b)
+    return out
+
+
+def fold_reliefs(z0, z1):
+    """Notches in the top-shell bore for the display flex folds."""
+    out = None
+    for a in P.FOLD_RELIEF_ANGLES:
+        hw = P.FOLD_RELIEF_W / 2
+        n = cq.Solid.makeBox(P.FOLD_RELIEF_DEPTH + 2.0, 2 * hw, z1 - z0, pnt=cq.Vector(BORE_R - 2.0, -hw, z0))
+        n = at_angle(n, a)
+        out = n if out is None else out.fuse(n)
+    return out
+
+
 def base_sector(a0, a1, cups, latch_angles=(), inner_r=BASE_IN):
     w = wedge(a0, a1, FLOOR_BOT - 1, P.SEAM_Z + P.SPIGOT_H + 1)
     floor = cyl(R_OUT, FLOOR_BOT, FLOOR_TOP)
@@ -150,6 +173,7 @@ def base_sector(a0, a1, cups, latch_angles=(), inner_r=BASE_IN):
         body = body.fuse(ped)
     for la in latch_angles:
         body = body.cut(at_angle(_latch_base_cut_local(), la))
+    body = body.cut(plug_keepout())
     return body.clean()
 
 
@@ -159,13 +183,15 @@ def base_sector(a0, a1, cups, latch_angles=(), inner_r=BASE_IN):
 def c1_display_seat() -> Coupon:
     z0 = P.GLASS_BOTTOM_Z - 1.8
     ring_ = cyl(R_OUT, z0, LIP_TOP).cut(cyl(BORE_R, z0 - 1, P.GLASS_TOP_Z)).cut(cyl(LIP_R, z0, LIP_TOP + 1))
+    ring_ = ring_.cut(fold_reliefs(z0 - 1, P.GLASS_BOTTOM_Z - 0.05))      # round 2: flex folds
     # base floor locator: floor disc with three standoff cups and viewing windows
     loc = cyl(BASE_IN, FLOOR_BOT, FLOOR_TOP)
     for i, a in enumerate((30, 150, 270)):
         loc = loc.cut(cyl(5.5, FLOOR_BOT - 1, FLOOR_TOP + 1, 9 * math.cos(math.radians(a)), 9 * math.sin(math.radians(a))))
     for x, y in P.MOUNT_HOLES_XY:
         loc = loc.fuse(cyl(CUP_ID / 2 + P.CUP_WALL, FLOOR_BOT, CUP_TOP, x, y).cut(cyl(CUP_ID / 2, SEAT_Z, CUP_TOP + 1, x, y)))
-    loc = deboss(loc, "C1", (0, 0), size=3.0, face_z=FLOOR_TOP)
+    loc = loc.cut(plug_keepout())                                         # round 2: plugs made it rock
+    loc = deboss(loc, "C1v2", (0, -2), size=3.0, face_z=FLOOR_TOP)
     return Coupon(
         "C1_display_seat", "Display seat ring + base locator",
         {"seat_ring": ring_, "base_locator": loc},
