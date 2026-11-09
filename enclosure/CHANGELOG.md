@@ -6,6 +6,8 @@
   -> C9 USB fit gauge, three variants A/B/C (see params USB_GAUGE_VARIANTS).
 - C2: one latch beam broke ("pretty flimsy"): upright PLA beam, bending across the layers.
   -> Phase 2: latches become separate clips printed flat in PETG (layers along the beam).
+- C2: rest of the test can't be done (receptacle doesn't fit). C9 gauge replaces it; plug-in and
+  flush checks move to the Phase 2 print.
 - C3 battery tray: cell fits flat with room to spare; finger notch works. Leads leave the cell at
   one corner of the 34.5 mm end (that orientation lets the cell lie flattest) and went over the
   wall there, not through the centred slot -> Phase 2: wire exit at that corner. Thickness gauge
