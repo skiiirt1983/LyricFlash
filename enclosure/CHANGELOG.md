@@ -1,7 +1,7 @@
 # Enclosure changelog
 
 ## Labels (2026-11-09)
-- Paul: 3.5 mm text unreadable; ~10 mm at 0.3 deep is legible. Small parts get countable edge
+- Paul: 3.5 mm text unreadable; ~10 mm is legible with a 0.4 mm nozzle (depth 0.4). Small parts get countable edge
   notches instead; matching halves placed next to each other on the plate.
 
 ## C1 decision (2026-11-09)

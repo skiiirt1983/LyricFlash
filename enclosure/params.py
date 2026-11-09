@@ -420,8 +420,8 @@ LABEL_MIN_SIZE = 3.5                 # 10 pt for a 0.4 mm nozzle (Paul); bold
 # Bore opened so the glass drops in freely (no-force rule; v2 "just slides through").
 BOARD_SEAT_DIAM_CLEAR = 0.7          # was 0.3 on diameter
 
-# Labels (Paul 2026-11-09): 3.5 mm still unreadable; ~10 mm is legible, 0.3 deep.
+# Labels (Paul 2026-11-09): 3.5 mm still unreadable; ~10 mm text is legible with the 0.4 mm nozzle.
 LABEL_MIN_SIZE = 10.0                # text height, only where a face is big enough
-COUPON_LABEL_DEPTH = 0.3
+COUPON_LABEL_DEPTH = 0.4                # 2 layers
 ID_NOTCH_W, ID_NOTCH_D, ID_NOTCH_PITCH = 2.0, 1.0, 3.5   # small parts: count notches (1/2/3) on an edge
 PAIR_PARTS_ADJACENT = True           # matching halves next to each other on the plate
