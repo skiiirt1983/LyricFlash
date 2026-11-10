@@ -189,7 +189,7 @@ BATTERY_LEAD_SPACE = 10.0                             # PLAN 3.7: free space at 
 
 # --- Slide switch SS-12D00 (PLAN 2 / 3.7) ---
 SWITCH_BODY = (8.5, 3.5, 3.5)        # listing
-SWITCH_POCKET = (9.3, 4.3)           # PLAN 3.7
+SWITCH_POCKET = (9.7, 4.7)           # v9 (Paul): body wouldn't slide in; +0.2 all round (was 9.3 x 4.3, PLAN 3.7)
 SWITCH_PIN_SPACE = 2.0               # PLAN 3.7: below the body for pins + solder
 SWITCH_KNOB_W, SWITCH_TRAVEL = 1.5, 2.0
 SWITCH_KNOB_SLOT = (4.6, 2.3)        # PLAN 3.7
@@ -244,7 +244,7 @@ BATTERY_GAUGE_LEN = 10.0             # thickness gauge: how far the cell edge sl
 SWITCH_KNOB_HEIGHTS = (3.0, 4.0, 5.0)
 SWITCH_KNOB_HEIGHT = 3.0            # Paul round 1: the K3 pocket fits (tight, good)
 SWITCH_KNOB_TIP_RECESS = 0.4         # PLAN 3.7: 0.3-0.5 below the outer surface
-SWITCH_POCKET_H_CLEAR = 0.4          # body height clearance in the pocket
+SWITCH_POCKET_H_CLEAR = 0.6          # body height clearance in the pocket (v9: was 0.4, too tight)
 SWITCH_LIP = 0.6                     # 45-deg wedge lips under the body ends keep it in the pocket
 SWITCH_KNOB_CHANNEL_W = 1.9          # knob 1.5 + 0.4: entry channel from the open side
 SWITCH_CHANNEL_SKIN = 0.6            # plate skin left over the knob entry channel (3 layers)
@@ -586,3 +586,9 @@ CLEAT_HORN_T = 3.5                   # horn thickness (front to back)
 CLEAT_HORN_L = 9.0                   # each horn beyond the stem
 CLEAT_TIP_T = 2.0                    # horn depth at the tip (45 deg underside back to the stem)
 CLEAT_EAR = 2.0                      # turned-up tip so the turn can't slide off
+
+# ---- v9 (Paul): the flat cell couldn't get past the board ledges. Cell stands on its thin edge, the base gets
+# taller (board raised by the solver) and the ledges / back clip move off the cell's drop column.
+BATTERY_ON_EDGE = True
+BATTERY_STAND_X = -1.5               # world X of the standing cell's centre (clear column between the ledges)
+BATTERY_STAND_WALL_H = 16.0          # side walls that keep the standing cell upright

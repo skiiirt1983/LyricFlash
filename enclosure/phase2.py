@@ -169,7 +169,7 @@ def cg_and_tip(parts, info):
     board = cq.Compound.makeCompound([E.to_wf(g[k], zb) for k in ("pcb", "display", "pmma_frame")])
     items = [("board", P.BOARD_MASS_G, np.array(cq.Shape.centerOfMass(board).toTuple()))]
     (bx0, by0, bz0), (bx1, by1, bz1) = E.battery_box()
-    items.append(("battery", P.BATTERY_MASS_G, np.array([(bx0 + bx1) / 2, (by0 + by1) / 2, bz0 + 6.0])))
+    items.append(("battery", P.BATTERY_MASS_G, np.array([(bx0 + bx1) / 2, (by0 + by1) / 2, (bz0 + bz1) / 2])))
     items.append(("speaker", P.SPEAKER_MASS_G, np.array(cq.Shape.centerOfMass(E.speaker_dummy()).toTuple())))
     for k, v in parts.items():
         if k == "cable_clip":
