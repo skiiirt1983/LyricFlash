@@ -328,14 +328,23 @@ def port_features(b, zb):
     (bx0_, by0_, bz0_), (bx1_, by1_, bz1_) = battery_box()
     bat = _box((bx0_ - 0.5, by0_ - 0.5, bz0_ - 1), (bx1_ + 0.5, by1_ + 0.5, bz1_ + 0.5))
     blk_w = blk_w.cut(bat)                                              # keep off the battery
+    # v3.1 (Paul): behind the wall keep only the receptacle guide; the C10 insert spanned the whole
+    # +/-14 mm recess and left two blocks reaching into the case behind the mics
+    gh = g["W"] / 2 + P.USB_GUIDE_CLEAR + P.USB_INSERT_SIDE_WALL
+    for s_ in (-1, 1):
+        y_a = pc[1] + s_ * gh
+        blk_w = blk_w.cut(_box((fx_w + P.WALL_MIN + 0.01, min(y_a, y_a + s_ * 50), -10),
+                               (fx_w + 40, max(y_a, y_a + s_ * 50), 100)))
     # v3 (Paul: no support towers): fill the 45 deg "shadow" under the part of the port insert that reaches
     # in past the wall, back down toward the wall, so every underside is >= 45 deg and it prints on its own
     inner = (blk_w.intersect(_box((fx_w + P.WALL_MIN - 0.01, -100, 0), (fx_w + 40, 100, 100)))
              .intersect(halfspace_bf(zb, g["z_bot"] - P.USB_UNDER_GAP - 0.01, above=False)))   # only what's under the receptacle
     if inner.Volume() > 1e-3:
-        sh = inner
-        for dd in np.arange(0.4, 12.01, 0.4):
-            sh = sh.fuse(inner.moved(cq.Location(cq.Vector(-dd, 0, -dd))))
+        # exact sweep (v3.2): a stack of 0.4 mm-stepped copies left a sawtooth edge and creases (Paul's slicer view)
+        from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
+        from OCP.gp import gp_Vec
+        swept = cq.Shape.cast(BRepPrimAPI_MakePrism(inner.wrapped, gp_Vec(-12.0, 0.0, -12.0)).Shape())
+        sh = inner.fuse(*swept.Solids()) if swept.Solids() else inner.fuse(swept)
         sh = (sh.intersect(_box((x0, -100, P.CASE_FLOOR), (fx_w + 40, 100, zbot - 0.01))).fuse(
                   sh.intersect(_box((fx_w - 0.01, -100, zbot - 0.01), (fx_w + 40, 100, 100))))
               .intersect(base_body(zb))

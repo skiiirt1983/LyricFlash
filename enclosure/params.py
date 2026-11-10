@@ -447,7 +447,7 @@ LATCH_BEAM_T, LATCH_BEAM_L = 1.2, 10.0   # as tested in C7 (in-plane, bending al
 # PHASE 2: FULL CASE (Paul 2026-11-09: tilt 12 deg; layout study B)
 # World frame: desk at Z = 0, +Y = back, +X = right (USB-C on the left wall).
 # ============================================================================
-TILT_DEG = 12.0
+TILT_DEG = 20.0                      # v4 (Paul): 12 wasn't enough; 20 = top of PLAN's 15-20
 BOARD_X = 0.0                        # layout B (Paul): board centred left-right; the case is as wide as the bezel ring
 CASE_WALL = 2.0
 CASE_FLOOR = 1.6
@@ -535,3 +535,4 @@ SPK_DIVIDER_H = 16.0                 # layout B: divider height above the floor 
 MIC_HOLE_D_CASE = 2.0                # teardrop hole (was a D1.2 duct with a bar under each mic)
 MIC_HOLE_PCB_GAP = 0.6               # hole top this far below the PCB back
 BOOT_TUBE_LEN = 3.0                  # v3: guide length up to the surface (aims a 1 mm paperclip to +/-0.5 at the 1.8 mm plunger)
+USB_INSERT_SIDE_WALL = 1.6           # v3.1: guide walls either side of the receptacle; nothing wider behind the port wall
