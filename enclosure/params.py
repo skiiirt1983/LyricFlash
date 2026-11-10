@@ -488,7 +488,7 @@ LATCH_CLIP_X = 12.5                  # world X of the two clips (front + back wa
 LATCH_CLIP_E = 6.0                   # clip width (print height), = SNAP_EXTRUDE of C7
 LATCH_CLIP_NB0 = 1.0                 # beam outer face, inward from the wall's inner face
 LATCH_CLIP_LIP_MIN = 1.0             # lid material between the seam and the catch
-LATCH_CLIP_BAR_H = 4.0
+LATCH_CLIP_BAR_H = 2.6                # v4: 20 deg tilt lowers the front seam; 4.0 dipped into the battery space
 LATCH_CLIP_FIT = 0.25                # clip in its base channel, per side (slides in by hand)
 LATCH_POCKET_T_CLEAR = 0.5           # lid pocket, either side of the clip width
 LATCH_CLIP_SHOULDER = 1.8            # clip bar shoulders rise 1.8:1 (~61 deg), so the base channel prints
@@ -536,3 +536,4 @@ MIC_HOLE_D_CASE = 2.0                # teardrop hole (was a D1.2 duct with a bar
 MIC_HOLE_PCB_GAP = 0.6               # hole top this far below the PCB back
 BOOT_TUBE_LEN = 3.0                  # v3: guide length up to the surface (aims a 1 mm paperclip to +/-0.5 at the 1.8 mm plunger)
 USB_INSERT_SIDE_WALL = 1.6           # v3.1: guide walls either side of the receptacle; nothing wider behind the port wall
+LATCH_CLIP_BAR_IN = 1.0              # v4: inner shoulder width (was 1.6); with the 2.6 bar its 1.8:1 rise still fits

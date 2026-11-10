@@ -235,7 +235,7 @@ def export(parts, info):
 
 def report(parts, info, chk, lay, cg, sim_rows):
     import params as P
-    L = ["# Phase 2 report: full case v3 (layout B, no mic boxes)", "",
+    L = ["# Phase 2 report: full case v4 (20 deg, layout B)", "",
          f"Tilt {P.TILT_DEG:g} deg, board centre {info['zb']:.1f} mm above the desk. Parts: " + ", ".join(parts) + ".", "",
          "## Interference against the STEP board (boolean volume)", "",
          "| Part | Solids | Valid | Overlaps |", "|---|---|---|---|"]
@@ -262,7 +262,7 @@ def report(parts, info, chk, lay, cg, sim_rows):
     for k, iss in lay.items():
         bad = [i for i in iss if i[1] in ("FLOATING", "LONG BRIDGE")]
         L.append(f"| {k} | {orient[k]} | {'clean' if not bad else f'{len(bad)} flagged layers (see below)'} |")
-    L += ["", "Base: **no supports needed** (v3). What the check still flags, all small:", "",
+    L += ["", "Base: **no supports needed**. What the check still flags, all small:", "",
           "- **USB-C opening, top edge** (visible): with the 12 deg tilt it's a sloped ceiling, not a flat 9.5 mm bridge. "
           "If the first print shows a droop, paint a support enforcer inside the opening only.",
           "- PWR tube roof: bridged across the 3.5 mm bore as the roof climbs with the tilt (inside).",

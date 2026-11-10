@@ -341,10 +341,19 @@ def port_features(b, zb):
              .intersect(halfspace_bf(zb, g["z_bot"] - P.USB_UNDER_GAP - 0.01, above=False)))   # only what's under the receptacle
     if inner.Volume() > 1e-3:
         # exact sweep (v3.2): a stack of 0.4 mm-stepped copies left a sawtooth edge and creases (Paul's slicer view)
-        from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
-        from OCP.gp import gp_Vec
-        swept = cq.Shape.cast(BRepPrimAPI_MakePrism(inner.wrapped, gp_Vec(-12.0, 0.0, -12.0)).Shape())
-        sh = inner.fuse(*swept.Solids()) if swept.Solids() else inner.fuse(swept)
+        # = the solid plus every face extruded along the sweep direction
+        vec = cq.Vector(-12.0, 0.0, -12.0)
+        prisms = []
+        for f in inner.Faces():
+            if abs(f.normalAt().dot(vec.normalized())) < 1e-6:
+                continue                                           # parallel to the sweep: adds nothing
+            try:
+                pr = cq.Solid.extrudeLinear(f, vec)
+                if pr.isValid() and pr.Volume() > 1e-6:
+                    prisms.append(pr)
+            except Exception:
+                pass
+        sh = inner.fuse(*prisms).clean() if prisms else inner
         sh = (sh.intersect(_box((x0, -100, P.CASE_FLOOR), (fx_w + 40, 100, zbot - 0.01))).fuse(
                   sh.intersect(_box((fx_w - 0.01, -100, zbot - 0.01), (fx_w + 40, 100, 100))))
               .intersect(base_body(zb))
@@ -590,7 +599,7 @@ def _clip_profile():
     a_root = a_tip - L
     beam = [(nb0 + tb, a_root - 0.01), (nb0 + tb, a_tip), (nb0, a_tip), (nb0 - hk, a_tip - lead), (nb0 - hk, a_ro),
             (nb0, a_ro - ret), (nb0, a_root - 0.01)]
-    nb_lo, nb_hi = nb0 - 0.7, nb0 + tb + 1.6
+    nb_lo, nb_hi = nb0 - 0.7, nb0 + tb + P.LATCH_CLIP_BAR_IN
     a_b0 = a_root - P.LATCH_CLIP_BAR_H
     k = P.LATCH_CLIP_SHOULDER                     # shoulder rise per unit width: steep enough that the base
     bar = [(nb_lo, a_b0), (nb_hi, a_b0), (nb_hi, a_root - k * (nb_hi - nb0 - tb)), (nb0 + tb, a_root), (nb0, a_root),

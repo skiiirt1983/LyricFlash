@@ -1,4 +1,4 @@
-# Phase 2: full case v3 (layout B, no mic boxes), print and check
+# Phase 2: full case v4 (20° tilt, layout B), print and check
 
 One file: `out/phase2/lyricflash_case_project.3mf`. Everything is flat on the plate, fitted together in
 the **Assembly view**, and pre-assigned to a filament: **slot 1 = Iridium Gold PLA Metal**, **slot 2 =
@@ -19,7 +19,7 @@ black PETG**. If the parts don't all fit on one plate, Bambu Studio puts the ext
   without support. If the top edge of the opening droops, paint a support enforcer inside the opening only.
 
 `out/phase2/report.md` has every check: board interference (none), the tilt-in swing (PASS), the layer check,
-the centre of gravity (tips at 58.1°, PLAN asks for > 30°).
+the centre of gravity (tips at 55.9°, PLAN asks for > 30°).
 
 ## Before assembly
 - Check the USB-C opening, both mic holes (Ø2.0, inside the USB-C recess, either side of the port) and the

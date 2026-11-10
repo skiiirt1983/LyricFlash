@@ -1,5 +1,17 @@
 # Enclosure changelog
 
+## Phase 2 v4 (2026-11-10)
+- Tilt 12 -> 20 deg (Paul: 12 wasn't enough). Same 52.9 x 62 footprint; front 27.5 / back 50.1 mm; board
+  centre 30.4 mm up; tips at 55.9 deg. Ledges re-picked (same angles).
+- Paul: "the other mic box" was the C10 USB-C insert, which spanned the whole +/-14 mm recess and reached
+  6.5 mm into the case behind both mics. Behind the port wall it now keeps only the receptacle guide
+  (+/-6.5 mm).
+- Paul: odd edge in the slicer = the 45 deg fill under that insert, built from 0.4 mm-stepped copies
+  (sawtooth edge, creases). Now an exact sweep: flat 45 deg faces.
+- Latch clips: anchor bar 4.0 -> 2.6 and inner shoulder 1.6 -> 1.0 (the lower front seam at 20 deg put the
+  front clip into the battery space). Beam and hook unchanged (C7 v5).
+- Checks: board none; swing PASS; base still needs no supports; mic paths clear.
+
 ## Phase 2 v3 (2026-11-10)
 - Paul: a hole through the base wall beside the PWR tube. The finger dimple's cone ran along the pin axis,
   34 deg to the wall, so one side cut through the 2 mm wall. Now on the wall normal, 1.0 deep, >= 1.0 left.
