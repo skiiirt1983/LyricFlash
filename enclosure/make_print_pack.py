@@ -38,10 +38,16 @@ def main():
     plates = [[meshes["top_shell.stl"]], [meshes["base_ribbed.stl"]], [meshes["base_panels.stl"]],
               [meshes["base_smooth.stl"]], [meshes["latch_clip_front.stl"], meshes["latch_clip_back.stl"]]]
     write_3mf_plates(plates, OUT / "lyricflash_print_plates.3mf")
+    # fallback: one 3MF per plate (works whatever Bambu does with multi-plate files)
+    (OUT / "3mf_per_plate").mkdir()
+    for i, pl in enumerate(plates, 1):
+        nm = pl[0]["plate_name"].split(" (")[0].lower().replace(" - ", "_").replace(" ", "_")
+        write_3mf_plates([pl], OUT / "3mf_per_plate" / f"plate{i}_{nm}.3mf", bambu_app=False)   # the proven format
     shutil.copy(HERE / "PHASE2_CHECKLIST.md", OUT / "PHASE2_CHECKLIST.md")
     (OUT / "README.txt").write_text(
         "LyricFlash case - print pack\n\n"
-        "lyricflash_print_plates.3mf: one Bambu Studio project, one plate per print:\n"
+        "lyricflash_print_plates.3mf: one Bambu Studio project, one plate per print\n"
+        "(if it opens as a single plate, use the files in 3mf_per_plate/ instead):\n"
         "  1 top shell (filament 1, Iridium Gold PLA Metal), face-down\n"
         "  2 base - ribbed, 3 base - panels, 4 base - smooth (filament 2, black PETG): print ONE of the three\n"
         "  5 the two latch clips (filament 2, PETG: they flex)\n"

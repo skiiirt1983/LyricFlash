@@ -249,11 +249,13 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0, keep_order: boo
     return placed
 
 
-def write_3mf_plates(plates: list, path: Path, bed=BED):
+def write_3mf_plates(plates: list, path: Path, bed=BED, bambu_app=True):
     """Bambu Studio project with several plates. plates: [[dict(name, mesh (trimesh, print orientation),
     material)], ...] one list per plate. Parts on a plate are laid out side by side, centred on it.
     Plate positions follow Bambu's grid (stride = bed * 1.2, columns = ceil-ish sqrt(n), rows go -Y), and
-    every object's lowest point is exactly z = 0 (Bambu merges objects otherwise)."""
+    every object's lowest point is exactly z = 0 (Bambu merges objects otherwise).
+    bambu_app: tag the file as written by Bambu Studio; its importer only reads plate assignments from
+    model_settings.config for such files (Paul's test: an untagged file opened as one plate)."""
     import math
     n = len(plates)
     v = math.sqrt(n)
@@ -295,6 +297,8 @@ def write_3mf_plates(plates: list, path: Path, bed=BED):
     model = ('<?xml version="1.0" encoding="UTF-8"?>\n'
              '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
              '<metadata name="Title">LyricFlash print pack</metadata>'
+             + ('<metadata name="Application">BambuStudio-01.10.00.00</metadata>'
+                '<metadata name="BambuStudio:3mfVersion">1</metadata>' if bambu_app else '') +
              f'<resources>{"".join(objs)}</resources><build>{"".join(items)}</build></model>')
     config = '<?xml version="1.0" encoding="UTF-8"?>\n<config>\n' + "\n".join(cfg_plate + cfg_obj) + '\n</config>\n'
     ct = ('<?xml version="1.0" encoding="UTF-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
