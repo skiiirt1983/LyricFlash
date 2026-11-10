@@ -774,7 +774,10 @@ def latch_features(b, top, zb):
         bs = _poly_solid(boss, -E_ / 2 - side, E_ / 2 + side).moved(loc).intersect(below).intersect(base_body(zb))
         # 45 deg underside, over its full width: the battery roof alone left the boss's end past the battery
         # edge running to the floor as a thin leaning spike (Paul's slicer view)
-        if wall in ("y-", "y+"):                       # front/back wall: over the battery, 45 deg front-to-back roof
+        over_cell = bs.intersect(_box(battery_box()[0][:2] + (0,), battery_box()[1][:2] + (200,))).Volume() > 1e-3
+        if P.BATTERY_ON_EDGE and not over_cell:        # v9: nothing under it (the standing cell is elsewhere)
+            bs = bs.cut(_battery_keepout())
+        elif wall in ("y-", "y+"):                     # front/back wall: over the battery, 45 deg front-to-back roof
             bs = bs.cut(battery_cut45()).cut(battery_roof_y())
         elif not P.SPEAKER:                           # v9: side wall with nothing under it
             bs = bs.cut(_battery_keepout())
