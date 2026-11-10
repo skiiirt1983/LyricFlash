@@ -9,7 +9,6 @@ black PETG**. If the parts don't all fit on one plate, Bambu Studio puts the ext
 | `top_shell` | gold (1) | face-down: the top face (with the screen ring) on the plate |
 | `base` | black PETG (2) | floor down |
 | `clip_front`, `clip_back` | black PETG (2), springy | flat |
-| `cable_clip` | black PETG (2), springy | as installed (U-channel facing up) |
 
 **Settings:** 0.2 mm layers, 4 walls, 15 % gyroid, 0.4 mm nozzle.
 - **Base: supports OFF.** Nothing inside hangs over the battery any more (v3).
@@ -45,8 +44,8 @@ the centre of gravity (tips at 54.3°, PLAN asks for > 30°).
    **Snap the latches by squeezing the base and the gold shell together at the two latch spots (back wall,
    right of the middle, and the right wall's front corner).** Don't push on the middle of the base: the board is already clamped and
    the snap force should go clip-to-shell, not through the screen.
-6. **Cable clip:** drop it onto the rail on the left face, below the USB-C recess, until it sits on the
-   stop. Press the cable into the U from above; it lifts out the same way.
+6. **Cable:** press the cable down into the clip moulded on the left wall, below the USB-C recess. It lifts out
+   the same way. There's nothing to fit.
 
 **Opening:** case face-down on the cloth, pull the base's right end up to unsnap both latches, then swing it
 off about the USB-C.

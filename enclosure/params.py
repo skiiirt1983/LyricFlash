@@ -514,7 +514,7 @@ CABLE_CLIP_H = 8.0                   # clip height
 CABLE_CLIP_LEN = 14.0                # clip length along the cable
 CABLE_CLIP_FIT = 0.25                # clip on the rail, per side (slides on by hand)
 CABLE_CLIP_WALL = 1.6
-CABLE_CLIP_MOUTH = 0.85              # channel opening, fraction of the cable OD: jaws open ~0.29 each (~1.9 % strain, PETG)
+CABLE_CLIP_MOUTH = 0.92              # v6.3: one jaw flexes now; 3.5 mouth for a 3.8 cable = 0.3 mm (~2 % strain, PETG)
 TOP_EDGE_CHAMFER = 1.5               # top shell, outer top edge (bed side when printed face-down: 45 deg prints, a fillet wouldn't)
 BOTTOM_EDGE_CHAMFER = 1.0            # base, outer bottom edge (bed side; also eats elephant's foot)
 
@@ -559,3 +559,10 @@ PANEL_W = 13.0                       # target panel width along a side
 PANEL_GROOVE = 1.2                   # groove between panels
 PANEL_PROUD = 0.8                    # panels stand this far off the wall (45 deg edges)
 PANEL_Z0 = 1.2                       # panels start just above the bottom chamfer
+
+# ---- v6.3 (Paul): cable clip built into the base (no separate part, no rail)
+CABLE_CLIP_WALL_GAP = 0.0            # channel edge at the wall face (then cut 0.35 into it)
+CABLE_CLIP_ZC = 5.0                  # cable centre height above the desk
+CABLE_CLIP_JAW_T = 1.2               # outer jaw (the only part that flexes)
+CABLE_CLIP_TOP_ABOVE = 0.4           # block top above the channel
+CABLE_CLIP_CLEAR = 1.5               # plain border round the clip in the texture

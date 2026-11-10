@@ -100,7 +100,6 @@ def print_rotations(info):
     rots["pwr_pin"] = np.array([s_w, np.cross(l_w, s_w), l_w])
     for name, S, n, a_, t_, *_ in E._clip_frames(zb):
         rots[f"clip_{name}"] = np.array([n, a_, t_])                  # clip profile flat on the plate
-    rots["cable_clip"] = np.eye(3)                                    # printed as installed
     out = {}
     for k, R in rots.items():                                         # exact rotations (OCC rejects 1e-9 skew)
         u, _, vt = np.linalg.svd(np.asarray(R, float))
@@ -262,7 +261,7 @@ def report(parts, info, chk, lay, cg, sim_rows):
           "| Part | Orientation | Result |", "|---|---|---|"]
     orient = {"top_shell": "face-down (top face on the plate)", "base": "floor down", "pwr_pin": "on its flat side",
               "clip_front": "flat (profile on the plate)", "clip_back": "flat (profile on the plate)",
-              "cable_clip": "as installed"}
+              }
     for k, iss in lay.items():
         bad = [i for i in iss if i[1] in ("FLOATING", "LONG BRIDGE")]
         L.append(f"| {k} | {orient[k]} | {'clean' if not bad else f'{len(bad)} flagged layers (see below)'} |")

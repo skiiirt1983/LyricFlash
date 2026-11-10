@@ -1,6 +1,6 @@
 # Phase 2 report: full case v5 (20 deg, layout B, no button access)
 
-Tilt 20 deg, board centre 32.9 mm above the desk. Parts: top_shell, base, cable_clip, clip_front, clip_back.
+Tilt 20 deg, board centre 32.9 mm above the desk. Parts: top_shell, base, clip_front, clip_back.
 
 ## Interference against the STEP board (boolean volume)
 
@@ -8,7 +8,6 @@ Tilt 20 deg, board centre 32.9 mm above the desk. Parts: top_shell, base, cable_
 |---|---|---|---|
 | top_shell | 1 | True | none |
 | base | 1 | True | battery_envelope 9.94 mm3, speaker_envelope 2.328 mm3 (speaker: the grip ribs, 0.15 mm by design, as C8) (battery: the case's rounded inner corners trim the pocket's 1 mm clearance at its four extreme corners by <= 0.5 mm; the 56 mm cell keeps >= 0.5 mm) |
-| cable_clip | 1 | True | none |
 | clip_front | 1 | True | none |
 | clip_back | 1 | True | none |
 
@@ -26,7 +25,6 @@ Part against part: none overlap.
 | top_shell | face-down (top face on the plate) | 2 flagged layers (see below) |
 | clip_front | flat (profile on the plate) | clean |
 | clip_back | flat (profile on the plate) | clean |
-| cable_clip | as installed | clean |
 
 Base: **no supports needed**. What the check still flags, all small:
 
@@ -39,7 +37,7 @@ Top shell: the latch catch ledges (0.9 deep) are anchored on the outer wall and 
 
 ## Centre of gravity and tipping
 
-Total 89.6 g (board 20 g and battery 38 g are estimates). CG at X -0.13, Y 1.21, Z 18.3 mm. Smallest tipping angle **54.4 deg** (towards 0 deg; PLAN asks > 30).
+Total 89.6 g (board 20 g and battery 38 g are estimates). CG at X -0.11, Y 1.21, Z 18.3 mm. Smallest tipping angle **54.1 deg** (towards 180 deg; PLAN asks > 30).
 
 ## Key numbers
 

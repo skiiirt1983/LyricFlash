@@ -1,5 +1,13 @@
 # Enclosure changelog
 
+## Phase 2 v6.3 (2026-11-10)
+- Paul: cable clip built into the base (matte PETG sliding joints bind and break; separate parts were never
+  wanted for colour). U-channel along Y on the left wall at desk height, opening up; the wall is its inner
+  side, only the 1.2 mm outer jaw flexes (mouth 0.92 x OD = 3.5 for a 3.8 cable, ~2 % strain). Sticks out
+  4.95 mm (was ~11 with rail + clip). 1.5 mm plain border round it, texture resumes above on a 45 deg slope.
+  Rail, stop and the separate clip part removed. Wall behind the channel 1.65 mm. Checks: board none, swing
+  PASS, no new layer flags on either base.
+
 ## Phase 2 v6.2 (2026-11-10)
 - Paul: less blank round the USB-C side. Ribs (and panels) now run right up to the USB-C recess and the cable
   rail. The rail runs from the stop up to the recess floor; it stands 2.5 off the wall so the clip sits 1.3

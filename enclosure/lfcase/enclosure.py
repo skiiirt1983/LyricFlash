@@ -777,15 +777,15 @@ def build_all(zb=None, log=print):
     log("switch"); b, sw = switch_features(b, zb)
     if P.BUTTON_ACCESS:
         log("BOOT pinhole"); b, boot = boot_features(b, zb)
-    log("cable rail"); b = cable_rail_features(b, zb)
     tex = getattr(P, "TEXTURE", "ribs" if P.RIBS else None)
     if tex == "ribs":
         log("ribs"); b = rib_texture(b, zb)
     elif tex == "panels":
         log("panels"); b = panel_texture(b, zb)
+    log("cable clip (built in)"); b = cable_clip_features(b, zb)
     log("top shell"); top = top_shell(zb)
     log("latches"); b, top, lat = latch_features(b, top, zb)
-    parts = {"top_shell": top, "base": b, "cable_clip": cable_clip(zb)}
+    parts = {"top_shell": top, "base": b}
     if P.BUTTON_ACCESS:
         parts["pwr_pin"] = pwr_pin(zb)
     parts.update(latch_clips(zb))
@@ -889,60 +889,44 @@ def _usb_recess(zb):
     return _box((x0 - 6, pc[1] - hw, zbot), (P.BOARD_X + g["face_x"] + 0.01, pc[1] + hw, 200)), zbot
 
 
-def _clip_back_gap():
-    """Clip back face off the wall: clears the texture's relief by 0.3 as it slides down."""
-    return max(P.RIB_PROUD, P.PANEL_PROUD) + 0.3          # one clip fits both textured bases
-
-
-def _rail_slide_path(zb):
-    """The space the clip's dovetail slot sweeps on its way down the rail (texture is cut away here)."""
+def _clip_dims():
+    """Built-in cable clip (v6.3, Paul): U-channel along Y on the left wall at desk height, open upward; the
+    wall is its inner side, only the outer jaw flexes. Returns the key world coordinates."""
     x0 = footprint()[0]
-    c, pr, wb = P.CABLE_CLIP_FIT, P.CABLE_RAIL_PROUD, P.CABLE_RAIL_W
-    sl = [(0.5, -wb / 2 - c - 0.3), (-pr - c - 0.3, -wb / 2 - pr - c - 0.3), (-pr - c - 0.3, wb / 2 + pr + c + 0.3), (0.5, wb / 2 + c + 0.3)]
-    w = cq.Wire.makePolygon([cq.Vector(x0 + x, P.CABLE_RAIL_YC + y, -1) for x, y in sl], close=True)
-    return cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, 0, 250))
-
-
-def cable_rail_features(b, zb):
-    """Vertical dovetail on the left face from the stop up to the USB-C recess floor (prints standing: no
-    overhangs) + a stop at the bottom. The clip drops onto it from above (through the recess) and rests on
-    the stop; it stands off the wall so it clears the texture on the way down."""
-    x0 = footprint()[0]
-    yc = P.CABLE_RAIL_YC
-    _, zbot = _usb_recess(zb)
-    z0, z1 = P.CABLE_STOP_H, zbot
-    w = cq.Wire.makePolygon([cq.Vector(x0 + x, yc + y, z0 - 0.01) for x, y in _rail_xy()], close=True)
-    rail = cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, 0, z1 - z0 + 0.01))
-    hw = P.CABLE_RAIL_W / 2 + P.CABLE_RAIL_PROUD + P.CABLE_CLIP_FIT + 0.8
-    stop = _box((x0 - P.CABLE_RAIL_PROUD - P.CABLE_CLIP_FIT - 0.8, yc - hw, 0), (x0 + 1.0, yc + hw, z0))
-    return A.solidify(b.fuse(rail).fuse(stop.intersect(_box((x0 - 20, -100, 0), (x0 + 1.0, 100, 50)))))
-
-
-def cable_clip(zb):
-    """Separate part, printed as installed (Z up): dovetail slot (through, vertical) + a U-channel for the
-    cable running along Y, open at the top so the cable presses in and lifts out by hand. Plain faces (Paul)."""
-    x0 = footprint()[0]
-    yc = P.CABLE_RAIL_YC
-    c, pr, wb = P.CABLE_CLIP_FIT, P.CABLE_RAIL_PROUD, P.CABLE_RAIL_W
-    t = P.CABLE_CLIP_WALL
-    z0, H = P.CABLE_STOP_H, P.CABLE_CLIP_H
     r = P.CABLE_OD / 2 + 0.15
-    L = P.CABLE_CLIP_LEN
-    back = -pr - c - t                                       # back plate outer face (X, from the wall face)
-    xc = back - r                                            # cable centre
-    zc = z0 + t + r
-    x_out = x0 + xc - r - t                                  # outer face
-    body = _box((x_out, yc - L / 2, z0), (x0 - _clip_back_gap(), yc + L / 2, z0 + H))
-    # dovetail slot through the full height
-    sl = [(0.5, -wb / 2 - c), (-pr - c, -wb / 2 - pr - c), (-pr - c, wb / 2 + pr + c), (0.5, wb / 2 + c)]
-    w = cq.Wire.makePolygon([cq.Vector(x0 + x, yc + y, z0 - 1) for x, y in sl], close=True)
-    body = body.cut(cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, 0, H + 2)))
-    # U channel along Y: cylinder + mouth slot to the top (mouth CABLE_CLIP_MOUTH x OD)
-    chan = cq.Solid.makeCylinder(r, L + 2, pnt=cq.Vector(x0 + xc, yc - L / 2 - 1, zc), dir=cq.Vector(0, 1, 0))
+    xc = x0 - P.CABLE_CLIP_WALL_GAP - r + 0.35          # channel cuts 0.35 into the wall face
+    zc = P.CABLE_CLIP_ZC
+    x_out = xc - r - P.CABLE_CLIP_JAW_T                # outer face
+    z_top = zc + r + P.CABLE_CLIP_TOP_ABOVE
+    L, yc = P.CABLE_CLIP_LEN, P.CABLE_RAIL_YC
+    return dict(x0=x0, r=r, xc=xc, zc=zc, x_out=x_out, z_top=z_top, L=L, yc=yc)
+
+
+def _clip_clear_zone(zb):
+    """Plain border round the clip (it should read as a clip): CABLE_CLIP_CLEAR each side and above, with a
+    45 deg top so the texture above it starts on a printable slope."""
+    d = _clip_dims()
+    m, x0 = P.CABLE_CLIP_CLEAR, d["x0"]
+    zt = d["z_top"] + m
+    pts = [(x0 + 1, -1), (x0 + 1, zt), (x0, zt), (x0 - 15, zt + 15), (x0 - 15, -1)]
+    w = cq.Wire.makePolygon([cq.Vector(x, d["yc"] - d["L"] / 2 - m, z) for x, z in pts], close=True)
+    return cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, d["L"] + 2 * m, 0))
+
+
+def cable_clip_features(b, zb):
+    """The clip block, printed with the base (stands up from the plate, no support): floor + outer jaw, the
+    wall behind is the inner side; mouth CABLE_CLIP_MOUTH x OD at the top, so the cable presses in from above
+    and lifts out by hand. No separate part, no sliding joint (Paul: matte PETG joints bind and break)."""
+    d = _clip_dims()
+    x0, r, xc, zc, L, yc = d["x0"], d["r"], d["xc"], d["zc"], d["L"], d["yc"]
+    blk = _box((d["x_out"], yc - L / 2, 0), (x0 + 0.5, yc + L / 2, d["z_top"]))
+    blk = blk.intersect(base_body(zb).fuse(_box((d["x_out"] - 1, yc - L, 0), (x0, yc + L, 100))))
+    chan = cq.Solid.makeCylinder(r, L + 2, pnt=cq.Vector(xc, yc - L / 2 - 1, zc), dir=cq.Vector(0, 1, 0))
     m = P.CABLE_CLIP_MOUTH * P.CABLE_OD
-    mouth = _box((x0 + xc - m / 2, yc - L / 2 - 1, zc), (x0 + xc + m / 2, yc + L / 2 + 1, z0 + H + 1))
-    clip = body.cut(chan).cut(mouth)
-    return A.solidify(clip)
+    # mouth: from the wall face out to the jaw lip, open to the top
+    mouth = _box((x0 - m, yc - L / 2 - 1, zc), (x0 + 0.36, yc + L / 2 + 1, d["z_top"] + 0.01))
+    b = b.fuse(blk).cut(chan).cut(mouth)
+    return A.solidify(b)
 
 
 # ------------------------------------------------------------------ outside texture (v6, Paul: ribbed / japandi)
@@ -968,7 +952,7 @@ def rib_texture(b, zb):
     rib = cq.Compound.makeCompound(ribs)
     recess, _ = _usb_recess(zb)
     rib = (rib.intersect(halfspace_bf(zb, P.SEAM_Z - P.RIB_TOP_BAND, above=False)).cut(outer_body(zb))
-           .cut(recess).cut(_rail_slide_path(zb)))
+           .cut(recess).cut(_clip_clear_zone(zb)))
     b = b.fuse(rib)
     if _GRILLE.get("holes"):
         b = b.cut(cq.Compound.makeCompound(_GRILLE["holes"]))
@@ -983,7 +967,7 @@ def panel_texture(b, zb):
     Rc, g, pr = P.CASE_CORNER_R, P.PANEL_GROOVE, P.PANEL_PROUD
     ch = pr                                           # 45 deg edges
     recess, _ = _usb_recess(zb)
-    keep_out = [recess, _rail_slide_path(zb)]
+    keep_out = [recess, _clip_clear_zone(zb)]
     band = halfspace_bf(zb, P.SEAM_Z - P.RIB_TOP_BAND, above=False)
 
     def seam_z(y):
