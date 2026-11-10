@@ -1,5 +1,12 @@
 # Enclosure changelog
 
+## Phase 2 v6.1 (2026-11-10)
+- Paul: an alternative base with raised panels (his second picture): `out/phase2/stl/base_panels.stl`.
+  Panels ~13 mm wide in two rows on the four flat sides, 0.8 proud, 45 deg edges, 1.2 mm grooves; rounded
+  corners plain; skips the USB-C recess and the cable rail (45 deg cut above it); grille drilled through.
+  Same top shell and small parts. Checks: board none, swing PASS, only the USB-C mouth flagged (painted).
+  TEXTURE = "ribs" | "panels" | None in params.py picks the base in the project 3MF (ribs by default).
+
 ## Phase 2 v6 (2026-11-10)
 - Paul: ribbed / japandi outside on the base (BumpMesh gave poor results). Modelled, not a texture: vertical
   half-round flutes R1.5, 1.0 proud, 3.0 pitch, following the rounded corners, from the desk to a 1.5 mm

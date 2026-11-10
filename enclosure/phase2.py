@@ -301,8 +301,25 @@ def main():
     sections(parts, info)
     export(parts, info)
     report(parts, info, chk, lay, cg, sim_rows)
+    # alternative outside (v6): panel base, base STL only (same top shell and small parts)
+    import params as P
+    keep = P.TEXTURE
+    variant("panels", "base_panels")
+    P.TEXTURE = keep
     print((OUT / "report.md").read_text())
 
 
 if __name__ == "__main__":
     main()
+
+
+def variant(texture, name):
+    """Build the base with another outside texture and write just its STL (print orientation)."""
+    import params as P
+    from lfcase.export import write_stl
+    P.TEXTURE = texture
+    parts, info = E.build_all(log=lambda m: None)
+    b = parts["base"]
+    bb = b.BoundingBox()
+    write_stl(b.moved(__import__("cadquery").Location(__import__("cadquery").Vector(0, 0, -bb.zmin))), OUT / "stl" / f"{name}.stl")
+    return parts, info

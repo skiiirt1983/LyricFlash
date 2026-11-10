@@ -552,3 +552,10 @@ RIB_R = 1.5                          # flute radius
 RIB_PROUD = 1.0                      # how far each flute stands off the wall face
 RIB_PITCH = 3.0                      # flute spacing along the perimeter (leaves a small groove between them)
 RIB_TOP_BAND = 1.5                   # plain band under the gold top shell (board-frame mm below the seam)
+
+# ---- v6 alternative outside: raised panels (Paul's second picture). TEXTURE: "ribs", "panels" or None
+TEXTURE = "ribs"
+PANEL_W = 13.0                       # target panel width along a side
+PANEL_GROOVE = 1.2                   # groove between panels
+PANEL_PROUD = 0.8                    # panels stand this far off the wall (45 deg edges)
+PANEL_Z0 = 1.2                       # panels start just above the bottom chamfer

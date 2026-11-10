@@ -778,8 +778,11 @@ def build_all(zb=None, log=print):
     if P.BUTTON_ACCESS:
         log("BOOT pinhole"); b, boot = boot_features(b, zb)
     log("cable rail"); b = cable_rail_features(b, zb)
-    if P.RIBS:
+    tex = getattr(P, "TEXTURE", "ribs" if P.RIBS else None)
+    if tex == "ribs":
         log("ribs"); b = rib_texture(b, zb)
+    elif tex == "panels":
+        log("panels"); b = panel_texture(b, zb)
     log("top shell"); top = top_shell(zb)
     log("latches"); b, top, lat = latch_features(b, top, zb)
     parts = {"top_shell": top, "base": b, "cable_clip": cable_clip(zb)}
@@ -960,6 +963,64 @@ def rib_texture(b, zb):
     rib = cq.Compound.makeCompound(ribs)
     rib = rib.intersect(halfspace_bf(zb, P.SEAM_Z - P.RIB_TOP_BAND, above=False)).cut(outer_body(zb))
     b = b.fuse(rib)
+    if _GRILLE.get("holes"):
+        b = b.cut(cq.Compound.makeCompound(_GRILLE["holes"]))
+    return A.solidify(b)
+
+
+def panel_texture(b, zb):
+    """Alternative outside (v6, Paul's picture): raised rectangular panels with 45 deg chamfered edges, split
+    into columns (~PANEL_W) and two rows by PANEL_GROOVE grooves, on the four flat sides; rounded corners stay
+    plain. Skips the USB-C recess and the cable rail; the speaker grille is drilled through."""
+    x0, x1, y0, y1 = footprint()
+    Rc, g, pr = P.CASE_CORNER_R, P.PANEL_GROOVE, P.PANEL_PROUD
+    ch = pr                                           # 45 deg edges
+    gu = A.usb_geometry()
+    pc = bf_point_to_wf((P.USB_MOUTH_X, gu["yc"], gu["zc"]), zb)
+    keep_out = [
+        _box((x0 - 5, pc[1] - P.PORT_BAY_HALF_W - P.CASE_WALL - 0.5, pc[2] - P.PORT_BAY_BELOW - 3.5), (x0 + 1, pc[1] + P.PORT_BAY_HALF_W + P.CASE_WALL + 0.5, 200)),
+    ]
+    # cable rail: cut with a 45 deg top (panels above it grow out of the wall instead of starting in mid-air)
+    rz = P.CABLE_STOP_H + P.CABLE_CLIP_H + 1
+    ya, yb_ = P.CABLE_RAIL_YC - P.CABLE_CLIP_LEN / 2 - 0.5, P.CABLE_RAIL_YC + P.CABLE_CLIP_LEN / 2 + 0.5
+    wv = cq.Wire.makePolygon([cq.Vector(x, ya, z) for x, z in ((x0 + 1, -1), (x0 + 1, rz), (x0, rz), (x0 - 15, rz + 15), (x0 - 15, -1))], close=True)
+    keep_out.append(cq.Solid.extrudeLinear(cq.Face.makeFromWires(wv), cq.Vector(0, yb_ - ya, 0)))
+    band = halfspace_bf(zb, P.SEAM_Z - P.RIB_TOP_BAND, above=False)
+
+    def seam_z(y):
+        by = (y + P.SEAM_Z * math.sin(T)) / math.cos(T)
+        return zb + by * math.sin(T) + (P.SEAM_Z - P.RIB_TOP_BAND) * math.cos(T)
+
+    # faces: (origin of the flat stretch, along-vector, outward normal, length)
+    faces = [((x0 + Rc, y0, 0), (1, 0, 0), (0, -1, 0), x1 - x0 - 2 * Rc),    # front
+             ((x0 + Rc, y1, 0), (1, 0, 0), (0, 1, 0), x1 - x0 - 2 * Rc),     # back
+             ((x0, y0 + Rc, 0), (0, 1, 0), (-1, 0, 0), y1 - y0 - 2 * Rc),    # left
+             ((x1, y0 + Rc, 0), (0, 1, 0), (1, 0, 0), y1 - y0 - 2 * Rc)]     # right
+    panels = []
+    z_lo = P.PANEL_Z0
+    for o, u, nrm, Lf in faces:
+        o, u, nrm = np.array(o, float), np.array(u, float), np.array(nrm, float)
+        n_col = max(1, int(round((Lf - g) / (P.PANEL_W + g))))
+        w = (Lf - g) / n_col - g
+        # row split at half the lowest top along this face
+        zt_min = min(seam_z(o[1] + u[1] * s_) for s_ in np.linspace(0, Lf, 7))
+        z_mid = z_lo + (zt_min - z_lo) / 2
+        rows = ((z_lo, z_mid - g / 2), (z_mid + g / 2, 200.0))
+        for i in range(n_col):
+            s0 = g + i * (w + g)
+            for za, zb_ in rows:
+                h = zb_ - za
+                # frustum: w x h on the wall, (w-2ch) x (h-2ch) at `pr` proud
+                loc_pl = cq.Plane(origin=cq.Vector(*(o + u * (s0 + w / 2) + np.array([0, 0, za + h / 2]))),
+                                  xDir=cq.Vector(*u), normal=cq.Vector(*nrm))
+                fr = (cq.Workplane(loc_pl).workplane(offset=-0.3).rect(w, h).workplane(offset=0.3).rect(w, h)
+                      .workplane(offset=pr).rect(w - 2 * ch, h - 2 * ch).loft(ruled=True).val())
+                panels.append(fr)
+    pan = cq.Compound.makeCompound(panels).intersect(band).intersect(_box((-200, -200, 0), (200, 200, 300)))
+    for k in keep_out:
+        pan = pan.cut(k)
+    pan = pan.cut(outer_body(zb))
+    b = b.fuse(pan)
     if _GRILLE.get("holes"):
         b = b.cut(cq.Compound.makeCompound(_GRILLE["holes"]))
     return A.solidify(b)
