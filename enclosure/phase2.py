@@ -101,7 +101,7 @@ def render(parts, info, prefix="case"):
         s.add(disp, (0.03, 0.03, 0.04))
         for k, v in parts.items():
             s.add(v, col.get(k, ACCENT if k != "cable_clip" else GOLD))
-        s.camera(cam, target=(4, 0, 16), zoom=1.15)
+        s.camera(cam, target=(0, 0, info['zb'] * 0.6), zoom=0.85)          # v9: taller case
         save_labelled(s, str(OUT / f"{prefix}_{name}.png"), title=title)
 
 
@@ -234,11 +234,15 @@ def sections(parts, info):
     board = {k: E.to_wf(g[k], zb) for k in ("pcb", "display", "pmma_frame", "usb_c", "mic1", "mic2", "key2", "key1")}
     col = {"top_shell": GOLD, "base": (0.32, 0.32, 0.36)}
     name, S0, n, a, t, *_ = [f for f in E._clip_frames(zb) if f[0] == "front"][0]
+    (bx0_, _, _), (bx1_, _, _) = E.battery_box()
+    bxc = (bx0_ + bx1_) / 2
     cuts = [
         ("usb", ((-20.0, 0.33, 20.0), (0.0, -1.0, 0.0)), ((0, 1, 0), (0, 0, 1)), (-24, 0.3, 21), 3.2,
          "Section through the USB-C port (Y = port centre)"),
-        ("battery", ((0.0, 0.0, 10.0), (-1.0, 0.0, 0.0)), ((1, 0, 0), (0, 0, 1)), (0, 0, 16), 1.3,
-         "Section through the battery (X = 0)"),
+        ("battery", ((bxc, 0.0, 10.0), (-1.0, 0.0, 0.0)), ((1, 0, 0), (0, 0, 1)), (bxc, 0, zb * 0.6), 0.9,
+         f"Section through the battery (X = {bxc:.1f}), side view"),
+        ("front", ((0.0, 0.0, 10.0), (0.0, 1.0, 0.0)), ((0, -1, 0), (0, 0, 1)), (0, 0, zb * 0.6), 0.9,
+         "Section front-to-back middle (Y = 0): standing battery on the right, board above"),
         ("latch", (tuple(S0), tuple(-t)), (tuple(t), tuple(a)), tuple(S0 - 2 * a + 2 * n), 4.5,
          "Section through the front latch clip"),
     ]
@@ -320,7 +324,8 @@ def report(parts, info, chk, lay, cg, sim_rows):
           (f"- Speaker: {info['speaker']['holes']} x D{P.SPK_GRILLE_HOLE_D} grille holes (teardrop) in the right wall."
            if info.get("speaker") else "- Speaker: none (Paul, v9). The battery stands on its edge along the right wall."),
           f"- Switch: C4 K3 pocket in the floor at {info['switch']['centre']}.",
-          f"- Latches: 2 PETG clips (C7 v5 notch 1: hook {P.LATCH_HOOK}, {P.LATCH_CATCH_DEG:g} deg) at X {P.LATCH_CLIP_X}, front and back.",
+          f"- Latches: 2 identical PETG clips (C7 v5 notch 1: hook {P.LATCH_HOOK}, {P.LATCH_CATCH_DEG:g} deg): "
+          + "; ".join(f"{c[0]} on wall {c[1]} at {c[2]:g}, {c[3]:g} mm wide" for c in P.LATCH_CLIPS) + ".",
           ""]
     (OUT / "report.md").write_text("\n".join(L) + "\n")
 

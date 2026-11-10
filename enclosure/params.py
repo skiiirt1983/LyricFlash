@@ -597,4 +597,5 @@ BATTERY_STAND_T = 11.3               # pocket width for the 10.3 mm cell (+1); i
 BATTERY_STAND_WALL_H = 16.0          # side wall that keeps the standing cell upright
 SPEAKER = False                      # v9 (Paul): speaker removed; the cell stands where it was
 BOARD_Z_EXTRA = 0.0                  # v9: ledges no longer sit over the battery (the 2.5 was for the wedge ledges)
-LATCH_CLIPS = (("front", "x-", -22.0, 6.0, 0.8), ("back", "y+", -4.0, 6.0, 1.6))   # v9: both off the cell's column
+LATCH_CLIPS = (("front", "y-", -15.0, 6.0, 0.8), ("back", "y+", -4.0, 6.0, 1.6))   # v9: both off the cell's column,
+# both on front/back walls well clear of the USB-C hinge line, so the swing moves them straight down onto the catch

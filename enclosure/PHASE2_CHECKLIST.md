@@ -1,4 +1,4 @@
-# Phase 2: full case v5 (20° tilt, no button access), print and check
+# Phase 2: full case v9 (20° tilt, battery standing, no speaker), print and check
 
 One file: `out/phase2/lyricflash_case_project.3mf`. Everything is flat on the plate, fitted together in
 the **Assembly view**, and pre-assigned to a filament: **slot 1 = Iridium Gold PLA Metal**, **slot 2 =
@@ -18,38 +18,38 @@ black PETG**. If the parts don't all fit on one plate, Bambu Studio puts the ext
   printing and check the bare board's USB-C socket slides into the opening freely before assembly.
 
 `out/phase2/report.md` has every check: board interference (none), the tilt-in swing (PASS), the layer check,
-the centre of gravity (tips at 54.3°, PLAN asks for > 30°).
+the battery drop path (PASS), the centre of gravity (tips at 33.0°, PLAN asks for > 30°).
 
 ## Before assembly
 - Check the USB-C opening and both mic holes (Ø2.0, inside the USB-C recess, either side of the port) are clear.
 - There is no access to the PWR or BOOT buttons (v5, Paul: not used). The board powers up from USB or the
   battery; the underside switch is the off switch. To flash in recovery mode, open the case.
 - **Switch (optional):** solder the SS-12D00 into the battery's red lead first. Slide it into the floor
-  pocket at the back-right (behind the speaker) from the battery side, knob down through the slot. Nothing is pressed in: it slides
-  sideways and the end lips hold it, as on C4.
+  pocket at the back, just left of the battery's slot, from the battery side, knob down through the slot.
+  Nothing is pressed in: it slides sideways and the end lips hold it, as on C4. The pocket is 0.2 mm roomier
+  than v8 all round (Paul: the body wouldn't go in).
 
 ## Assembly (no pressing on the screen, ever)
-1. **Battery:** lay it flat in its pocket, long side front-to-back, leads at the back-left corner, over
-   the low wall on its left. Its right side closes the switch pocket.
-2. **Latch clips (before the speaker):** slide each clip sideways into its channel, hook facing the outer wall, beam pointing up. The 6 mm clip
-   goes on the back wall; the 4 mm clip on the right wall's front corner, sliding in from the speaker side
-   (that's why it goes in first). No force: 0.25 mm per side.
-3. **Speaker:** slide it down into the pocket against the right wall, cone toward the grille, leads at the
-   back end and up through the slot. The side ribs hold it, as on C8.
-4. **Board:** put a soft cloth on the table, put the gold top shell face-down on it, and drop the board in
-   glass-first. The glass rests on the lip. Plug in the battery (J1) and the speaker (H3).
-5. **Base:** hold it upside down over the board. Hook the USB-C opening over the board's USB-C receptacle
+1. **Latch clips:** slide each 6 mm clip sideways into its channel, hook facing the outer wall, beam pointing
+   up. Both clips are the same part. One goes on the back wall left of the middle, the other on the front
+   wall's left part. No force: 0.25 mm per side.
+2. **Battery:** stand it on its thin edge and lower it straight down into the slot along the right wall, leads
+   at the back end and at the top. Nothing is over the slot, so it goes in without tilting. It has 0.5 mm of air
+   at each side and 1 mm at each end. Its left side closes the switch pocket.
+3. **Board:** put a soft cloth on the table, put the gold top shell face-down on it, and drop the board in
+   glass-first. The glass rests on the lip. Plug in the battery (J1). There is no speaker any more (v9).
+4. **Base:** hold it upside down over the board. Hook the USB-C opening over the board's USB-C receptacle
    first (left side), then swing the right side down. It should come down on its own weight until the
    latches touch, with nothing rubbing on the way (the simulation keeps 0.2 mm of air everywhere else).
    **Snap the latches by squeezing the base and the gold shell together at the two latch spots (back wall,
-   right of the middle, and the right wall's front corner).** Don't push on the middle of the base: the board is already clamped and
-   the snap force should go clip-to-shell, not through the screen.
-6. **Cable:** take the cable round to the back and give it one turn round the cleat at the bottom of the back
+   left of the middle, and the front wall's left part).** Don't push on the middle of the base: the board is
+   already clamped, and the snap force should go clip-to-shell, not through the screen.
+5. **Cable:** take the cable round to the back and give it one turn round the cleat at the bottom of the back
    wall (under one horn, over the other). A tug on the cable is then taken by the cleat, not the USB-C plug.
    Bases without the cleat: nothing to do.
 
 **Opening:** case face-down on the cloth, pull the base's right end up to unsnap both latches, then swing it
-off about the USB-C.
+off about the USB-C. Lift the battery straight out.
 
 ## Check and report
 | | Check | Report |
@@ -60,7 +60,7 @@ off about the USB-C.
 | 4 | USB-C opening top edge printed clean | clean / droops |
 | 5 | Plug a cable in 20 times while holding the case | board moves (no / yes), latches hold |
 | 6 | Mics: play a song from ~1 m, LyricFlash identifies it as reliably as with the bare board | same / worse / much worse |
-| 7 | Speaker at higher volume | buzz or rattle (yes / no) |
+| 7 | Battery goes in and comes out by hand, no forcing; doesn't rattle when closed | OK / tight where / rattles |
 | 8 | Switch: slides end to end, knob below the bottom face, cuts power | OK / rubs / sticks out |
 | 9 | Cable cleat: one turn holds; a light tug from any side doesn't pull on the plug, slide or tip the case | OK / slips / too fiddly |
 | 10 | Face-down on the table: the glass doesn't touch | OK / touches |

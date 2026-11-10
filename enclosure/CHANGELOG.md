@@ -1,5 +1,26 @@
 # Enclosure changelog
 
+## Phase 2 v9 (2026-11-10)
+- Paul: the flat battery couldn't get past the board ledges. The two front ledges and the back one hung over
+  its ends, and the old checks never tested the battery's way in (my miss). The board's underside leaves no
+  other place to support its front, so the ledges stay where they are and the battery moves:
+  - **The cell stands on its thin edge along the right wall** (pocket 11.3 x 58 x 36.5, side wall 16 mm). That
+    column is clear of every ledge, the latch bosses and the USB-C insert, so it drops straight in.
+  - **Speaker removed** (Paul): no pocket, divider, ribs or grille; the right wall is plain.
+  - **Base taller**: the board sits above the standing cell. The case is 44.5 mm at the front and 67.4 at the
+    back (was 29.9 / 52.7), so the base front is about 42 mm, as Paul asked. Footprint unchanged, 52.9 x 62.8.
+    BOARD_Z_EXTRA is now 0, because the ledges no longer sit over the battery.
+- Both latch clips are the same 6 mm part (the front one was 4 mm). The front clip moved to the front wall at X -15
+  and the back clip to X -4. Both are off the cell's column and both are well away from the USB-C hinge line, so
+  the swing brings them straight down onto their catches.
+- Switch pocket +0.2 mm all round (9.7 x 4.7) and +0.2 mm height clearance: the body wouldn't slide in (Paul).
+  It now sits left of the cell at the back, still open toward the battery, which keeps it in.
+- New check, every build: the battery drop path. The real 10.3 x 56 x 34.5 cell is lowered straight into its
+  pocket: centred with 0.2 mm air, and against either pocket side. PASS.
+- Checks: interference none (board, parts); swing PASS; drop path PASS; base layer check shows only the USB-C
+  mouth's top edge (painted support, as before); top shell 3 short latch-pocket roof spots, the same kind as
+  before; tips at 33.0 deg (PLAN > 30; was 53.8, because the case is taller).
+
 ## Phase 2 v8 (2026-11-10)
 - Paul: the side cable catch didn't really work (a pull along the cable just slides through). Replaced by a
   cable cleat on the back, low near the desk: a 6 mm stem standing on the plate, horns 24 mm across with
