@@ -7,7 +7,7 @@ Tilt 20 deg, board centre 32.9 mm above the desk. Parts: top_shell, base, cable_
 | Part | Solids | Valid | Overlaps |
 |---|---|---|---|
 | top_shell | 1 | True | none |
-| base | 1 | True | battery_envelope 9.692 mm3, speaker_envelope 4.656 mm3 (speaker: the grip ribs, 0.15 mm by design, as C8) (battery: the case's rounded inner corners trim the pocket's 1 mm clearance at its four extreme corners by <= 0.5 mm; the 56 mm cell keeps >= 0.5 mm) |
+| base | 1 | True | battery_envelope 9.94 mm3, speaker_envelope 2.328 mm3 (speaker: the grip ribs, 0.15 mm by design, as C8) (battery: the case's rounded inner corners trim the pocket's 1 mm clearance at its four extreme corners by <= 0.5 mm; the 56 mm cell keeps >= 0.5 mm) |
 | cable_clip | 1 | True | none |
 | clip_front | 1 | True | none |
 | clip_back | 1 | True | none |
@@ -22,7 +22,7 @@ Part against part: none overlap.
 
 | Part | Orientation | Result |
 |---|---|---|
-| base | floor down | 19 flagged layers (see below) |
+| base | floor down | 18 flagged layers (see below) |
 | top_shell | face-down (top face on the plate) | 5 flagged layers (see below) |
 | clip_front | flat (profile on the plate) | clean |
 | clip_back | flat (profile on the plate) | clean |
@@ -39,7 +39,7 @@ Top shell: the latch catch ledges (0.9 deep) are anchored on the outer wall and 
 
 ## Centre of gravity and tipping
 
-Total 85.8 g (board 20 g and battery 38 g are estimates). CG at X -0.13, Y 0.95, Z 18.34 mm. Smallest tipping angle **54.3 deg** (towards 0 deg; PLAN asks > 30).
+Total 85.8 g (board 20 g and battery 38 g are estimates). CG at X -0.14, Y 0.96, Z 18.33 mm. Smallest tipping angle **54.4 deg** (towards 0 deg; PLAN asks > 30).
 
 ## Key numbers
 

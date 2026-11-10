@@ -14,11 +14,12 @@ black PETG**. If the parts don't all fit on one plate, Bambu Studio puts the ext
 **Settings:** 0.2 mm layers, 4 walls, 15 % gyroid, 0.4 mm nozzle.
 - **Base: supports OFF.** Nothing inside hangs over the battery any more (v3).
 - **Top shell, pin, clips, cable clip: supports OFF.**
-- **USB-C opening:** with the 12° tilt, its top edge prints as a sloped ceiling, not a flat bridge. Print once
-  without support. If the top edge of the opening droops, paint a support enforcer inside the opening only.
+- **USB-C opening:** with the tilt, its top edge prints as a sloped ceiling. **Paint a support enforcer on
+  the opening's top edge** (that clears Bambu's floating-region warning). Clean the support out fully after
+  printing and check the bare board's USB-C socket slides into the opening freely before assembly.
 
 `out/phase2/report.md` has every check: board interference (none), the tilt-in swing (PASS), the layer check,
-the centre of gravity (tips at 54.3°, PLAN asks for > 30°).
+the centre of gravity (tips at 54.4°, PLAN asks for > 30°).
 
 ## Before assembly
 - Check the USB-C opening and both mic holes (Ø2.0, inside the USB-C recess, either side of the port) are clear.
@@ -29,8 +30,8 @@ the centre of gravity (tips at 54.3°, PLAN asks for > 30°).
   sideways and the end lips hold it, as on C4.
 
 ## Assembly (no pressing on the screen, ever)
-1. **Battery:** lay it flat in its pocket, long side front-to-back, leads at the back-left corner, out
-   through the gap in the low wall on its left. Its right side closes the switch pocket.
+1. **Battery:** lay it flat in its pocket, long side front-to-back, leads at the back-left corner, over
+   the low wall on its left. Its right side closes the switch pocket.
 2. **Speaker:** slide it down into the pocket against the right wall, cone toward the grille, leads at the
    back end and up through the slot. The side ribs hold it, as on C8.
 3. **Latch clips:** slide each clip sideways into its channel on the front and back wall (it goes in from

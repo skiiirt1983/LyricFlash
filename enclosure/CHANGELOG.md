@@ -1,5 +1,12 @@
 # Enclosure changelog
 
+## Phase 2 v5.3 (2026-11-10)
+- Paul: battery lead gap closed; the low wall runs the full length (leads leave the cell ~6.75 up, over the
+  5.6 wall top).
+- Paul: speaker grip rib on the lead end removed (the lead slot left its top as a free-standing fin). The
+  -Y rib still pushes the speaker onto the lead-end wall with the C8 0.15 grip.
+- USB-C mouth: Paul painted support on its top edge in Bambu; that cleared the floating-region warning.
+
 ## Phase 2 v5.2 (2026-11-10)
 - Paul: Bambu reported floating regions on the base. Cause: the two front board ledges. With the battery
   running to the front wall, the battery's 45 deg clearance cut ran parallel to the ledges' own underside and
