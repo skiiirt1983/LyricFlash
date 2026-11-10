@@ -19,7 +19,7 @@ black PETG**. If the parts don't all fit on one plate, Bambu Studio puts the ext
   printing and check the bare board's USB-C socket slides into the opening freely before assembly.
 
 `out/phase2/report.md` has every check: board interference (none), the tilt-in swing (PASS), the layer check,
-the centre of gravity (tips at 54.4°, PLAN asks for > 30°).
+the centre of gravity (tips at 54.3°, PLAN asks for > 30°).
 
 ## Before assembly
 - Check the USB-C opening and both mic holes (Ø2.0, inside the USB-C recess, either side of the port) are clear.
@@ -32,17 +32,18 @@ the centre of gravity (tips at 54.4°, PLAN asks for > 30°).
 ## Assembly (no pressing on the screen, ever)
 1. **Battery:** lay it flat in its pocket, long side front-to-back, leads at the back-left corner, over
    the low wall on its left. Its right side closes the switch pocket.
-2. **Speaker:** slide it down into the pocket against the right wall, cone toward the grille, leads at the
+2. **Latch clips (before the speaker):** slide each clip sideways into its channel, hook facing the outer wall, beam pointing up. The 6 mm clip
+   goes on the back wall; the 4 mm clip on the right wall's front corner, sliding in from the speaker side
+   (that's why it goes in first). No force: 0.25 mm per side.
+3. **Speaker:** slide it down into the pocket against the right wall, cone toward the grille, leads at the
    back end and up through the slot. The side ribs hold it, as on C8.
-3. **Latch clips:** slide each clip sideways into its channel on the front and back wall (it goes in from
-   the open end, hook facing the outer wall, beam pointing up). No force: 0.25 mm per side.
 4. **Board:** put a soft cloth on the table, put the gold top shell face-down on it, and drop the board in
    glass-first. The glass rests on the lip. Plug in the battery (J1) and the speaker (H3).
 5. **Base:** hold it upside down over the board. Hook the USB-C opening over the board's USB-C receptacle
    first (left side), then swing the right side down. It should come down on its own weight until the
    latches touch, with nothing rubbing on the way (the simulation keeps 0.2 mm of air everywhere else).
-   **Snap the latches by squeezing the base and the gold shell together at the two latch spots (front and
-   back, about 12 mm right of the middle).** Don't push on the middle of the base: the board is already clamped and
+   **Snap the latches by squeezing the base and the gold shell together at the two latch spots (back wall,
+   right of the middle, and the right wall's front corner).** Don't push on the middle of the base: the board is already clamped and
    the snap force should go clip-to-shell, not through the screen.
 6. **Cable clip:** drop it onto the rail on the left face, below the USB-C recess, until it sits on the
    stop. Press the cable into the U from above; it lifts out the same way.

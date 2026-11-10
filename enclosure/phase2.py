@@ -98,7 +98,7 @@ def print_rotations(info):
     s_w = E.bf_point_to_wf((math.cos(a), math.sin(a), 0), zb) - o
     l_w = E.bf_point_to_wf((-math.sin(a), math.cos(a), 0), zb) - o
     rots["pwr_pin"] = np.array([s_w, np.cross(l_w, s_w), l_w])
-    for name, S, n, a_, t_ in E._clip_frames(zb):
+    for name, S, n, a_, t_, *_ in E._clip_frames(zb):
         rots[f"clip_{name}"] = np.array([n, a_, t_])                  # clip profile flat on the plate
     rots["cable_clip"] = np.eye(3)                                    # printed as installed
     out = {}
@@ -205,7 +205,7 @@ def sections(parts, info):
     g = load_board(verbose=False)
     board = {k: E.to_wf(g[k], zb) for k in ("pcb", "display", "pmma_frame", "usb_c", "mic1", "mic2", "key2", "key1")}
     col = {"top_shell": GOLD, "base": (0.32, 0.32, 0.36)}
-    name, S0, n, a, t = [f for f in E._clip_frames(zb) if f[0] == "front"][0]
+    name, S0, n, a, t, *_ = [f for f in E._clip_frames(zb) if f[0] == "front"][0]
     cuts = [
         ("usb", ((-20.0, 0.33, 20.0), (0.0, -1.0, 0.0)), ((0, 1, 0), (0, 0, 1)), (-24, 0.3, 21), 3.2,
          "Section through the USB-C port (Y = port centre)"),

@@ -1,5 +1,16 @@
 # Enclosure changelog
 
+## Phase 2 v5.4 (2026-11-10)
+- Paul: a leaning spike in the slicer. The latch boss reached past the battery's edge and ran to the floor
+  as a thin leaning column; bosses now get the 45 deg underside across their full width.
+- Front latch moved from the front wall to the right wall's front corner: at the low front wall the battery
+  clearance left the clip channel's inner wall floating. There it stands on the floor; clip 4 mm wide (the
+  straight wall between speaker and corner is 6.4 mm), about 2/3 of the C7 snap force. Back latch unchanged.
+  The clip goes in before the speaker (it slides in from that side).
+- Ledges get only the front-to-back 45 deg trim (the sideways one left a strip).
+- Checks: board none; swing PASS; base: no floating spots except the USB-C mouth (painted support); gold
+  shell skin intact round the new pocket; tips at 54.3 deg.
+
 ## Phase 2 v5.3 (2026-11-10)
 - Paul: battery lead gap closed; the low wall runs the full length (leads leave the cell ~6.75 up, over the
   5.6 wall top).

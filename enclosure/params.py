@@ -542,3 +542,6 @@ LATCH_CLIP_BAR_IN = 1.0              # v4: inner shoulder width (was 1.6); with 
 BUTTON_ACCESS = False
 LEDGE_MIN_T = 1.0                    # v5.2: wedge ledges end square where they'd get thinner than this
 BOARD_Z_EXTRA = 2.5                  # v5.2 (Paul): board raised so the front ledges print as solid wedges (were floating slivers)
+# v5.4: front latch moved to the right wall's front stretch (nothing under it there); at the front wall the
+# battery's 45 deg clearance left the channel's inner wall floating. (name, wall, position along it, width, boss side)
+LATCH_CLIPS = (("front", "x+", -22.0, 4.0, 1.0), ("back", "y+", 12.5, 6.0, 1.6))   # front: leans 20 deg along the wall

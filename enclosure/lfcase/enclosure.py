@@ -194,6 +194,16 @@ def _battery_keepout(gap=0.5):
     return _box((bx0 - gap, by0 - gap, bz0 - 1), (bx1 + gap, by1 + gap, bz1 + gap))
 
 
+def battery_roof_y(gap=0.5):
+    """The battery's front/back 45 deg roof, extended across the whole case width."""
+    (bx0, by0, bz0), (bx1, by1, bz1) = battery_box()
+    y0, y1, zt = by0 - gap, by1 + gap, bz1 + gap
+    w = (y1 - y0) / 2
+    pts = [(y0, 0.0), (y1, 0.0), (y1, zt), (y1 - w, zt + w), (y0, zt)]
+    wire = cq.Wire.makePolygon([cq.Vector(-100, y, z) for y, z in pts], close=True)
+    return cq.Solid.extrudeLinear(cq.Face.makeFromWires(wire), cq.Vector(200, 0, 0))
+
+
 def battery_cut45(gap=0.5):
     """Battery envelope (+gap) plus a 45 deg roof over it, so anything trimmed by it keeps a printable
     45 deg underside instead of a flat ceiling over the battery."""
@@ -266,11 +276,11 @@ def _ledge(zb, a):
     deep = [(inner[1], ztop(inner[1])), (wall_y, ztop(wall_y)), (wall_y, P.CASE_FLOOR), (inner[1], P.CASE_FLOOR)]
     wedge = (cq.Workplane("YZ", origin=(inner[0] - P.BOARD_LEDGE_W / 2, 0, 0)).polyline(deep).close()
              .extrude(P.BOARD_LEDGE_W).val())
-    wedge = wedge.cut(battery_cut45())
+    wedge = wedge.cut(battery_roof_y())
     # end it square where it gets thinner than LEDGE_MIN_T (a knife edge prints as a floating last layer)
     (bx0, by0, bz0), (bx1, by1, bz1) = battery_box()
     g_, zt = 0.5, bz1 + 0.5
-    roof = lambda x, y: zt + min(y - (by0 - g_), (by1 + g_) - y, x - (bx0 - g_), (bx1 + g_) - x)
+    roof = lambda x, y: zt + min(y - (by0 - g_), (by1 + g_) - y)
     step = 0.05 if inner[1] > wall_y else -0.05
     yc = wall_y
     while (inner[1] - yc) * step > 0 and ztop(yc) - max(roof(inner[0] - P.BOARD_LEDGE_W / 2, yc),
@@ -648,10 +658,12 @@ def _clip_frames(zb):
     up_bf = bf_point_to_wf((0, 0, 1), zb) - bf_point_to_wf((0, 0, 0), zb)
     x0, x1, y0, y1 = footprint()
     out = []
-    for name, y_in, nrm in (("front", y0 + P.CASE_WALL, (0, 1, 0)), ("back", y1 - P.CASE_WALL, (0, -1, 0))):
-        x = P.LATCH_CLIP_X
-        # seam height on the wall face at this X: BF z = SEAM_Z
-        # solve world z for (x, y_in) on the plane BF z = SEAM_Z
+    walls = {"y-": ((0, 1, 0), lambda u: (u, y0 + P.CASE_WALL)), "y+": ((0, -1, 0), lambda u: (u, y1 - P.CASE_WALL)),
+             "x+": ((-1, 0, 0), lambda u: (x1 - P.CASE_WALL, u)), "x-": ((1, 0, 0), lambda u: (x0 + P.CASE_WALL, u))}
+    for name, wall, u, E_, side in P.LATCH_CLIPS:
+        nrm, xy = walls[wall]
+        x, y_in = xy(u)
+        # seam height on the wall face here: BF z = SEAM_Z
         # world point = BOARD_X + bx, by cos - bz sin, zb + by sin + bz cos  with bz = SEAM_Z
         by = (y_in + P.SEAM_Z * math.sin(T)) / math.cos(T)
         S = np.array([x, y_in, zb + by * math.sin(T) + P.SEAM_Z * math.cos(T)])
@@ -675,7 +687,7 @@ def _clip_frames(zb):
             a /= np.linalg.norm(a)
             n = nw.copy()
             t = np.cross(n, a)
-        out.append((name, S, n, a, t))
+        out.append((name, S, n, a, t, E_, side))
     return out
 
 
@@ -690,15 +702,15 @@ def _poly_solid(pts, z0, z1):
     return cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, 0, z1 - z0)).moved(cq.Location(cq.Vector(0, 0, z0)))
 
 
-def clip_local():
+def clip_local(E_=None):
     """The clip in its local frame (X=n, Y=a, Z=t); this is also its print orientation (flat, Z up)."""
     pr = _clip_profile()
-    E_ = P.LATCH_CLIP_E
+    E_ = E_ or P.LATCH_CLIP_E
     return _poly_solid(pr["beam"], 0, E_).fuse(_poly_solid(pr["bar"], 0, E_)).clean().moved(cq.Location(cq.Vector(0, 0, -E_ / 2)))
 
 
 def latch_clips(zb):
-    return {f"clip_{name}": clip_local().moved(_frame_loc(S, n, a, t)) for name, S, n, a, t in _clip_frames(zb)}
+    return {f"clip_{name}": clip_local(E_).moved(_frame_loc(S, n, a, t)) for name, S, n, a, t, E_, _ in _clip_frames(zb)}
 
 
 def latch_features(b, top, zb):
@@ -706,7 +718,7 @@ def latch_features(b, top, zb):
     from shapely.geometry import Polygon
     from shapely.ops import unary_union
     pr = _clip_profile()
-    E_, c = P.LATCH_CLIP_E, P.LATCH_CLIP_FIT
+    c = P.LATCH_CLIP_FIT
     clip_poly = unary_union([Polygon(pr["beam"]), Polygon(pr["bar"])])
     chan = clip_poly.buffer(c, join_style=2)
     # beam bending room below the seam (inward), plus the channel continues up through the seam
@@ -727,11 +739,19 @@ def latch_features(b, top, zb):
               (pr["n_lip"], pr["lip_a"](pr["n_lip"]))]
     ct = P.LATCH_POCKET_T_CLEAR
     below = halfspace_bf(zb, P.SEAM_Z, above=False)
-    for name, S, n, a, t in _clip_frames(zb):
+    walls_of = {c_[0]: c_[1] for c_ in P.LATCH_CLIPS}
+    for name, S, n, a, t, E_, side in _clip_frames(zb):
+        wall = walls_of[name]
         loc = _frame_loc(S, n, a, t)
-        bs = _poly_solid(boss, -E_ / 2 - 1.6, E_ / 2 + 1.6).moved(loc).intersect(below).intersect(base_body(zb))
-        bs = bs.cut(battery_cut45())                                                    # 45 deg underside over the battery
-        ch = _poly_solid(list(chan.exterior.coords)[:-1], -E_ / 2 - c, E_ / 2 + 5.0).moved(loc)
+        bs = _poly_solid(boss, -E_ / 2 - side, E_ / 2 + side).moved(loc).intersect(below).intersect(base_body(zb))
+        # 45 deg underside, over its full width: the battery roof alone left the boss's end past the battery
+        # edge running to the floor as a thin leaning spike (Paul's slicer view)
+        if wall in ("y-", "y+"):                       # front/back wall: over the battery, 45 deg front-to-back roof
+            bs = bs.cut(battery_cut45()).cut(battery_roof_y())
+        else:                                         # side wall: nothing under it but the speaker pocket
+            (sx0, sy0, sz0), (sx1, sy1, sz1) = speaker_box()
+            bs = bs.cut(_battery_keepout()).cut(_box((sx0 - 0.3, sy0 - 1.5, 0), (sx1 + 5, sy1 + 1.5, sz1 + 0.5)))
+        ch = _poly_solid(list(chan.exterior.coords)[:-1], -E_ / 2 - c, E_ / 2 + side + 0.5).moved(loc)   # open at +t
         b = b.fuse(bs).cut(ch)
         top = top.cut(_poly_solid(pocket, -E_ / 2 - ct, E_ / 2 + ct).moved(loc))
     return A.solidify(b), A.solidify(top), dict(a_tip=round(pr["a_tip"], 2), a_root=round(pr["a_root"], 2))
