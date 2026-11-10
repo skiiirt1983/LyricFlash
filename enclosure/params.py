@@ -574,3 +574,15 @@ FLOOR_LOGO = "assets/logo_floor_cut.stl"   # v6.5 (Paul): logo + text engraved 0
 SPK_END_WALL = 2.4                   # speaker pocket end walls (were 1.2)
 SPK_GRIP_RIB_W = 1.6                 # grip rib width (was 0.8)
 BATTERY_LOW_WALL_T = 2.0             # battery low walls (were 1.2)
+
+# ---- v8 (Paul): side catch replaced by a cable cleat on the back (one turn round it takes the pull)
+CABLE_CLIP = False                   # the v6.3 side catch (off)
+CLEAT = True
+CLEAT_X = 0.0                        # centre on the back wall
+CLEAT_Z_TOP = 14.0                   # horn tops above the desk
+CLEAT_STEM_W = 6.0
+CLEAT_GAP = 5.0                      # horns to wall: the cable (3.8) wraps in here
+CLEAT_HORN_T = 3.5                   # horn thickness (front to back)
+CLEAT_HORN_L = 9.0                   # each horn beyond the stem
+CLEAT_TIP_T = 2.0                    # horn depth at the tip (45 deg underside back to the stem)
+CLEAT_EAR = 2.0                      # turned-up tip so the turn can't slide off

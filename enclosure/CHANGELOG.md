@@ -1,5 +1,14 @@
 # Enclosure changelog
 
+## Phase 2 v8 (2026-11-10)
+- Paul: the side cable catch didn't really work (a pull along the cable just slides through). Replaced by a
+  cable cleat on the back, low near the desk: a 6 mm stem standing on the plate, horns 24 mm across with
+  45 deg undersides and turned-up tips, 5 mm gap behind them for the cable. One turn round it takes the pull.
+  Prints with no support. The side catch is off (CABLE_CLIP = False).
+- Paul: every style also without the cleat: base_{ribbed,panels,smooth}_nocleat.stl. Print pack now has
+  eight plates: top shell, three bases with the cleat, three without, latch clips.
+- Checks: swing PASS; all six bases watertight, no floating spots (USB-C mouth painted), logo intact.
+
 ## Phase 2 v7 (2026-11-10)
 - Paul printed the base: the internals were very flimsy (pieces round the speaker broke taking it off the
   plate). Thicker everywhere: outer wall 2.0 -> 2.4 (6 perimeters), speaker divider 1.2 -> 2.0, speaker end

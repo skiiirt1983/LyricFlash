@@ -310,22 +310,28 @@ def main():
     keep = P.TEXTURE
     variant("panels", "base_panels")
     variant(None, "base_smooth")
+    for tex, nm in (("ribs", "base_ribbed_nocleat"), ("panels", "base_panels_nocleat"), (None, "base_smooth_nocleat")):
+        variant(tex, nm, cleat=False)
     P.TEXTURE = keep
     print((OUT / "report.md").read_text())
 
 
 
-def variant(texture, name):
-    """Build the base with another outside texture and write just its STL (print orientation)."""
+def variant(texture, name, cleat=True):
+    """Build the base with another outside texture (and with or without the cable cleat) and write just its
+    STL (print orientation)."""
     import params as P
     from lfcase.export import write_stl
     P.TEXTURE = texture
+    keep_cleat = P.CLEAT
+    P.CLEAT = cleat
     parts, info = E.build_all(log=lambda m: None)
     b = parts["base"]
     bb = b.BoundingBox()
     write_stl(b.moved(__import__("cadquery").Location(__import__("cadquery").Vector(0, 0, -bb.zmin))), OUT / "stl" / f"{name}.stl")
     from lfcase import logo
     logo.cut_stl(OUT / "stl" / f"{name}.stl", None, (0, 0, -bb.zmin))
+    P.CLEAT = keep_cleat
     return parts, info
 
 

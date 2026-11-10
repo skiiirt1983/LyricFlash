@@ -801,7 +801,10 @@ def build_all(zb=None, log=print):
         log("ribs"); b = rib_texture(b, zb)
     elif tex == "panels":
         log("panels"); b = panel_texture(b, zb)
-    log("cable clip (built in)"); b = cable_clip_features(b, zb)
+    if P.CABLE_CLIP:
+        log("cable clip (built in)"); b = cable_clip_features(b, zb)
+    if P.CLEAT:
+        log("cable cleat (back)"); b = cable_cleat_features(b, zb)
     log("top shell"); top = top_shell(zb)
     log("latches"); b, top, lat = latch_features(b, top, zb)
     parts = {"top_shell": top, "base": b}
@@ -932,6 +935,55 @@ def _clip_clear_zone(zb):
     return cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, d["L"] + 2 * m, 0))
 
 
+def _texture_keepouts(zb):
+    ks = []
+    if P.CABLE_CLIP:
+        ks.append(_clip_clear_zone(zb))
+    if P.CLEAT:
+        ks.append(_cleat_clear_zone(zb))
+    return cq.Compound.makeCompound(ks) if ks else _box((0, 0, -50), (0.01, 0.01, -49))
+
+
+def _cleat_dims():
+    x0, x1, y0, y1 = footprint()
+    return dict(y1=y1, xc=P.CLEAT_X, half=P.CLEAT_STEM_W / 2 + P.CLEAT_HORN_L, z_top=P.CLEAT_Z_TOP,
+                proud=P.CLEAT_GAP + P.CLEAT_HORN_T)
+
+
+def _cleat_clear_zone(zb):
+    d = _cleat_dims()
+    m = P.CABLE_CLIP_CLEAR
+    zt = d["z_top"] + P.CLEAT_EAR + m
+    y1 = d["y1"]
+    pts = [(y1 - 1, -1), (y1 - 1, zt), (y1, zt), (y1 + 15, zt + 15), (y1 + 15, -1)]
+    w = cq.Wire.makePolygon([cq.Vector(d["xc"] - d["half"] - m, y, z) for y, z in pts], close=True)
+    return cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(2 * (d["half"] + m), 0, 0))
+
+
+def cable_cleat_features(b, zb):
+    """Cable cleat on the back wall (v8, Paul): the cable takes one turn round it, so a pull is taken by the
+    cleat, low and to the rear, not by the USB-C plug. A stem standing on the plate, CLEAT_PROUD off the wall,
+    with two horns sideways; CLEAT_GAP between the horns and the wall for the cable. The horns' undersides are
+    45 deg and their tips turn up, so it all prints with no support."""
+    d = _cleat_dims()
+    y1, xc, zt = d["y1"], d["xc"], d["z_top"]
+    g, t = P.CLEAT_GAP, P.CLEAT_HORN_T
+    sw, hl, tip, ear = P.CLEAT_STEM_W, P.CLEAT_HORN_L, P.CLEAT_TIP_T, P.CLEAT_EAR
+    stem = _box((xc - sw / 2, y1 - 0.5, 0), (xc + sw / 2, y1 + g + t, zt))
+    parts = [stem]
+    for s_ in (-1, 1):
+        xr = xc + s_ * sw / 2
+        xt = xr + s_ * hl
+        # horn profile in XZ: top flat at zt (+ ear at the tip), underside rising 45 deg from the stem to the tip
+        prof = [(xr, zt - tip - hl), (xt, zt - tip), (xt, zt + ear), (xt - s_ * 1.6, zt + ear), (xt - s_ * 1.6, zt), (xr, zt)]
+        w = cq.Wire.makePolygon([cq.Vector(x, y1 + g, z) for x, z in prof], close=True)
+        parts.append(cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, t, 0)))
+    cleat = parts[0]
+    for p_ in parts[1:]:
+        cleat = cleat.fuse(p_)
+    return A.solidify(b.fuse(cleat))
+
+
 def cable_clip_features(b, zb):
     """The clip block, printed with the base (stands up from the plate, no support): floor + outer jaw, the
     wall behind is the inner side; mouth CABLE_CLIP_MOUTH x OD at the top, so the cable presses in from above
@@ -971,7 +1023,7 @@ def rib_texture(b, zb):
     rib = cq.Compound.makeCompound(ribs)
     recess, _ = _usb_recess(zb)
     rib = (rib.intersect(halfspace_bf(zb, P.SEAM_Z - P.RIB_TOP_BAND, above=False)).cut(outer_body(zb))
-           .cut(recess).cut(_clip_clear_zone(zb)))
+           .cut(recess).cut(_texture_keepouts(zb)))
     b = b.fuse(rib)
     if _GRILLE.get("holes"):
         b = b.cut(cq.Compound.makeCompound(_GRILLE["holes"]))
@@ -986,7 +1038,7 @@ def panel_texture(b, zb):
     Rc, g, pr = P.CASE_CORNER_R, P.PANEL_GROOVE, P.PANEL_PROUD
     ch = pr                                           # 45 deg edges
     recess, _ = _usb_recess(zb)
-    keep_out = [recess, _clip_clear_zone(zb)]
+    keep_out = [recess, _texture_keepouts(zb)]
     band = halfspace_bf(zb, P.SEAM_Z - P.RIB_TOP_BAND, above=False)
 
     def seam_z(y):

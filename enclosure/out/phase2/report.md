@@ -37,7 +37,7 @@ Top shell: the latch catch ledges (0.9 deep) are anchored on the outer wall and 
 
 ## Centre of gravity and tipping
 
-Total 93.1 g (board 20 g and battery 38 g are estimates). CG at X -0.54, Y 1.35, Z 18.32 mm. Smallest tipping angle **53.6 deg** (towards 180 deg; PLAN asks > 30).
+Total 93.6 g (board 20 g and battery 38 g are estimates). CG at X -0.49, Y 1.59, Z 18.28 mm. Smallest tipping angle **53.8 deg** (towards 180 deg; PLAN asks > 30).
 
 ## Key numbers
 

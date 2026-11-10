@@ -44,8 +44,9 @@ the centre of gravity (tips at 54.3°, PLAN asks for > 30°).
    **Snap the latches by squeezing the base and the gold shell together at the two latch spots (back wall,
    right of the middle, and the right wall's front corner).** Don't push on the middle of the base: the board is already clamped and
    the snap force should go clip-to-shell, not through the screen.
-6. **Cable:** press the cable down into the clip moulded on the left wall, below the USB-C recess. It lifts out
-   the same way. There's nothing to fit.
+6. **Cable:** take the cable round to the back and give it one turn round the cleat at the bottom of the back
+   wall (under one horn, over the other). A tug on the cable is then taken by the cleat, not the USB-C plug.
+   Bases without the cleat: nothing to do.
 
 **Opening:** case face-down on the cloth, pull the base's right end up to unsnap both latches, then swing it
 off about the USB-C.
@@ -61,6 +62,6 @@ off about the USB-C.
 | 6 | Mics: play a song from ~1 m, LyricFlash identifies it as reliably as with the bare board | same / worse / much worse |
 | 7 | Speaker at higher volume | buzz or rattle (yes / no) |
 | 8 | Switch: slides end to end, knob below the bottom face, cuts power | OK / rubs / sticks out |
-| 9 | Cable clip: cable presses in and lifts out by hand; a light tug doesn't slide or tip the case | OK / too tight / too loose |
+| 9 | Cable cleat: one turn holds; a light tug from any side doesn't pull on the plug, slide or tip the case | OK / slips / too fiddly |
 | 10 | Face-down on the table: the glass doesn't touch | OK / touches |
 | 11 | Touch works right to the edge, no lit pixels hidden by the lip | OK / hidden where |
