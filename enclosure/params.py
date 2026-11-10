@@ -527,7 +527,7 @@ PRINT_FILL = 0.6                     # 4 walls + 15 % gyroid: effective fraction
 MIN_TIP_DEG = 30.0                   # PLAN Phase 3
 
 # ---- Layout B (Paul, after v1): battery front-to-back, speaker under the board's right side
-BATTERY_LEAD_GAP = 9.0               # gap in the battery's left low wall at the back corner, for the leads
+BATTERY_LEAD_GAP = 0.0               # v5.3 (Paul): closed. Leads leave the cell ~6.75 up, over the 5.6 wall top
 SWITCH_CELL_Y = 22.7                 # layout B: switch pocket behind the speaker (back-right), centre Y
 SPK_DIVIDER_H = 16.0                 # layout B: divider height above the floor (full height came 0.01 from a standoff in the swing)
 

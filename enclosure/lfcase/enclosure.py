@@ -232,7 +232,8 @@ def base_shell(zb):
     # low wall along the battery's left long side (front and back are the case walls, right is the
     # speaker divider); lead gap at the back-left corner, where the cell's leads leave (Paul, C3)
     b = b.fuse(_box((bx0 - 1.2, by0 - 0.01, bz0 - 0.01), (bx0, by1 + 0.01, bz0 + P.BATTERY_POCKET_WALL_H)))
-    b = b.cut(_box((bx0 - 1.3, by1 - P.BATTERY_LEAD_GAP, bz0), (bx0 + 0.1, by1 + 1, bz0 + P.BATTERY_POCKET_WALL_H + 1)))
+    if P.BATTERY_LEAD_GAP > 0:
+        b = b.cut(_box((bx0 - 1.3, by1 - P.BATTERY_LEAD_GAP, bz0), (bx0 + 0.1, by1 + 1, bz0 + P.BATTERY_POCKET_WALL_H + 1)))
     # speaker pocket: divider wall + end walls (speaker stands, fires out the right wall)
     (sx0, sy0, sz0), (sx1, sy1, sz1) = speaker_box()
     b = b.fuse(_box((bx1, sy0 - 1.2, sz0 - 0.01), (sx0, sy1 + 1.2, sz0 + P.SPK_DIVIDER_H)))
@@ -599,7 +600,9 @@ def speaker_features(b, zb):
     # grip ribs on the two end walls (the speaker's 20 mm ends), C8 interference, centred on its thickness
     gr = P.SPK_CLEAR + P.SPK_GRIP_RIB
     xm = sx1 - rh - P.SPK_T / 2
-    for y0_, y1_ in ((sy0 - 0.01, sy0 + gr), (sy1 - gr, sy1 + 0.01)):
+    # v5.3 (Paul): only on the -Y end. On the lead end the slot left the rib's top as a free-standing fin;
+    # one rib still pushes the speaker against the lead-end wall with the same 0.15 grip.
+    for y0_, y1_ in ((sy0 - 0.01, sy0 + gr),):
         b = b.fuse(_box((xm - 0.4, y0_, sz0 - 0.01), (xm + 0.4, y1_, sz1 - 1.0)))
     # lead slot: +Y end wall (H3 is on the +Y side of the board), from mid-height to the top
     b = b.cut(_box((xm - P.SPK_LEAD_SLOT_W / 2, sy1 - 0.1, zc - P.SPK_LEAD_SLOT_W / 2), (xm + P.SPK_LEAD_SLOT_W / 2, sy1 + 1.4, sz1 + 1)))
