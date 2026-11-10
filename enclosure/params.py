@@ -508,7 +508,7 @@ BOOT_TUBE_START = 1.5                # tube starts this far out from the plunger
 # ---- Phase 2: cable clip (separate part) on a vertical dovetail, left face, at desk height
 CABLE_RAIL_YC = 6.0                  # world Y of the rail centre (behind the port: cable loops down and runs back)
 CABLE_RAIL_W = 3.0                   # dovetail width at the wall
-CABLE_RAIL_PROUD = 1.2               # dovetail stands this far off the left face (45 deg flanks, vertical faces)
+CABLE_RAIL_PROUD = 2.5               # v6.2: dovetail stands this far off the left face (clip clears the texture by 0.3)
 CABLE_STOP_H = 1.5                   # stop block at the bottom; the clip rests on it
 CABLE_CLIP_H = 8.0                   # clip height
 CABLE_CLIP_LEN = 14.0                # clip length along the cable

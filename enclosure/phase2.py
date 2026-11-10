@@ -309,9 +309,6 @@ def main():
     print((OUT / "report.md").read_text())
 
 
-if __name__ == "__main__":
-    main()
-
 
 def variant(texture, name):
     """Build the base with another outside texture and write just its STL (print orientation)."""
@@ -323,3 +320,7 @@ def variant(texture, name):
     bb = b.BoundingBox()
     write_stl(b.moved(__import__("cadquery").Location(__import__("cadquery").Vector(0, 0, -bb.zmin))), OUT / "stl" / f"{name}.stl")
     return parts, info
+
+
+if __name__ == "__main__":
+    main()

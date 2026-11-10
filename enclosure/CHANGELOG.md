@@ -1,5 +1,13 @@
 # Enclosure changelog
 
+## Phase 2 v6.2 (2026-11-10)
+- Paul: less blank round the USB-C side. Ribs (and panels) now run right up to the USB-C recess and the cable
+  rail. The rail runs from the stop up to the recess floor; it stands 2.5 off the wall so the clip sits 1.3
+  off it and slides down from above (through the recess) with 0.3 mm over the texture. Clip reprint needed;
+  one clip fits both bases. (Texturing the clip itself was dropped, Paul.)
+- Panel base: panels wrap the rounded corners too (one curved panel per corner, same 45 deg edges); one
+  groove line all round. Checks (both bases): board none, swing PASS; panel base no floating spots.
+
 ## Phase 2 v6.1 (2026-11-10)
 - Paul: an alternative base with raised panels (his second picture): `out/phase2/stl/base_panels.stl`.
   Panels ~13 mm wide in two rows on the four flat sides, 0.8 proud, 45 deg edges, 1.2 mm grooves; rounded

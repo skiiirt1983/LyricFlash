@@ -879,12 +879,38 @@ def _rail_xy():
     return [(0.01, -wb / 2), (-pr, -wb / 2 - pr), (-pr, wb / 2 + pr), (0.01, wb / 2)]
 
 
+def _usb_recess(zb):
+    """(recess cut box, floor top z): the USB-C recess in the left wall, as port_features cuts it."""
+    x0 = footprint()[0]
+    g = A.usb_geometry()
+    pc = bf_point_to_wf((P.USB_MOUTH_X, g["yc"], g["zc"]), zb)
+    zbot = pc[2] - P.PORT_BAY_BELOW
+    hw = P.PORT_BAY_HALF_W
+    return _box((x0 - 6, pc[1] - hw, zbot), (P.BOARD_X + g["face_x"] + 0.01, pc[1] + hw, 200)), zbot
+
+
+def _clip_back_gap():
+    """Clip back face off the wall: clears the texture's relief by 0.3 as it slides down."""
+    return max(P.RIB_PROUD, P.PANEL_PROUD) + 0.3          # one clip fits both textured bases
+
+
+def _rail_slide_path(zb):
+    """The space the clip's dovetail slot sweeps on its way down the rail (texture is cut away here)."""
+    x0 = footprint()[0]
+    c, pr, wb = P.CABLE_CLIP_FIT, P.CABLE_RAIL_PROUD, P.CABLE_RAIL_W
+    sl = [(0.5, -wb / 2 - c - 0.3), (-pr - c - 0.3, -wb / 2 - pr - c - 0.3), (-pr - c - 0.3, wb / 2 + pr + c + 0.3), (0.5, wb / 2 + c + 0.3)]
+    w = cq.Wire.makePolygon([cq.Vector(x0 + x, P.CABLE_RAIL_YC + y, -1) for x, y in sl], close=True)
+    return cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, 0, 250))
+
+
 def cable_rail_features(b, zb):
-    """Vertical dovetail on the left face (prints standing: no overhangs) + a stop at the bottom.
-    The clip drops onto it from above and rests on the stop."""
+    """Vertical dovetail on the left face from the stop up to the USB-C recess floor (prints standing: no
+    overhangs) + a stop at the bottom. The clip drops onto it from above (through the recess) and rests on
+    the stop; it stands off the wall so it clears the texture on the way down."""
     x0 = footprint()[0]
     yc = P.CABLE_RAIL_YC
-    z0, z1 = P.CABLE_STOP_H, P.CABLE_STOP_H + P.CABLE_CLIP_H
+    _, zbot = _usb_recess(zb)
+    z0, z1 = P.CABLE_STOP_H, zbot
     w = cq.Wire.makePolygon([cq.Vector(x0 + x, yc + y, z0 - 0.01) for x, y in _rail_xy()], close=True)
     rail = cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, 0, z1 - z0 + 0.01))
     hw = P.CABLE_RAIL_W / 2 + P.CABLE_RAIL_PROUD + P.CABLE_CLIP_FIT + 0.8
@@ -894,7 +920,7 @@ def cable_rail_features(b, zb):
 
 def cable_clip(zb):
     """Separate part, printed as installed (Z up): dovetail slot (through, vertical) + a U-channel for the
-    cable running along Y, open at the top so the cable presses in and lifts out by hand."""
+    cable running along Y, open at the top so the cable presses in and lifts out by hand. Plain faces (Paul)."""
     x0 = footprint()[0]
     yc = P.CABLE_RAIL_YC
     c, pr, wb = P.CABLE_CLIP_FIT, P.CABLE_RAIL_PROUD, P.CABLE_RAIL_W
@@ -905,7 +931,8 @@ def cable_clip(zb):
     back = -pr - c - t                                       # back plate outer face (X, from the wall face)
     xc = back - r                                            # cable centre
     zc = z0 + t + r
-    body = _box((x0 + xc - r - t, yc - L / 2, z0), (x0 - c, yc + L / 2, z0 + H))
+    x_out = x0 + xc - r - t                                  # outer face
+    body = _box((x_out, yc - L / 2, z0), (x0 - _clip_back_gap(), yc + L / 2, z0 + H))
     # dovetail slot through the full height
     sl = [(0.5, -wb / 2 - c), (-pr - c, -wb / 2 - pr - c), (-pr - c, wb / 2 + pr + c), (0.5, wb / 2 + c)]
     w = cq.Wire.makePolygon([cq.Vector(x0 + x, yc + y, z0 - 1) for x, y in sl], close=True)
@@ -922,8 +949,8 @@ def cable_clip(zb):
 def rib_texture(b, zb):
     """Vertical half-round flutes round the base's outside: cylinders R RIB_R whose axes sit RIB_R - RIB_PROUD
     inside the wall face, every RIB_PITCH along the perimeter (they follow the rounded corners). They run from
-    the desk to RIB_TOP_BAND below the seam, and skip the USB-C recess and the cable rail. The speaker grille is
-    drilled through them."""
+    the desk to RIB_TOP_BAND below the seam, right up to the USB-C recess and the cable rail's slide path.
+    The speaker grille is drilled through them."""
     x0, x1, y0, y1 = footprint()
     R, proud, pitch = P.RIB_R, P.RIB_PROUD, P.RIB_PITCH
     inset = R - proud                                  # axis inside the wall face
@@ -934,34 +961,14 @@ def rib_texture(b, zb):
     ring = rect.exterior
     n = int(round(ring.length / pitch))
     step = ring.length / n
-    g = A.usb_geometry()
-    pc = bf_point_to_wf((P.USB_MOUTH_X, g["yc"], g["zc"]), zb)
-    bay_y = (pc[1] - P.PORT_BAY_HALF_W - P.CASE_WALL - R, pc[1] + P.PORT_BAY_HALF_W + P.CASE_WALL + R)
-    bay_z = pc[2] - P.PORT_BAY_BELOW - max(P.CASE_FLOOR, 3.0) - 0.5
-    rail_y = (P.CABLE_RAIL_YC - P.CABLE_CLIP_LEN / 2 - R - 0.5, P.CABLE_RAIL_YC + P.CABLE_CLIP_LEN / 2 + R + 0.5)
-    rail_z = P.CABLE_STOP_H + P.CABLE_CLIP_H + 1.0
     ribs = []
     for k in range(n):
         p_ = ring.interpolate(k * step)
-        x, y = p_.x, p_.y
-        z0, z1 = 0.0, 200.0
-        on_left = x < x0 + Rc - 1e-6 and abs(x - (x0 + inset)) < 0.5
-        if on_left and bay_y[0] < y < bay_y[1]:
-            z1 = bay_z                                 # below the USB-C recess only
-        if on_left and rail_y[0] < y < rail_y[1]:
-            z0 = rail_z                                # above the cable clip only
-        if z1 - z0 < 3.0:
-            continue
-        r_ = cq.Solid.makeCylinder(R, z1 - z0 + R + 1, pnt=cq.Vector(x, y, z0 - R - 1), dir=cq.Vector(0, 0, 1))
-        if z0 > 0:
-            # starts above the desk: 45 deg underside growing out of the wall (left wall: outward = -X)
-            pl = cq.Plane(origin=cq.Vector(x0, 0, z0), xDir=cq.Vector(0, 1, 0), normal=cq.Vector(1, 0, 1).normalized())
-            r_ = r_.intersect(cq.Solid.makeBox(400, 400, 400, pnt=cq.Vector(-200, -200, 0)).moved(cq.Location(pl)))
-        else:
-            r_ = r_.intersect(_box((-200, -200, 0), (200, 200, 300)))
-        ribs.append(r_)
+        ribs.append(cq.Solid.makeCylinder(R, 200, pnt=cq.Vector(p_.x, p_.y, 0), dir=cq.Vector(0, 0, 1)))
     rib = cq.Compound.makeCompound(ribs)
-    rib = rib.intersect(halfspace_bf(zb, P.SEAM_Z - P.RIB_TOP_BAND, above=False)).cut(outer_body(zb))
+    recess, _ = _usb_recess(zb)
+    rib = (rib.intersect(halfspace_bf(zb, P.SEAM_Z - P.RIB_TOP_BAND, above=False)).cut(outer_body(zb))
+           .cut(recess).cut(_rail_slide_path(zb)))
     b = b.fuse(rib)
     if _GRILLE.get("holes"):
         b = b.cut(cq.Compound.makeCompound(_GRILLE["holes"]))
@@ -970,21 +977,13 @@ def rib_texture(b, zb):
 
 def panel_texture(b, zb):
     """Alternative outside (v6, Paul's picture): raised rectangular panels with 45 deg chamfered edges, split
-    into columns (~PANEL_W) and two rows by PANEL_GROOVE grooves, on the four flat sides; rounded corners stay
-    plain. Skips the USB-C recess and the cable rail; the speaker grille is drilled through."""
+    into columns (~PANEL_W) and two rows by PANEL_GROOVE grooves, all round (the rounded corners carry one
+    curved panel each). Stops at the USB-C recess and the cable rail's slide path; grille drilled through."""
     x0, x1, y0, y1 = footprint()
     Rc, g, pr = P.CASE_CORNER_R, P.PANEL_GROOVE, P.PANEL_PROUD
     ch = pr                                           # 45 deg edges
-    gu = A.usb_geometry()
-    pc = bf_point_to_wf((P.USB_MOUTH_X, gu["yc"], gu["zc"]), zb)
-    keep_out = [
-        _box((x0 - 5, pc[1] - P.PORT_BAY_HALF_W - P.CASE_WALL - 0.5, pc[2] - P.PORT_BAY_BELOW - 3.5), (x0 + 1, pc[1] + P.PORT_BAY_HALF_W + P.CASE_WALL + 0.5, 200)),
-    ]
-    # cable rail: cut with a 45 deg top (panels above it grow out of the wall instead of starting in mid-air)
-    rz = P.CABLE_STOP_H + P.CABLE_CLIP_H + 1
-    ya, yb_ = P.CABLE_RAIL_YC - P.CABLE_CLIP_LEN / 2 - 0.5, P.CABLE_RAIL_YC + P.CABLE_CLIP_LEN / 2 + 0.5
-    wv = cq.Wire.makePolygon([cq.Vector(x, ya, z) for x, z in ((x0 + 1, -1), (x0 + 1, rz), (x0, rz), (x0 - 15, rz + 15), (x0 - 15, -1))], close=True)
-    keep_out.append(cq.Solid.extrudeLinear(cq.Face.makeFromWires(wv), cq.Vector(0, yb_ - ya, 0)))
+    recess, _ = _usb_recess(zb)
+    keep_out = [recess, _rail_slide_path(zb)]
     band = halfspace_bf(zb, P.SEAM_Z - P.RIB_TOP_BAND, above=False)
 
     def seam_z(y):
@@ -998,14 +997,33 @@ def panel_texture(b, zb):
              ((x1, y0 + Rc, 0), (0, 1, 0), (1, 0, 0), y1 - y0 - 2 * Rc)]     # right
     panels = []
     z_lo = P.PANEL_Z0
+    # one groove line all round: half the lowest top (the front)
+    z_mid = z_lo + (seam_z(y0) - z_lo) / 2
+    rows = ((z_lo, z_mid - g / 2), (z_mid + g / 2, 200.0))
+    # rounded corners (v6.2, Paul): one panel per corner, revolved, 45 deg edges, a groove each side
+    for cx, cy, a0 in ((x0 + Rc, y0 + Rc, 180.0), (x1 - Rc, y0 + Rc, 270.0), (x1 - Rc, y1 - Rc, 0.0), (x0 + Rc, y1 - Rc, 90.0)):
+        for za, zb_ in rows:
+            prof = [(Rc - 0.3, za), (Rc, za), (Rc + pr, za + ch), (Rc + pr, zb_ - ch), (Rc, zb_), (Rc - 0.3, zb_)]
+            wv = cq.Wire.makePolygon([cq.Vector(r_, 0, z_) for r_, z_ in prof], close=True)
+            sol = cq.Solid.revolve(cq.Face.makeFromWires(wv), 90.0, cq.Vector(0, 0, 0), cq.Vector(0, 0, 1))
+            # side edges: 45 deg chamfer planes at both ends of the arc (end groove = g/2 each side)
+            ga = math.degrees(g / 2 / Rc)
+            for ang, sgn in ((ga, 1), (90.0 - ga, -1)):
+                th = math.radians(ang)
+                p_in = np.array([Rc * math.cos(th), Rc * math.sin(th)])
+                th2 = th + sgn * (pr / (Rc + pr))
+                p_out = np.array([(Rc + pr) * math.cos(th2), (Rc + pr) * math.sin(th2)])
+                d = p_out - p_in
+                nrm2 = np.array([-d[1], d[0]]) * sgn                  # points into the panel
+                pl = cq.Plane(origin=cq.Vector(p_in[0], p_in[1], 0), xDir=cq.Vector(d[0], d[1], 0), normal=cq.Vector(nrm2[0], nrm2[1], 0))
+                half = cq.Solid.makeBox(200, 200, 400, pnt=cq.Vector(-100, -100, 0)).moved(cq.Location(pl))
+                sol = sol.intersect(half)
+            sol = sol.rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), a0).moved(cq.Location(cq.Vector(cx, cy, 0)))
+            panels.append(sol)
     for o, u, nrm, Lf in faces:
         o, u, nrm = np.array(o, float), np.array(u, float), np.array(nrm, float)
         n_col = max(1, int(round((Lf - g) / (P.PANEL_W + g))))
         w = (Lf - g) / n_col - g
-        # row split at half the lowest top along this face
-        zt_min = min(seam_z(o[1] + u[1] * s_) for s_ in np.linspace(0, Lf, 7))
-        z_mid = z_lo + (zt_min - z_lo) / 2
-        rows = ((z_lo, z_mid - g / 2), (z_mid + g / 2, 200.0))
         for i in range(n_col):
             s0 = g + i * (w + g)
             for za, zb_ in rows:
