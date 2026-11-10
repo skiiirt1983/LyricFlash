@@ -1,5 +1,15 @@
 # Enclosure changelog
 
+## Phase 2 v3 (2026-11-10)
+- Paul: a hole through the base wall beside the PWR tube. The finger dimple's cone ran along the pin axis,
+  34 deg to the wall, so one side cut through the 2 mm wall. Now on the wall normal, 1.0 deep, >= 1.0 left.
+- Paul: mic boxes removed (their supports turned the whole left wall into a support). Plain D2.0 teardrop
+  holes (was D1.2) straight through the USB recess wall, 6.1 / 6.3 mm from the mics, path checked clear.
+- No supports in the base: the USB-C insert's underside is filled down to the wall at 45 deg (only from the
+  material under the receptacle, so the opening keeps its 0.55 clearance), the recess floor/cheeks reach
+  under the port wall, the BOOT guide is 3 mm (it sat 0.1 above the speaker pocket).
+- Checks: board none, swing PASS, tips at 58.1 deg.
+
 ## Phase 2 v2: layout B (2026-11-09)
 - Paul: v1 looked off-centre and bigger than pictured. v1 was 70.8 x 53.7 with the board 9 mm left of centre
   (flush USB-C on the left, 58 mm battery longer than the board, speaker at the battery's right end). The

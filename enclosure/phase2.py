@@ -235,7 +235,7 @@ def export(parts, info):
 
 def report(parts, info, chk, lay, cg, sim_rows):
     import params as P
-    L = ["# Phase 2 report: full case v2 (layout B)", "",
+    L = ["# Phase 2 report: full case v3 (layout B, no mic boxes)", "",
          f"Tilt {P.TILT_DEG:g} deg, board centre {info['zb']:.1f} mm above the desk. Parts: " + ", ".join(parts) + ".", "",
          "## Interference against the STEP board (boolean volume)", "",
          "| Part | Solids | Valid | Overlaps |", "|---|---|---|---|"]
@@ -262,23 +262,22 @@ def report(parts, info, chk, lay, cg, sim_rows):
     for k, iss in lay.items():
         bad = [i for i in iss if i[1] in ("FLOATING", "LONG BRIDGE")]
         L.append(f"| {k} | {orient[k]} | {'clean' if not bad else f'{len(bad)} flagged layers (see below)'} |")
-    L += ["", "Flagged in the base, all inside except the USB-C mouth:", "",
-          "- Over the battery: the USB-C port block and both mic bars (one region at the battery top); over the "
-          "speaker: the inner end of the short BOOT tube. **Tree supports, inside only** (Paul's choice); they "
-          "snap off before assembly.",
-          "- The USB-C block's underside and the PWR tube's roof follow the 12 deg board tilt, so each layer steps "
-          "~0.7 mm: bridged between side walls, prints, may need the supports above.",
-          "- **USB-C opening, top edge** (the only visible one): with the 12 deg tilt it's no longer a flat 9.5 mm bridge. "
-          "Paint a support enforcer inside the opening in Bambu Studio if the first print shows a droop.",
-          "", "Top shell: the latch catch ledges (0.9 deep) are anchored on the outer wall and bridged 6.6 mm between "
+    L += ["", "Base: **no supports needed** (v3). What the check still flags, all small:", "",
+          "- **USB-C opening, top edge** (visible): with the 12 deg tilt it's a sloped ceiling, not a flat 9.5 mm bridge. "
+          "If the first print shows a droop, paint a support enforcer inside the opening only.",
+          "- PWR tube roof: bridged across the 3.5 mm bore as the roof climbs with the tilt (inside).",
+          "- Two specks under 2 mm2 (a lead-gap edge, the BOOT tube mouth): print as short overhangs.",
+          "", "The USB-C insert's underside is filled down to the wall at 45 deg, and the mic bars are gone (Paul), "
+          "so nothing inside hangs over the battery any more.", "",
+          "Top shell: the latch catch ledges (0.9 deep) are anchored on the outer wall and bridged 6.6 mm between "
           "the pocket's side walls.", ""]
     L += ["## Centre of gravity and tipping", "",
           f"Total {cg['mass']} g (board {P.BOARD_MASS_G:g} g and battery {P.BATTERY_MASS_G:g} g are estimates). "
           f"CG at X {cg['cg'][0]}, Y {cg['cg'][1]}, Z {cg['cg'][2]} mm. "
           f"Smallest tipping angle **{cg['worst'][1]:.1f} deg** (towards {cg['worst'][0]} deg; PLAN asks > {P.MIN_TIP_DEG:g}).", ""]
     L += ["## Key numbers", ""]
-    L += [f"- Mic ducts: D{P.MIC_DUCT_D} teardrop, {info['mic']['MIC1']['duct_len']:.1f} / {info['mic']['MIC2']['duct_len']:.1f} mm "
-          f"(PLAN <= {P.MIC_DUCT_MAX_LEN:g}), open (no collar, Paul).",
+    L += [f"- Mic holes: D{P.MIC_HOLE_D_CASE} teardrop straight through the USB recess wall, "
+          f"{info['mic']['MIC1']['to_mic']} / {info['mic']['MIC2']['to_mic']} mm from the mics (no collar, no duct: Paul).",
           f"- PWR pin: exits back-right at {info['pwr']['exit']}, rest gap {P.PWR_PIN_REST_GAP} to the plunger.",
           f"- BOOT pinhole: D{P.BOOT_HOLE_D}, {info['boot']['length']} mm guide, exits front-right at {info['boot']['exit']}.",
           f"- Speaker: {info['speaker']['holes']} x D{P.SPK_GRILLE_HOLE_D} grille holes (teardrop) in the right wall.",

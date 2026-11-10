@@ -174,6 +174,21 @@ def _inner_cavity():
             .sketch().rect(x1 - x0 - 2 * w, y1 - y0 - 2 * w).vertices().fillet(P.CASE_CORNER_R - w).finalize().extrude(200).val())
 
 
+def _wall_normal(p):
+    """Outward horizontal normal of the case's side surface nearest to world point p."""
+    x0, x1, y0, y1 = footprint()
+    R = P.CASE_CORNER_R
+    cx = min(max(p[0], x0 + R), x1 - R)
+    cy = min(max(p[1], y0 + R), y1 - R)
+    if abs(cx - p[0]) > 1e-6 and abs(cy - p[1]) > 1e-6:          # in a rounded corner: radial
+        v = np.array([p[0] - cx, p[1] - cy, 0.0])
+    else:                                                          # on a flat side
+        d = {(1, 0): x1 - p[0], (-1, 0): p[0] - x0, (0, 1): y1 - p[1], (0, -1): p[1] - y0}
+        k = min(d, key=lambda k: abs(d[k]))
+        v = np.array([k[0], k[1], 0.0])
+    return v / np.linalg.norm(v)
+
+
 def battery_cut45(gap=0.5):
     """Battery envelope (+gap) plus a 45 deg roof over it, so anything trimmed by it keeps a printable
     45 deg underside instead of a flat ceiling over the battery."""
@@ -310,16 +325,31 @@ def port_features(b, zb):
     blk_w = blk.moved(bf_loc(zb)).intersect(halfspace_bf(zb, P.SEAM_Z, above=False))
     # keep the PCB/PMMA outline clear: the web touches it, nothing may enter it
     blk_w = blk_w.cut(to_wf(A.cyl(P.USB_PCB_CONTACT_R, -0.05, P.SEAM_Z + 2), zb))
-    blk_w = blk_w.cut(_box(*battery_box()))                       # stays above the battery (support under it)
+    (bx0_, by0_, bz0_), (bx1_, by1_, bz1_) = battery_box()
+    bat = _box((bx0_ - 0.5, by0_ - 0.5, bz0_ - 1), (bx1_ + 0.5, by1_ + 0.5, bz1_ + 0.5))
+    blk_w = blk_w.cut(bat)                                              # keep off the battery
+    # v3 (Paul: no support towers): fill the 45 deg "shadow" under the part of the port insert that reaches
+    # in past the wall, back down toward the wall, so every underside is >= 45 deg and it prints on its own
+    inner = (blk_w.intersect(_box((fx_w + P.WALL_MIN - 0.01, -100, 0), (fx_w + 40, 100, 100)))
+             .intersect(halfspace_bf(zb, g["z_bot"] - P.USB_UNDER_GAP - 0.01, above=False)))   # only what's under the receptacle
+    if inner.Volume() > 1e-3:
+        sh = inner
+        for dd in np.arange(0.4, 12.01, 0.4):
+            sh = sh.fuse(inner.moved(cq.Location(cq.Vector(-dd, 0, -dd))))
+        sh = (sh.intersect(_box((x0, -100, P.CASE_FLOOR), (fx_w + 40, 100, zbot - 0.01))).fuse(
+                  sh.intersect(_box((fx_w - 0.01, -100, zbot - 0.01), (fx_w + 40, 100, 100))))
+              .intersect(base_body(zb))
+              .intersect(halfspace_bf(zb, P.SEAM_Z, above=False)).cut(bat))
+        blk_w = blk_w.fuse(sh.clean())
     # tie the port wall into the case: a floor under the bay and a cheek either side, wall-thick
     t = P.CASE_WALL
     # bay floor: wall-thick at the wall, then a 45 deg underside where it reaches in over the cavity
     x_in = x0 + t
-    zf = zbot - P.CASE_FLOOR
-    prof = [(x0, zf), (x_in, zf), (min(x_in + P.CASE_FLOOR, fx_w + P.WALL_MIN), zbot + 0.01), (x0, zbot + 0.01)]
+    xe = fx_w + P.WALL_MIN
+    zf = zbot - max(P.CASE_FLOOR, xe - x_in)          # deep enough that the 45 deg underside reaches under the port wall
+    prof = [(x0, zf), (x_in, zf), (xe, zbot + 0.01), (x0, zbot + 0.01)]
     wv = cq.Wire.makePolygon([cq.Vector(x, pc[1] - hw - t, z) for x, z in prof], close=True)
     frame = cq.Solid.extrudeLinear(cq.Face.makeFromWires(wv), cq.Vector(0, 2 * (hw + t), 0))
-    xe = fx_w + P.WALL_MIN
     cheek = [(x0, zf), (x_in, zf), (xe, zf + (xe - x_in)), (xe, 100), (x0, 100)]     # 45 deg underside inside
     for s in (-1, 1):
         y_a = pc[1] + s * hw
@@ -372,33 +402,21 @@ def _mic_swept_outline(mic, air=0.2):
 
 
 def mic_features(b, zb):
-    """Open mic ducts (Paul, Phase 2: no collar, no crush rib).
-
-    A solid bar runs from the USB bay's back wall to under each mic. Its top is the board-parallel plane
-    MIC_CAVITY_H below the mic lid (the swing only lifts the mic, so it never comes lower than that).
-    A vertical hole under the mic's sound port meets a horizontal teardrop duct that exits in the bay."""
+    """Mic holes (Paul, v3): a plain D MIC_HOLE_D_CASE teardrop straight through the USB recess's back wall,
+    level with each mic, opening into the case. No bar or duct inside: those hung over the battery and needed
+    a wall of supports. The bigger hole makes up for the open path."""
     fx_w = P.BOARD_X + A.usb_geometry()["face_x"]
-    d = P.MIC_DUCT_D
-    cav = _inner_cavity().fuse(_box((fx_w - 0.01, -100, P.CASE_FLOOR - 0.01), (fx_w + 5, 100, 100)))
+    d = P.MIC_HOLE_D_CASE
     info = {}
     for mic in ("MIC1", "MIC2"):
         cx, cy = getattr(P, f"{mic}_CENTER")
-        z_top = getattr(P, f"{mic}_Z")[0] - P.MIC_CAVITY_H                     # bar top, board frame
-        port = bf_point_to_wf((cx, cy, z_top), zb)
-        c = bf_point_to_wf((cx, cy, z_top - d / 2 - P.MIC_DUCT_COVER), zb)     # duct centre under the port
-        hw = d / 2 + P.MIC_BAR_SIDE
-        bar = (_box((fx_w - 0.01, c[1] - hw, P.CASE_FLOOR - 0.01), (c[0] + hw, c[1] + hw, 100))
-               .intersect(halfspace_bf(zb, z_top, above=False)).intersect(cav)
-               .cut(_box(*battery_box())))                                      # hangs over the battery: support
-        x_out, x_in = fx_w - 1.0, c[0]
-        L = x_in - x_out
-        q = d / 2 * math.sqrt(2)
-        tear = (cq.Workplane("YZ").workplane(offset=x_out).center(c[1], c[2]).circle(d / 2).extrude(L).val()
-                .fuse(cq.Solid.makeBox(L, q, q, pnt=cq.Vector(x_out, c[1] - q / 2, c[2] - q / 2))
-                      .rotate(cq.Vector(0, c[1], c[2]), cq.Vector(1, c[1], c[2]), 45)))
-        riser = A.cyl(d / 2, c[2], port[2] + 2.0, x=c[0], y=c[1])
-        b = b.fuse(bar).cut(tear).cut(riser)
-        info[mic] = dict(duct_len=round(x_in - fx_w + port[2] - c[2], 2), exit=(round(x_out, 2), round(c[1], 2), round(c[2], 2)))
+        # centre the hole just under the mic package (top-port: the sound port faces away from the PCB),
+        # top of the hole MIC_HOLE_PCB_GAP below the PCB back
+        c = bf_point_to_wf((cx, cy, -P.MIC_HOLE_PCB_GAP - d / 2), zb)
+        x_out, x_in = fx_w - 1.0, fx_w + P.WALL_MIN + 1.0
+        b = b.cut(_teardrop_x(x_out, x_in, c[1], c[2], d))
+        info[mic] = dict(hole_d=d, centre=(round(fx_w, 2), round(float(c[1]), 2), round(float(c[2]), 2)),
+                         to_mic=round(float(cx + P.BOARD_X - fx_w), 1))
     return A.solidify(b), info
 
 
@@ -486,8 +504,12 @@ def pwr_features(b, zb):
     # finger dimple: shallow cone round the exit
     lc, zc = (d["l0"] + d["l1"]) / 2, (d["z0"] + d["z1"]) / 2
     ex = bf_point_to_wf((tip[0] + s_x * math.cos(a) - lc * math.sin(a), tip[1] + s_x * math.sin(a) + lc * math.cos(a), zc), zb)
-    cone = cq.Solid.makeCone(P.PWR_DIMPLE_D / 2 - P.PWR_DIMPLE_DEPTH, P.PWR_DIMPLE_D / 2 + 2, P.PWR_DIMPLE_DEPTH + 2,
-                             pnt=cq.Vector(*(ex - uh * (P.PWR_DIMPLE_DEPTH + 0.0))), dir=cq.Vector(*uh))
+    # axis = the wall's outward normal (not the pin axis: tilted 34 deg to the wall, a cone along the pin
+    # cut right through the 2 mm wall beside the tube). Depth capped so >= DIMPLE_MIN_WALL stays behind it.
+    nw = _wall_normal(ex)
+    dep = min(P.PWR_DIMPLE_DEPTH, P.CASE_WALL - P.PWR_DIMPLE_MIN_WALL)
+    cone = cq.Solid.makeCone(P.PWR_DIMPLE_D / 2 - dep, P.PWR_DIMPLE_D / 2 + 2, dep + 2,
+                             pnt=cq.Vector(*(ex - nw * dep)), dir=cq.Vector(*nw))
     b = b.cut(cone)
     return A.solidify(b), dict(exit=tuple(round(float(v), 2) for v in ex), s_exit=round(s_x, 2))
 
@@ -741,6 +763,7 @@ def boot_features(b, zb):
             break
         s += 0.05
     s_x = s
+    s0 = max(s0, s_x - P.BOOT_TUBE_LEN)          # v3: short guide, mostly in the wall (inner end sat over the speaker)
     h = d / 2
     top_z = min(zc + h + w, P.PWR_PIN_TOP + P.PWR_PIN_CLEAR + w)
     tube = _local_box(s0, s_x + 5, -h - w, h + w, zc - h - w, top_z, key)

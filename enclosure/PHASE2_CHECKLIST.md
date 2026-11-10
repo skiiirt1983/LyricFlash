@@ -1,4 +1,4 @@
-# Phase 2: full case v2 (layout B), print and check
+# Phase 2: full case v3 (layout B, no mic boxes), print and check
 
 One file: `out/phase2/lyricflash_case_project.3mf`. Everything is flat on the plate, fitted together in
 the **Assembly view**, and pre-assigned to a filament: **slot 1 = Iridium Gold PLA Metal**, **slot 2 =
@@ -13,11 +13,7 @@ black PETG**. If the parts don't all fit on one plate, Bambu Studio puts the ext
 | `cable_clip` | black PETG (2), springy | as installed (U-channel facing up) |
 
 **Settings:** 0.2 mm layers, 4 walls, 15 % gyroid, 0.4 mm nozzle.
-- **Base: supports ON, tree, "for enforcers only" or with a blocker on the outside.** Only these spots need
-  them, all inside the case:
-  - under the USB-C block and the two mic bars (they hang over the battery space);
-  - under the inner end of the short BOOT tube (front-right, just above the speaker pocket).
-  Snap them off before assembly. No support may touch the outside faces.
+- **Base: supports OFF.** Nothing inside hangs over the battery any more (v3).
 - **Top shell, pin, clips, cable clip: supports OFF.**
 - **USB-C opening:** with the 12° tilt, its top edge prints as a sloped ceiling, not a flat bridge. Print once
   without support. If the top edge of the opening droops, paint a support enforcer inside the opening only.
@@ -26,8 +22,8 @@ black PETG**. If the parts don't all fit on one plate, Bambu Studio puts the ext
 the centre of gravity (tips at 58.1°, PLAN asks for > 30°).
 
 ## Before assembly
-- Cut away the internal supports (base). Check the USB-C opening, both mic holes (Ø1.2, inside the USB-C
-  recess) and the BOOT pinhole are clear: a 1 mm paperclip should slide all the way in.
+- Check the USB-C opening, both mic holes (Ø2.0, inside the USB-C recess, either side of the port) and the
+  BOOT pinhole are clear: a 1 mm paperclip should slide into the BOOT hole and click the button.
 - **Switch (optional):** solder the SS-12D00 into the battery's red lead first. Slide it into the floor
   pocket at the back-right (behind the speaker) from the battery side, knob down through the slot. Nothing is pressed in: it slides
   sideways and the end lips hold it, as on C4.

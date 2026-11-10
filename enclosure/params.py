@@ -480,7 +480,8 @@ PWR_PIN_CLEAR = 0.25                 # bore clearance per side
 PWR_TUBE_WALL = 1.2
 PWR_PIN_RECESS = 0.3                 # outer end below the case surface at rest
 PWR_DIMPLE_D = 7.0                   # finger dimple round the pin end
-PWR_DIMPLE_DEPTH = 1.2
+PWR_DIMPLE_DEPTH = 1.0
+PWR_DIMPLE_MIN_WALL = 1.0            # wall left behind the finger dimple (v2 cut through: cone was on the pin axis)
 
 # ---- Phase 2: latch clips (separate PETG parts printed flat = C7 v5 notch 1 geometry)
 LATCH_CLIP_X = 12.5                  # world X of the two clips (front + back wall); 22 sat on the PWR/BOOT paths
@@ -529,3 +530,8 @@ MIN_TIP_DEG = 30.0                   # PLAN Phase 3
 BATTERY_LEAD_GAP = 9.0               # gap in the battery's left low wall at the back corner, for the leads
 SWITCH_CELL_Y = 22.7                 # layout B: switch pocket behind the speaker (back-right), centre Y
 SPK_DIVIDER_H = 16.0                 # layout B: divider height above the floor (full height came 0.01 from a standoff in the swing)
+
+# ---- v3 (Paul): mic boxes removed, plain holes through the USB recess wall, bigger
+MIC_HOLE_D_CASE = 2.0                # teardrop hole (was a D1.2 duct with a bar under each mic)
+MIC_HOLE_PCB_GAP = 0.6               # hole top this far below the PCB back
+BOOT_TUBE_LEN = 3.0                  # v3: guide length up to the surface (aims a 1 mm paperclip to +/-0.5 at the 1.8 mm plunger)
