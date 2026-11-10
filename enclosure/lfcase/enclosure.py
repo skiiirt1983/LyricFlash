@@ -771,7 +771,14 @@ def latch_features(b, top, zb):
             bs = bs.cut(battery_cut45()).cut(battery_roof_y())
         else:                                         # side wall: nothing under it but the speaker pocket
             (sx0, sy0, sz0), (sx1, sy1, sz1) = speaker_box()
-            bs = bs.cut(_battery_keepout()).cut(_box((sx0 - 0.3, sy0 - 1.5, 0), (sx1 + 5, sy1 + 1.5, sz1 + 0.5)))
+            # v9: 45 deg roof over the speaker's ends (like battery_roof_y), so a boss reaching past them
+            # gets a sloped underside instead of a flat ceiling
+            y0, y1, zt = sy0 - 1.5, sy1 + 1.5, sz1 + 0.5
+            w = (y1 - y0) / 2
+            pts = [(y0, 0.0), (y1, 0.0), (y1, zt), (y1 - w, zt + w), (y0, zt)]
+            wire = cq.Wire.makePolygon([cq.Vector(sx0 - 0.3, y, z) for y, z in pts], close=True)
+            spk_cut = cq.Solid.extrudeLinear(cq.Face.makeFromWires(wire), cq.Vector(sx1 + 5 - (sx0 - 0.3), 0, 0))
+            bs = bs.cut(_battery_keepout()).cut(spk_cut)
         ch = _poly_solid(list(chan.exterior.coords)[:-1], -E_ / 2 - c, E_ / 2 + side + 0.5).moved(loc)   # open at +t
         b = b.fuse(bs).cut(ch)
         # v6.4 (Paul): keep >= TOP_SKIN of shell between the pocket and every outside face (the front pocket
