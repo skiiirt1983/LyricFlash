@@ -1,5 +1,12 @@
 # Enclosure changelog
 
+## Phase 2 v6.5 (2026-11-10)
+- Paul's logo + "LYRIC FLASH" (his Bambu edit of base_panels.stl) applied to all three bases. Taken as the
+  difference between his file and mine (84.6 mm3, 0.5 mm deep in the top of the floor, inside under the
+  battery), stored in assets/logo_floor_cut.stl, and cut with an exact mesh boolean into every exported base
+  (STLs and the project 3MF; lfcase/logo.py). FLOOR_LOGO = "" turns it off. Panel base matches his file to
+  0.1 mm3. Base STLs now sit exactly on z = 0.
+
 ## Phase 2 v6.4 (2026-11-10)
 - Paul: a latch pocket broke through the top shell's first layer (the front pocket, leaning into the top-edge
   chamfer). Pockets now stay >= 0.6 mm (3 layers) inside every outside face of the top shell, and their roof

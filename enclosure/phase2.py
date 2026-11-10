@@ -141,6 +141,9 @@ def printable(parts, info, out_dir=None):
         sh = sh.moved(cq.Location(cq.Vector(0, 0, -bb.zmin)))
         f = out_dir / f"{k}.stl"
         write_stl(sh, f)
+        if k == "base":
+            from lfcase import logo
+            logo.cut_stl(f, R, (0, 0, -bb.zmin))
         res[k] = layers.check(f)
         bad = [i for i in res[k] if i[1] in ("FLOATING", "LONG BRIDGE")]
         print(k, "issues", len(res[k]), "floating/long", len(bad), flush=True)
@@ -229,7 +232,9 @@ def export(parts, info):
     from lfcase.export import write_3mf_project, write_step
     rots = print_rotations(info)
     order = [k for k in ["top_shell", "base", "clip_front", "clip_back", "pwr_pin", "cable_clip"] if k in parts]
-    plist = [dict(name=k, shape_assembled=parts[k], R=rots[k], rotate=rotate, material=MATERIAL[k]) for k in order]
+    from lfcase import logo
+    plist = [dict(name=k, shape_assembled=parts[k], R=rots[k], rotate=rotate, material=MATERIAL[k],
+                  mesh_post=(logo.cut if k == "base" else None)) for k in order]
     write_3mf_project(plist, OUT / "lyricflash_case_project.3mf", gap=8.0, keep_order=True)
     (OUT / "step").mkdir(exist_ok=True)
     for k in order:
@@ -319,6 +324,8 @@ def variant(texture, name):
     b = parts["base"]
     bb = b.BoundingBox()
     write_stl(b.moved(__import__("cadquery").Location(__import__("cadquery").Vector(0, 0, -bb.zmin))), OUT / "stl" / f"{name}.stl")
+    from lfcase import logo
+    logo.cut_stl(OUT / "stl" / f"{name}.stl", None, (0, 0, -bb.zmin))
     return parts, info
 
 

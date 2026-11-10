@@ -175,7 +175,7 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0, keep_order: boo
     a_shift = np.array([BED[0] / 2 - (min(b.xmin for b in bbs) + max(b.xmax for b in bbs)) / 2,
                         BED[1] / 2 - (min(b.ymin for b in bbs) + max(b.ymax for b in bbs)) / 2,
                         -min(b.zmin for b in bbs)])
-    locals_, mats_asm = {}, {}
+    locals_, mats_asm, tf = {}, {}, {}
     for p in parts:
         sh = p["shape_assembled"]
         if p.get("R") is not None:                      # general print orientation (3x3 rotation)
@@ -194,6 +194,7 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0, keep_order: boo
         # local = R*S + d  ->  S = R^T (local - d); assembled world = S + a_shift
         Rt = R.T
         mats_asm[p["name"]] = (Rt, Rt @ (-d) + a_shift)
+        tf[p["name"]] = (R, d)
     placed = pack(dict(locals_), gap=gap, keep_order=keep_order)   # plate positions
     objs, items, asm, slots = [], [], [], []
     for i, p in enumerate(parts, 2):
@@ -203,6 +204,8 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0, keep_order: boo
             write_stl(locals_[n], f)
             m = trimesh.load(f)
         m.merge_vertices()
+        if p.get("mesh_post") is not None:                # e.g. the floor logo (mesh boolean), same transform as the part
+            m = p["mesh_post"](m, *tf[n])
         if not m.is_watertight:
             raise RuntimeError(f"{n}: not watertight")
         V = np.round(m.vertices, 4)
