@@ -35,13 +35,15 @@ def load():
 
 def check(parts, info):
     """Interference: every part vs the STEP board + battery/speaker envelopes, and the parts vs each other."""
+    import params as P
     from lfcase.board import load_board
     from lfcase.interference import check as chk
     zb = info["zb"]
     g = load_board(verbose=False)
     gw = {k: E.to_wf(v, zb) for k, v in g.items()}
     gw["battery_envelope"] = E._box(*E.battery_box())
-    gw["speaker_envelope"] = E.speaker_dummy()
+    if P.SPEAKER:
+        gw["speaker_envelope"] = E.speaker_dummy()
     rows = []
     for k, v in parts.items():
         hits = [(n, round(x, 3)) for n, x, _ in chk(v, gw)]
@@ -58,6 +60,26 @@ def check(parts, info):
 
 
 GOLD, BLACK, ACCENT = (0.83, 0.66, 0.30), (0.13, 0.13, 0.15), (0.85, 0.68, 0.30)
+
+
+def insertion_check(parts, air=0.2):
+    """v9 (Paul): the battery must go in by hand. The real cell (not the pocket) is lowered straight down into
+    its pocket from above the case: every position it can take in the pocket, grown by `air`, swept from just
+    above its resting place to above the base, must not touch the base."""
+    import params as P
+    b = parts["base"]
+    (bx0, by0, bz0), (bx1, by1, bz1) = E.battery_box()
+    t, L, h = (P.BATTERY_T, P.BATTERY_L, P.BATTERY_W) if P.BATTERY_ON_EDGE else (P.BATTERY_W, P.BATTERY_L, P.BATTERY_T)
+    top = b.BoundingBox().zmax + 5
+    rows = []
+    for xa in (bx0, bx1 - t):
+        for ya in (by0, (by0 + by1 - L) / 2, by1 - L):
+            sweep = E._box((xa - air, ya - air, bz0 + air), (xa + t + air, ya + L + air, top))
+            v = sweep.intersect(b).Volume()
+            rows.append(((round(xa, 2), round(ya, 2)), round(v, 3)))
+    ok = all(v < 1e-3 for _, v in rows)
+    print("battery drop path", "PASS" if ok else "FAIL", rows, flush=True)
+    return ok, rows
 
 
 def render(parts, info, prefix="case"):
@@ -170,7 +192,8 @@ def cg_and_tip(parts, info):
     items = [("board", P.BOARD_MASS_G, np.array(cq.Shape.centerOfMass(board).toTuple()))]
     (bx0, by0, bz0), (bx1, by1, bz1) = E.battery_box()
     items.append(("battery", P.BATTERY_MASS_G, np.array([(bx0 + bx1) / 2, (by0 + by1) / 2, (bz0 + bz1) / 2])))
-    items.append(("speaker", P.SPEAKER_MASS_G, np.array(cq.Shape.centerOfMass(E.speaker_dummy()).toTuple())))
+    if P.SPEAKER:
+        items.append(("speaker", P.SPEAKER_MASS_G, np.array(cq.Shape.centerOfMass(E.speaker_dummy()).toTuple())))
     for k, v in parts.items():
         if k == "cable_clip":
             continue
@@ -221,7 +244,8 @@ def sections(parts, info):
         for k, v in board.items():
             s.add(v, (0.1, 0.42, 0.22) if k == "pcb" else (0.75, 0.75, 0.8), clip=clip)
         s.add(E._box(*E.battery_box()), (0.35, 0.45, 0.75), clip=clip)
-        s.add(E.speaker_dummy(), (0.5, 0.5, 0.55), clip=clip)
+        if P.SPEAKER:
+            s.add(E.speaker_dummy(), (0.5, 0.5, 0.55), clip=clip)
         for k, v in parts.items():
             s.add(v, col.get(k, (0.3, 0.5, 0.9)), clip=clip)
         s.camera(cam, target=target, zoom=zoom)
@@ -278,6 +302,10 @@ def report(parts, info, chk, lay, cg, sim_rows):
           "so nothing inside hangs over the battery any more.", "",
           "Top shell: the latch catch ledges (0.9 deep) are anchored on the outer wall and bridged 6.6 mm between "
           "the pocket's side walls.", ""]
+    ok_i, rows_i = info.get("insertion", (None, []))
+    L += ["## Battery insertion (v9)", "",
+          f"Real cell lowered straight into its pocket, every extreme position, {0.2} mm air: "
+          f"**{'PASS' if ok_i else 'FAIL'}** " + ", ".join(f"{p}: {v} mm3" for p, v in rows_i), ""]
     L += ["## Centre of gravity and tipping", "",
           f"Total {cg['mass']} g (board {P.BOARD_MASS_G:g} g and battery {P.BATTERY_MASS_G:g} g are estimates). "
           f"CG at X {cg['cg'][0]}, Y {cg['cg'][1]}, Z {cg['cg'][2]} mm. "
@@ -286,7 +314,8 @@ def report(parts, info, chk, lay, cg, sim_rows):
     L += [f"- Mic holes: D{P.MIC_HOLE_D_CASE} teardrop straight through the USB recess wall, "
           f"{info['mic']['MIC1']['to_mic']} / {info['mic']['MIC2']['to_mic']} mm from the mics (no collar, no duct: Paul).",
           "- PWR and BOOT buttons: no access (Paul, v5: not used by the firmware). Walls are plain.",
-          f"- Speaker: {info['speaker']['holes']} x D{P.SPK_GRILLE_HOLE_D} grille holes (teardrop) in the right wall.",
+          (f"- Speaker: {info['speaker']['holes']} x D{P.SPK_GRILLE_HOLE_D} grille holes (teardrop) in the right wall."
+           if info.get("speaker") else "- Speaker: none (Paul, v9). The battery stands on its edge along the right wall."),
           f"- Switch: C4 K3 pocket in the floor at {info['switch']['centre']}.",
           f"- Latches: 2 PETG clips (C7 v5 notch 1: hook {P.LATCH_HOOK}, {P.LATCH_CATCH_DEG:g} deg) at X {P.LATCH_CLIP_X}, front and back.",
           ""]
@@ -297,6 +326,8 @@ def main():
     import simulate_case as SC
     parts, info = build()
     chk = check(parts, info)
+    ins = insertion_check(parts)
+    info["insertion"] = ins
     mov = {k: v for k, v in parts.items() if k not in ("top_shell", "cable_clip")}
     sim_rows = SC.run(mov, zb=info["zb"], out=OUT / "assembly_sim.md", top=parts["top_shell"])
     lay = printable(parts, info)

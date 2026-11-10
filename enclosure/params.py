@@ -590,5 +590,11 @@ CLEAT_EAR = 2.0                      # turned-up tip so the turn can't slide off
 # ---- v9 (Paul): the flat cell couldn't get past the board ledges. Cell stands on its thin edge, the base gets
 # taller (board raised by the solver) and the ledges / back clip move off the cell's drop column.
 BATTERY_ON_EDGE = True
-BATTERY_STAND_X = -1.5               # world X of the standing cell's centre (clear column between the ledges)
-BATTERY_STAND_WALL_H = 16.0          # side walls that keep the standing cell upright
+BATTERY_STAND_X1 = 22.26             # world X of the pocket's right face: along the right wall, kept far enough
+                                     # in that the cell's corners clear the case's rounded inner corners
+BATTERY_STAND_T = 11.3               # pocket width for the 10.3 mm cell (+1); its left side stays 0.6 clear of the
+                                     # front-right board ledge's column
+BATTERY_STAND_WALL_H = 16.0          # side wall that keeps the standing cell upright
+SPEAKER = False                      # v9 (Paul): speaker removed; the cell stands where it was
+BOARD_Z_EXTRA = 0.0                  # v9: ledges no longer sit over the battery (the 2.5 was for the wedge ledges)
+LATCH_CLIPS = (("front", "x-", -22.0, 6.0, 0.8), ("back", "y+", -4.0, 6.0, 1.6))   # v9: both off the cell's column

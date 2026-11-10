@@ -36,7 +36,7 @@ def board_z():
     import layout_study as L
     from lfcase.board import load_board
     boxes = L.board_boxes(load_board(verbose=False))
-    obst = [battery_box(), speaker_box()]
+    obst = [battery_box()] + ([speaker_box()] if P.SPEAKER else [])
     air = P.CASE_AIR
 
     def ok(zb):
@@ -103,8 +103,8 @@ def battery_box():
     """Battery turned front-to-back (long side along Y), against the speaker divider."""
     L, W, H = P.BATTERY_POCKET
     if getattr(P, "BATTERY_ON_EDGE", False):           # v9: standing on its thin edge, long side along Y
-        cx = P.BATTERY_STAND_X
-        return (cx - H / 2, -L / 2, P.CASE_FLOOR), (cx + H / 2, L / 2, P.CASE_FLOOR + W)
+        x1 = P.BATTERY_STAND_X1
+        return (x1 - P.BATTERY_STAND_T, -L / 2, P.CASE_FLOOR), (x1, L / 2, P.CASE_FLOOR + W)
     (sx0, _, _), _ = speaker_box()
     bx1 = sx0 - P.SPK_DIVIDER
     return (bx1 - W, -L / 2, P.CASE_FLOOR), (bx1, L / 2, P.CASE_FLOOR + H)
@@ -260,11 +260,14 @@ def base_shell(zb):
     b = b.fuse(_box((bx0 - P.BATTERY_LOW_WALL_T, by0 - 0.01, bz0 - 0.01), (bx0, by1 + 0.01, bz0 + wall_h)))
     if P.BATTERY_LEAD_GAP > 0:
         b = b.cut(_box((bx0 - 1.3, by1 - P.BATTERY_LEAD_GAP, bz0), (bx0 + 0.1, by1 + 1, bz0 + P.BATTERY_POCKET_WALL_H + 1)))
+    # low wall along the battery's right side (v9: up to the case wall, trimmed to the cavity's corners)
+    b = b.fuse(_box((bx1, by0 - 0.01, bz0 - 0.01), (bx1 + P.BATTERY_LOW_WALL_T + 5, by1 + 0.01, bz0 + wall_h))
+               .intersect(base_body(zb)))
+    if not P.SPEAKER:
+        return A.solidify(b)
     # speaker pocket: divider wall + end walls (speaker stands, fires out the right wall)
     (sx0, sy0, sz0), (sx1, sy1, sz1) = speaker_box()
     b = b.fuse(_box((min(bx1, sx0 - P.SPK_DIVIDER), sy0 - P.SPK_END_WALL, sz0 - 0.01), (sx0, sy1 + P.SPK_END_WALL, sz0 + P.SPK_DIVIDER_H)))
-    # low wall continuing the divider along the battery's right side (front and back of the speaker)
-    b = b.fuse(_box((bx1, by0 - 0.01, bz0 - 0.01), (bx1 + P.BATTERY_LOW_WALL_T, by1 + 0.01, bz0 + wall_h)))
     for y in (sy0 - P.SPK_END_WALL, sy1):
         b = b.fuse(_box((sx0 - 0.01, y, sz0 - 0.01), (sx1 + 0.01, y + P.SPK_END_WALL, sz1)))
     return A.solidify(b)
@@ -773,6 +776,8 @@ def latch_features(b, top, zb):
         # edge running to the floor as a thin leaning spike (Paul's slicer view)
         if wall in ("y-", "y+"):                       # front/back wall: over the battery, 45 deg front-to-back roof
             bs = bs.cut(battery_cut45()).cut(battery_roof_y())
+        elif not P.SPEAKER:                           # v9: side wall with nothing under it
+            bs = bs.cut(_battery_keepout())
         else:                                         # side wall: nothing under it but the speaker pocket
             (sx0, sy0, sz0), (sx1, sy1, sz1) = speaker_box()
             # v9: 45 deg roof over the speaker's ends (like battery_roof_y), so a boss reaching past them
@@ -803,7 +808,9 @@ def build_all(zb=None, log=print):
     pwr = boot = None
     if P.BUTTON_ACCESS:
         log("PWR pin tube"); b, pwr = pwr_features(b, zb)
-    log("speaker"); b, spk = speaker_features(b, zb)
+    spk = None
+    if P.SPEAKER:
+        log("speaker"); b, spk = speaker_features(b, zb)
     log("switch"); b, sw = switch_features(b, zb)
     if P.BUTTON_ACCESS:
         log("BOOT pinhole"); b, boot = boot_features(b, zb)
@@ -846,7 +853,8 @@ def switch_features(b, zb):
     cw = P.SWITCH_KNOB_CHANNEL_W
     cut.append(_box((-0.5, -cw / 2, P.SWITCH_CHANNEL_SKIN), (pw / 2, cw / 2, plate + 0.01)))            # knob entry channel
     cut.append(_box((-0.5, -pl / 2, plate), (pw, pl / 2, H + 5)))                                    # body cavity
-    cut.append(_box((-1.5, -pl / 2 - wall, bz0), (0.01, pl / 2 + wall, bz0 + P.BATTERY_POCKET_WALL_H + 1)))  # low-wall gap
+    gap_h = P.BATTERY_STAND_WALL_H if P.BATTERY_ON_EDGE else P.BATTERY_POCKET_WALL_H
+    cut.append(_box((-1.5, -pl / 2 - wall, bz0), (0.01, pl / 2 + wall, bz0 + gap_h + 1)))  # low-wall gap
     z0 = plate + cav_h - P.SWITCH_LIP
     for sgn in (-1, 1):
         vw = sgn * pl / 2
@@ -854,7 +862,10 @@ def switch_features(b, zb):
         prof = [(vw, z0), (vi, z0 + P.SWITCH_LIP), (vi, H), (vw, H)]
         w = cq.Wire.makePolygon([cq.Vector(0, v, z) for v, z in prof], close=True)
         add.append(cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(pw, 0, 0)))
-    loc = cq.Location(cq.Vector(bx1 + 1.2 * 0, P.SWITCH_CELL_Y, 0))
+    if P.BATTERY_ON_EDGE:                       # v9: cell on the right, switch left of it, open side facing +X
+        loc = cq.Location(cq.Vector(bx0, P.SWITCH_CELL_Y, 0), cq.Vector(0, 0, 1), 180)
+    else:
+        loc = cq.Location(cq.Vector(bx1 + 1.2 * 0, P.SWITCH_CELL_Y, 0))
     body = base_body(zb)
     for a_ in add[:1]:
         b = b.fuse(a_.moved(loc).intersect(body))
@@ -862,7 +873,8 @@ def switch_features(b, zb):
         b = b.cut(c_.moved(loc))
     for a_ in add[1:]:
         b = b.fuse(a_.moved(loc))
-    return A.solidify(b), dict(centre=(round(bx1 + pw / 2, 2), P.SWITCH_CELL_Y), knob_slot=(sl, sw), plate=plate)
+    cx_ = bx0 - pw / 2 if P.BATTERY_ON_EDGE else bx1 + pw / 2
+    return A.solidify(b), dict(centre=(round(cx_, 2), P.SWITCH_CELL_Y), knob_slot=(sl, sw), plate=plate)
 
 
 # ------------------------------------------------------------------ BOOT pinhole (KEY1), PLAN 3.5
