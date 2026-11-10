@@ -545,3 +545,10 @@ BOARD_Z_EXTRA = 2.5                  # v5.2 (Paul): board raised so the front le
 # v5.4: front latch moved to the right wall's front stretch (nothing under it there); at the front wall the
 # battery's 45 deg clearance left the channel's inner wall floating. (name, wall, position along it, width, boss side)
 LATCH_CLIPS = (("front", "x+", -22.0, 4.0, 1.0), ("back", "y+", 12.5, 6.0, 1.6))   # front: leans 20 deg along the wall
+
+# ---- v6 (Paul): ribbed / japandi outside on the base
+RIBS = True
+RIB_R = 1.5                          # flute radius
+RIB_PROUD = 1.0                      # how far each flute stands off the wall face
+RIB_PITCH = 3.0                      # flute spacing along the perimeter (leaves a small groove between them)
+RIB_TOP_BAND = 1.5                   # plain band under the gold top shell (board-frame mm below the seam)

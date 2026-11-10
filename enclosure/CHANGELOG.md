@@ -1,5 +1,13 @@
 # Enclosure changelog
 
+## Phase 2 v6 (2026-11-10)
+- Paul: ribbed / japandi outside on the base (BumpMesh gave poor results). Modelled, not a texture: vertical
+  half-round flutes R1.5, 1.0 proud, 3.0 pitch, following the rounded corners, from the desk to a 1.5 mm
+  plain band under the gold top. Skipped over the USB-C recess and round the cable rail (the ribs above the
+  clip start with a 45 deg underside); the speaker grille is drilled through them. RIBS = False turns it off.
+- Base now 56.1 x 64.0 at the floor (+2 mm each way). Other parts unchanged. Checks: board none, swing PASS,
+  no floating spots except the USB-C mouth (painted).
+
 ## Phase 2 v5.4 (2026-11-10)
 - Paul: a leaning spike in the slicer. The latch boss reached past the battery's edge and ran to the floor
   as a thin leaning column; bosses now get the 45 deg underside across their full width.

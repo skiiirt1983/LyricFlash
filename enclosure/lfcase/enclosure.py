@@ -580,6 +580,9 @@ def _teardrop_x(x0, x1, y, z, d):
                   .rotate(cq.Vector(0, y, z), cq.Vector(1, y, z), 45)))
 
 
+_GRILLE = {}
+
+
 def speaker_features(b, zb):
     """Grille through the right wall, seal rib on its inner face, grip ribs on the end walls, lead slot (+Y end, toward H3)."""
     (sx0, sy0, sz0), (sx1, sy1, sz1) = speaker_box()
@@ -605,7 +608,8 @@ def speaker_features(b, zb):
             u += p
         v += p * math.sqrt(3) / 2
         j += 1
-    holes = [_teardrop_x(sx1 - rh - 0.1, x_out + 1, y, z, P.SPK_GRILLE_HOLE_D) for y, z in pts]
+    holes = [_teardrop_x(sx1 - rh - 0.1, x_out + 1 + P.RIB_PROUD + 1, y, z, P.SPK_GRILLE_HOLE_D) for y, z in pts]
+    _GRILLE["holes"] = holes                            # recut after the ribs go on
     b = b.cut(cq.Compound.makeCompound(holes))
     # grip ribs on the two end walls (the speaker's 20 mm ends), C8 interference, centred on its thickness
     gr = P.SPK_CLEAR + P.SPK_GRIP_RIB
@@ -774,6 +778,8 @@ def build_all(zb=None, log=print):
     if P.BUTTON_ACCESS:
         log("BOOT pinhole"); b, boot = boot_features(b, zb)
     log("cable rail"); b = cable_rail_features(b, zb)
+    if P.RIBS:
+        log("ribs"); b = rib_texture(b, zb)
     log("top shell"); top = top_shell(zb)
     log("latches"); b, top, lat = latch_features(b, top, zb)
     parts = {"top_shell": top, "base": b, "cable_clip": cable_clip(zb)}
@@ -907,3 +913,53 @@ def cable_clip(zb):
     mouth = _box((x0 + xc - m / 2, yc - L / 2 - 1, zc), (x0 + xc + m / 2, yc + L / 2 + 1, z0 + H + 1))
     clip = body.cut(chan).cut(mouth)
     return A.solidify(clip)
+
+
+# ------------------------------------------------------------------ outside texture (v6, Paul: ribbed / japandi)
+def rib_texture(b, zb):
+    """Vertical half-round flutes round the base's outside: cylinders R RIB_R whose axes sit RIB_R - RIB_PROUD
+    inside the wall face, every RIB_PITCH along the perimeter (they follow the rounded corners). They run from
+    the desk to RIB_TOP_BAND below the seam, and skip the USB-C recess and the cable rail. The speaker grille is
+    drilled through them."""
+    x0, x1, y0, y1 = footprint()
+    R, proud, pitch = P.RIB_R, P.RIB_PROUD, P.RIB_PITCH
+    inset = R - proud                                  # axis inside the wall face
+    Rc = P.CASE_CORNER_R
+    # perimeter path at the axis line: rounded rectangle offset inward by `inset`
+    import shapely.geometry as sg
+    rect = sg.box(x0 + Rc, y0 + Rc, x1 - Rc, y1 - Rc).buffer(Rc - inset, resolution=64)
+    ring = rect.exterior
+    n = int(round(ring.length / pitch))
+    step = ring.length / n
+    g = A.usb_geometry()
+    pc = bf_point_to_wf((P.USB_MOUTH_X, g["yc"], g["zc"]), zb)
+    bay_y = (pc[1] - P.PORT_BAY_HALF_W - P.CASE_WALL - R, pc[1] + P.PORT_BAY_HALF_W + P.CASE_WALL + R)
+    bay_z = pc[2] - P.PORT_BAY_BELOW - max(P.CASE_FLOOR, 3.0) - 0.5
+    rail_y = (P.CABLE_RAIL_YC - P.CABLE_CLIP_LEN / 2 - R - 0.5, P.CABLE_RAIL_YC + P.CABLE_CLIP_LEN / 2 + R + 0.5)
+    rail_z = P.CABLE_STOP_H + P.CABLE_CLIP_H + 1.0
+    ribs = []
+    for k in range(n):
+        p_ = ring.interpolate(k * step)
+        x, y = p_.x, p_.y
+        z0, z1 = 0.0, 200.0
+        on_left = x < x0 + Rc - 1e-6 and abs(x - (x0 + inset)) < 0.5
+        if on_left and bay_y[0] < y < bay_y[1]:
+            z1 = bay_z                                 # below the USB-C recess only
+        if on_left and rail_y[0] < y < rail_y[1]:
+            z0 = rail_z                                # above the cable clip only
+        if z1 - z0 < 3.0:
+            continue
+        r_ = cq.Solid.makeCylinder(R, z1 - z0 + R + 1, pnt=cq.Vector(x, y, z0 - R - 1), dir=cq.Vector(0, 0, 1))
+        if z0 > 0:
+            # starts above the desk: 45 deg underside growing out of the wall (left wall: outward = -X)
+            pl = cq.Plane(origin=cq.Vector(x0, 0, z0), xDir=cq.Vector(0, 1, 0), normal=cq.Vector(1, 0, 1).normalized())
+            r_ = r_.intersect(cq.Solid.makeBox(400, 400, 400, pnt=cq.Vector(-200, -200, 0)).moved(cq.Location(pl)))
+        else:
+            r_ = r_.intersect(_box((-200, -200, 0), (200, 200, 300)))
+        ribs.append(r_)
+    rib = cq.Compound.makeCompound(ribs)
+    rib = rib.intersect(halfspace_bf(zb, P.SEAM_Z - P.RIB_TOP_BAND, above=False)).cut(outer_body(zb))
+    b = b.fuse(rib)
+    if _GRILLE.get("holes"):
+        b = b.cut(cq.Compound.makeCompound(_GRILLE["holes"]))
+    return A.solidify(b)
