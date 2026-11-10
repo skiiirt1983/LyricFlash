@@ -6,3 +6,4 @@ cache/
 __pycache__/
 .venv/
 out/phase2/brep/
+out/print_pack/

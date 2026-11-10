@@ -247,3 +247,64 @@ def write_3mf_project(parts: list, path: Path, gap: float = 6.0, keep_order: boo
         z.writestr("3D/3dmodel.model", model)
         z.writestr("Metadata/model_settings.config", config)
     return placed
+
+
+def write_3mf_plates(plates: list, path: Path, bed=BED):
+    """Bambu Studio project with several plates. plates: [[dict(name, mesh (trimesh, print orientation),
+    material)], ...] one list per plate. Parts on a plate are laid out side by side, centred on it.
+    Plate positions follow Bambu's grid (stride = bed * 1.2, columns = ceil-ish sqrt(n), rows go -Y), and
+    every object's lowest point is exactly z = 0 (Bambu merges objects otherwise)."""
+    import math
+    n = len(plates)
+    v = math.sqrt(n)
+    cols = int(round(v)) + (1 if v > round(v) else 0)
+    sx, sy = bed[0] * 1.2, bed[1] * 1.2
+    objs, items, cfg_obj, cfg_plate = [], [], [], []
+    oid = 2
+    for pi, plate in enumerate(plates):
+        row, col = divmod(pi, cols)
+        ox, oy = col * sx, -row * sy
+        gap = 8.0
+        widths = [p["mesh"].extents[0] for p in plate]
+        x = bed[0] / 2 - (sum(widths) + gap * (len(plate) - 1)) / 2
+        inst = []
+        for p in plate:
+            m = p["mesh"].copy()
+            m.merge_vertices()
+            if not m.is_watertight:
+                raise RuntimeError(f"{p['name']}: not watertight")
+            c = (m.bounds[0] + m.bounds[1]) / 2
+            V = np.round(m.vertices - c, 4)                     # stored centred (Bambu re-centres on load)
+            z_lift = -float(V[:, 2].min())
+            tx = ox + x + m.extents[0] / 2
+            ty = oy + bed[1] / 2
+            x += m.extents[0] + gap
+            vs = "".join(f'<vertex x="{a:.4f}" y="{b:.4f}" z="{c_:.4f}"/>' for a, b, c_ in V)
+            ts = "".join(f'<triangle v1="{a}" v2="{b}" v3="{c_}"/>' for a, b, c_ in m.faces)
+            objs.append(f'<object id="{oid}" name="{p["name"]}" type="model"><mesh><vertices>{vs}</vertices>'
+                        f'<triangles>{ts}</triangles></mesh></object>')
+            items.append(f'<item objectid="{oid}" transform="1 0 0 0 1 0 0 0 1 {tx:.4f} {ty:.4f} {z_lift:.4f}" printable="1"/>')
+            cfg_obj.append(f'  <object id="{oid}">\n    <metadata key="name" value="{p["name"]}"/>\n'
+                           f'    <metadata key="extruder" value="{FILAMENT_SLOT[p["material"]]}"/>\n  </object>')
+            inst.append(f'    <model_instance>\n      <metadata key="object_id" value="{oid}"/>\n'
+                        f'      <metadata key="instance_id" value="0"/>\n    </model_instance>')
+            oid += 1
+        cfg_plate.append(f'  <plate>\n    <metadata key="plater_id" value="{pi + 1}"/>\n'
+                         f'    <metadata key="plater_name" value="{plate[0].get("plate_name", "")}"/>\n'
+                         f'    <metadata key="locked" value="false"/>\n' + "\n".join(inst) + '\n  </plate>')
+    model = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+             '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
+             '<metadata name="Title">LyricFlash print pack</metadata>'
+             f'<resources>{"".join(objs)}</resources><build>{"".join(items)}</build></model>')
+    config = '<?xml version="1.0" encoding="UTF-8"?>\n<config>\n' + "\n".join(cfg_plate + cfg_obj) + '\n</config>\n'
+    ct = ('<?xml version="1.0" encoding="UTF-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+          '<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>'
+          '<Default Extension="config" ContentType="text/xml"/></Types>')
+    rels = ('<?xml version="1.0" encoding="UTF-8"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>')
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", ct)
+        z.writestr("_rels/.rels", rels)
+        z.writestr("3D/3dmodel.model", model)
+        z.writestr("Metadata/model_settings.config", config)
