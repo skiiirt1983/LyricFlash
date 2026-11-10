@@ -92,7 +92,7 @@ def render(parts, info, prefix="case"):
     col = {"top_shell": GOLD, "base": BLACK}
     views = [
         ("front_left", ((-0.8, -1.0, 0.55), (0, 0, 1)), "Front-left: USB-C bay, mic holes, cable clip"),
-        ("back_right", ((0.9, 1.0, 0.5), (0, 0, 1)), "Back-right: speaker grille"),
+        ("back_right", ((0.9, 1.0, 0.5), (0, 0, 1)), "Back-right (v9: no speaker; battery along the right wall)"),
         ("front_right", ((0.9, -1.0, 0.45), (0, 0, 1)), "Front-right"),
         ("underside", ((0.25, -0.35, -1.0), (0, 1, 0)), "Underside: switch pocket"),
     ]
@@ -226,6 +226,7 @@ def cg_and_tip(parts, info):
 
 def sections(parts, info):
     """PLAN Phase 2: section renders through the USB port, the battery and a latch."""
+    import params as P
     from lfcase.board import load_board
     from lfcase.render import Scene, save_labelled
     zb = info["zb"]
