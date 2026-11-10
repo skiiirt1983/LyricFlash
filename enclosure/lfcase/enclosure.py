@@ -107,6 +107,18 @@ def battery_box():
     return (bx1 - W, -L / 2, P.CASE_FLOOR), (bx1, L / 2, P.CASE_FLOOR + H)
 
 
+def _top_skin_body(zb):
+    """The top shell's outer envelope eroded by TOP_SKIN: footprint, top face and top-edge chamfer all
+    moved TOP_SKIN inward. Cuts inside the top shell are kept within it."""
+    x0, x1, y0, y1 = footprint()
+    k = P.TOP_SKIN
+    body = (cq.Workplane("XY").center((x0 + x1) / 2, (y0 + y1) / 2)
+            .sketch().rect(x1 - x0 - 2 * k, y1 - y0 - 2 * k).vertices().fillet(P.CASE_CORNER_R - k).finalize().extrude(120).val())
+    body = body.cut(halfspace_bf(zb, A.LIP_TOP - k, above=True))
+    nv = bf_point_to_wf((0, 0, 1), zb) - bf_point_to_wf((0, 0, 0), zb)
+    return _chamfer_face_outer(body, nv, P.TOP_EDGE_CHAMFER, top=True)
+
+
 def outer_body(zb):
     x0, x1, y0, y1 = footprint()
     h = 120
@@ -739,8 +751,13 @@ def latch_features(b, top, zb):
     n_far = pr["nb0"] + pr["tb"] + hk + 0.3
     n_win = pr["nb0"] - hk - 0.2
     a_top = pr["a_tip"] + 0.3
-    pocket = [(pr["n_lip"], -3.0), (n_far, -3.0), (n_far, a_top), (n_win, a_top), (n_win, pr["lip_a"](n_win)),
-              (pr["n_lip"], pr["lip_a"](pr["n_lip"]))]
+    # roof follows the hook's 30 deg lead-in toward the outer wall (v6.4: keeps the pocket clear of the top-edge
+    # chamfer), with LATCH_ROOF_CLEAR above it
+    lead = hk / math.tan(math.radians(P.SNAP_LEADIN_DEG))
+    rc = P.LATCH_ROOF_CLEAR
+    roof_out = pr["a_tip"] + rc - lead * (pr["nb0"] - n_win) / hk
+    pocket = [(pr["n_lip"], -3.0), (n_far, -3.0), (n_far, a_top), (pr["nb0"], a_top), (n_win, roof_out),
+              (n_win, pr["lip_a"](n_win)), (pr["n_lip"], pr["lip_a"](pr["n_lip"]))]
     ct = P.LATCH_POCKET_T_CLEAR
     below = halfspace_bf(zb, P.SEAM_Z, above=False)
     walls_of = {c_[0]: c_[1] for c_ in P.LATCH_CLIPS}
@@ -757,7 +774,9 @@ def latch_features(b, top, zb):
             bs = bs.cut(_battery_keepout()).cut(_box((sx0 - 0.3, sy0 - 1.5, 0), (sx1 + 5, sy1 + 1.5, sz1 + 0.5)))
         ch = _poly_solid(list(chan.exterior.coords)[:-1], -E_ / 2 - c, E_ / 2 + side + 0.5).moved(loc)   # open at +t
         b = b.fuse(bs).cut(ch)
-        top = top.cut(_poly_solid(pocket, -E_ / 2 - ct, E_ / 2 + ct).moved(loc))
+        # v6.4 (Paul): keep >= TOP_SKIN of shell between the pocket and every outside face (the front pocket
+        # broke through the top-edge chamfer, i.e. the first layer of the face-down print)
+        top = top.cut(_poly_solid(pocket, -E_ / 2 - ct, E_ / 2 + ct).moved(loc).intersect(_top_skin_body(zb)))
     return A.solidify(b), A.solidify(top), dict(a_tip=round(pr["a_tip"], 2), a_root=round(pr["a_root"], 2))
 
 

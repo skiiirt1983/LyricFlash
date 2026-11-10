@@ -1,5 +1,12 @@
 # Enclosure changelog
 
+## Phase 2 v6.4 (2026-11-10)
+- Paul: a latch pocket broke through the top shell's first layer (the front pocket, leaning into the top-edge
+  chamfer). Pockets now stay >= 0.6 mm (3 layers) inside every outside face of the top shell, and their roof
+  slopes with the hook's 30 deg lead-in toward the wall. First three print layers: screen opening only.
+- Paul: plain (untextured) base added: `out/phase2/stl/base_smooth.stl`, with the built-in cable clip.
+- Checks: no part overlaps; swing PASS; all three bases watertight, no floating spots (USB-C mouth painted).
+
 ## Phase 2 v6.3 (2026-11-10)
 - Paul: cable clip built into the base (matte PETG sliding joints bind and break; separate parts were never
   wanted for colour). U-channel along Y on the left wall at desk height, opening up; the wall is its inner

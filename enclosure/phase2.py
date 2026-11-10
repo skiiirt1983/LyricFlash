@@ -304,6 +304,7 @@ def main():
     import params as P
     keep = P.TEXTURE
     variant("panels", "base_panels")
+    variant(None, "base_smooth")
     P.TEXTURE = keep
     print((OUT / "report.md").read_text())
 

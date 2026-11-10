@@ -566,3 +566,5 @@ CABLE_CLIP_ZC = 5.0                  # cable centre height above the desk
 CABLE_CLIP_JAW_T = 1.2               # outer jaw (the only part that flexes)
 CABLE_CLIP_TOP_ABOVE = 0.4           # block top above the channel
 CABLE_CLIP_CLEAR = 1.5               # plain border round the clip in the texture
+TOP_SKIN = 0.6                       # v6.4: shell kept between latch pockets and any outside face (3 layers; 0.8 left the back hook touching)
+LATCH_ROOF_CLEAR = 0.5                # v6.4: pocket roof above the hook's lead-in slope (vertical)
