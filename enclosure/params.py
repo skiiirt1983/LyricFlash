@@ -537,3 +537,6 @@ MIC_HOLE_PCB_GAP = 0.6               # hole top this far below the PCB back
 BOOT_TUBE_LEN = 3.0                  # v3: guide length up to the surface (aims a 1 mm paperclip to +/-0.5 at the 1.8 mm plunger)
 USB_INSERT_SIDE_WALL = 1.6           # v3.1: guide walls either side of the receptacle; nothing wider behind the port wall
 LATCH_CLIP_BAR_IN = 1.0              # v4: inner shoulder width (was 1.6); with the 2.6 bar its 1.8:1 rise still fits
+
+# ---- v5 (Paul): remove the PWR pin / tube / dimple and the BOOT pinhole; plain walls
+BUTTON_ACCESS = False

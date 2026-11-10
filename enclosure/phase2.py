@@ -15,6 +15,8 @@ CACHE = OUT / "brep"
 
 def build():
     CACHE.mkdir(parents=True, exist_ok=True)
+    for old in list(CACHE.glob("*.brep")) + list((OUT / "stl").glob("*.stl")) + list((OUT / "step").glob("*.step")):
+        old.unlink()                                       # parts that no longer exist must not linger
     t = time.time()
     parts, info = E.build_all(log=lambda m: print(f"[{time.time() - t:6.0f}s] {m}", flush=True))
     for k, v in parts.items():
@@ -66,8 +68,8 @@ def render(parts, info, prefix="case"):
     col = {"top_shell": GOLD, "base": BLACK}
     views = [
         ("front_left", ((-0.8, -1.0, 0.55), (0, 0, 1)), "Front-left: USB-C bay, mic holes, cable clip"),
-        ("back_right", ((0.9, 1.0, 0.5), (0, 0, 1)), "Back-right: PWR button, speaker grille"),
-        ("front_right", ((0.9, -1.0, 0.45), (0, 0, 1)), "Front-right: BOOT pinhole, latch line"),
+        ("back_right", ((0.9, 1.0, 0.5), (0, 0, 1)), "Back-right: speaker grille"),
+        ("front_right", ((0.9, -1.0, 0.45), (0, 0, 1)), "Front-right"),
         ("underside", ((0.25, -0.35, -1.0), (0, 1, 0)), "Underside: switch pocket"),
     ]
     for name, cam, title in views:
@@ -90,7 +92,7 @@ def print_rotations(info):
     Rx = lambda d: np.array([[1, 0, 0], [0, math.cos(math.radians(d)), -math.sin(math.radians(d))],
                              [0, math.sin(math.radians(d)), math.cos(math.radians(d))]])
     rots = {"base": np.eye(3), "top_shell": Rx(180.0 - P.TILT_DEG)}     # top face down on the plate
-    # PWR pin: lying on its flat side (face A), length along X
+    # PWR pin (only when BUTTON_ACCESS): lying on its flat side (face A), length along X
     a, tip, _ = E._pin_frame()
     o = E.bf_point_to_wf((0, 0, 0), zb)
     s_w = E.bf_point_to_wf((math.cos(a), math.sin(a), 0), zb) - o
@@ -133,6 +135,8 @@ def printable(parts, info, out_dir=None):
     out_dir.mkdir(parents=True, exist_ok=True)
     res = {}
     for k, R in print_rotations(info).items():
+        if k not in parts:
+            continue
         sh = rotate(parts[k], R)
         bb = sh.BoundingBox()
         sh = sh.moved(cq.Location(cq.Vector(0, 0, -bb.zmin)))
@@ -225,7 +229,7 @@ def sections(parts, info):
 def export(parts, info):
     from lfcase.export import write_3mf_project, write_step
     rots = print_rotations(info)
-    order = ["top_shell", "base", "clip_front", "clip_back", "pwr_pin", "cable_clip"]
+    order = [k for k in ["top_shell", "base", "clip_front", "clip_back", "pwr_pin", "cable_clip"] if k in parts]
     plist = [dict(name=k, shape_assembled=parts[k], R=rots[k], rotate=rotate, material=MATERIAL[k]) for k in order]
     write_3mf_project(plist, OUT / "lyricflash_case_project.3mf", gap=8.0, keep_order=True)
     (OUT / "step").mkdir(exist_ok=True)
@@ -235,7 +239,7 @@ def export(parts, info):
 
 def report(parts, info, chk, lay, cg, sim_rows):
     import params as P
-    L = ["# Phase 2 report: full case v4 (20 deg, layout B)", "",
+    L = ["# Phase 2 report: full case v5 (20 deg, layout B, no button access)", "",
          f"Tilt {P.TILT_DEG:g} deg, board centre {info['zb']:.1f} mm above the desk. Parts: " + ", ".join(parts) + ".", "",
          "## Interference against the STEP board (boolean volume)", "",
          "| Part | Solids | Valid | Overlaps |", "|---|---|---|---|"]
@@ -265,8 +269,7 @@ def report(parts, info, chk, lay, cg, sim_rows):
     L += ["", "Base: **no supports needed**. What the check still flags, all small:", "",
           "- **USB-C opening, top edge** (visible): with the 12 deg tilt it's a sloped ceiling, not a flat 9.5 mm bridge. "
           "If the first print shows a droop, paint a support enforcer inside the opening only.",
-          "- PWR tube roof: bridged across the 3.5 mm bore as the roof climbs with the tilt (inside).",
-          "- Two specks under 2 mm2 (a lead-gap edge, the BOOT tube mouth): print as short overhangs.",
+          "- Small specks under 2 mm2 (a lead-gap edge): print as short overhangs.",
           "", "The USB-C insert's underside is filled down to the wall at 45 deg, and the mic bars are gone (Paul), "
           "so nothing inside hangs over the battery any more.", "",
           "Top shell: the latch catch ledges (0.9 deep) are anchored on the outer wall and bridged 6.6 mm between "
@@ -278,8 +281,7 @@ def report(parts, info, chk, lay, cg, sim_rows):
     L += ["## Key numbers", ""]
     L += [f"- Mic holes: D{P.MIC_HOLE_D_CASE} teardrop straight through the USB recess wall, "
           f"{info['mic']['MIC1']['to_mic']} / {info['mic']['MIC2']['to_mic']} mm from the mics (no collar, no duct: Paul).",
-          f"- PWR pin: exits back-right at {info['pwr']['exit']}, rest gap {P.PWR_PIN_REST_GAP} to the plunger.",
-          f"- BOOT pinhole: D{P.BOOT_HOLE_D}, {info['boot']['length']} mm guide, exits front-right at {info['boot']['exit']}.",
+          "- PWR and BOOT buttons: no access (Paul, v5: not used by the firmware). Walls are plain.",
           f"- Speaker: {info['speaker']['holes']} x D{P.SPK_GRILLE_HOLE_D} grille holes (teardrop) in the right wall.",
           f"- Switch: C4 K3 pocket in the floor at {info['switch']['centre']}.",
           f"- Latches: 2 PETG clips (C7 v5 notch 1: hook {P.LATCH_HOOK}, {P.LATCH_CATCH_DEG:g} deg) at X {P.LATCH_CLIP_X}, front and back.",

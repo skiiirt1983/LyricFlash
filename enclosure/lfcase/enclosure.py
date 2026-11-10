@@ -713,14 +713,20 @@ def build_all(zb=None, log=print):
     b = base(zb)
     log("USB-C bay"); b = port_features(b, zb)
     log("mic ducts"); b, mic = mic_features(b, zb)
-    log("PWR pin tube"); b, pwr = pwr_features(b, zb)
+    # v5 (Paul): no button access at all. PWR and BOOT aren't used by his firmware; walls stay plain.
+    pwr = boot = None
+    if P.BUTTON_ACCESS:
+        log("PWR pin tube"); b, pwr = pwr_features(b, zb)
     log("speaker"); b, spk = speaker_features(b, zb)
     log("switch"); b, sw = switch_features(b, zb)
-    log("BOOT pinhole"); b, boot = boot_features(b, zb)
+    if P.BUTTON_ACCESS:
+        log("BOOT pinhole"); b, boot = boot_features(b, zb)
     log("cable rail"); b = cable_rail_features(b, zb)
     log("top shell"); top = top_shell(zb)
     log("latches"); b, top, lat = latch_features(b, top, zb)
-    parts = {"top_shell": top, "base": b, "pwr_pin": pwr_pin(zb), "cable_clip": cable_clip(zb)}
+    parts = {"top_shell": top, "base": b, "cable_clip": cable_clip(zb)}
+    if P.BUTTON_ACCESS:
+        parts["pwr_pin"] = pwr_pin(zb)
     parts.update(latch_clips(zb))
     return parts, dict(mic=mic, pwr=pwr, speaker=spk, switch=sw, boot=boot, latch=lat, zb=zb)
 

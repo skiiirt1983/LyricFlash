@@ -1,5 +1,11 @@
 # Enclosure changelog
 
+## Phase 2 v5 (2026-11-10)
+- Paul: no button access. PWR and BOOT aren't used by his firmware, so the PWR pin, its guide tube and
+  finger dimple, and the BOOT pinhole and guide are gone (BUTTON_ACCESS = False; the code stays for later).
+  The right wall and its corners are plain.
+- Checks: board none; swing PASS; base needs no supports; tips at 55.9 deg.
+
 ## Phase 2 v4 (2026-11-10)
 - Tilt 12 -> 20 deg (Paul: 12 wasn't enough). Same 52.9 x 62 footprint; front 27.5 / back 50.1 mm; board
   centre 30.4 mm up; tips at 55.9 deg. Ledges re-picked (same angles).
