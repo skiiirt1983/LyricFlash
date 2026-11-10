@@ -54,7 +54,7 @@ def board_z():
     for _ in range(40):
         mid = (lo + hi) / 2
         lo, hi = (lo, mid) if ok(mid) else (mid, hi)
-    _ZB["zb"] = round(hi + 0.005, 2)
+    _ZB["zb"] = round(hi + 0.005 + P.BOARD_Z_EXTRA, 2)
     return _ZB["zb"]
 
 
@@ -189,6 +189,11 @@ def _wall_normal(p):
     return v / np.linalg.norm(v)
 
 
+def _battery_keepout(gap=0.5):
+    (bx0, by0, bz0), (bx1, by1, bz1) = battery_box()
+    return _box((bx0 - gap, by0 - gap, bz0 - 1), (bx1 + gap, by1 + gap, bz1 + gap))
+
+
 def battery_cut45(gap=0.5):
     """Battery envelope (+gap) plus a 45 deg roof over it, so anything trimmed by it keeps a printable
     45 deg underside instead of a flat ceiling over the battery."""
@@ -238,6 +243,9 @@ def base_shell(zb):
     return A.solidify(b)
 
 
+_LEDGE_REACH = {}
+
+
 def _ledge(zb, a):
     x0, x1, y0, y1 = footprint()
     r_pcb = P.PCB_D / 2
@@ -248,8 +256,28 @@ def _ledge(zb, a):
     ztop = lambda y: inner[2] + (y - inner[1]) * slope - 0.02
     L = abs(wall_y - inner[1])
     prof = [(inner[1], ztop(inner[1])), (wall_y, ztop(wall_y)), (wall_y, ztop(inner[1]) - 2.0 - L), (inner[1], ztop(inner[1]) - 2.0)]
-    return (cq.Workplane("YZ", origin=(inner[0] - P.BOARD_LEDGE_W / 2, 0, 0)).polyline(prof).close()
-            .extrude(P.BOARD_LEDGE_W).val())
+    plate = (cq.Workplane("YZ", origin=(inner[0] - P.BOARD_LEDGE_W / 2, 0, 0)).polyline(prof).close()
+             .extrude(P.BOARD_LEDGE_W).val())
+    if not plate.intersect(_battery_keepout()).Volume() > 1e-3:
+        return plate
+    # v5.2: over the battery the ledge's own 45 deg underside and the battery's 45 deg roof run parallel and
+    # leave a sliver. Make it a solid wedge down to the roof instead: thick at the wall, 45 deg underside.
+    deep = [(inner[1], ztop(inner[1])), (wall_y, ztop(wall_y)), (wall_y, P.CASE_FLOOR), (inner[1], P.CASE_FLOOR)]
+    wedge = (cq.Workplane("YZ", origin=(inner[0] - P.BOARD_LEDGE_W / 2, 0, 0)).polyline(deep).close()
+             .extrude(P.BOARD_LEDGE_W).val())
+    wedge = wedge.cut(battery_cut45())
+    # end it square where it gets thinner than LEDGE_MIN_T (a knife edge prints as a floating last layer)
+    (bx0, by0, bz0), (bx1, by1, bz1) = battery_box()
+    g_, zt = 0.5, bz1 + 0.5
+    roof = lambda x, y: zt + min(y - (by0 - g_), (by1 + g_) - y, x - (bx0 - g_), (bx1 + g_) - x)
+    step = 0.05 if inner[1] > wall_y else -0.05
+    yc = wall_y
+    while (inner[1] - yc) * step > 0 and ztop(yc) - max(roof(inner[0] - P.BOARD_LEDGE_W / 2, yc),
+                                                        roof(inner[0] + P.BOARD_LEDGE_W / 2, yc)) >= P.LEDGE_MIN_T:
+        yc += step
+    lo_y, hi_y = (yc, 200) if step > 0 else (-200, yc)
+    _LEDGE_REACH[a] = abs(yc - wall_y)
+    return wedge.cut(_box((inner[0] - 10, lo_y, 0), (inner[0] + 10, hi_y, 100)))
 
 
 def pick_ledge_angles(zb, board_wf, targets=(-50.0, -110.0, 135.0)):  # noqa: B006
@@ -293,7 +321,7 @@ def board_ledges(zb, angles=None):
     for a in (angles or P.BOARD_LEDGE_ANGLES):
         sol = _ledge(zb, a)
         out = sol if out is None else out.fuse(sol)
-    return out.cut(battery_cut45())                   # layout B: the battery reaches the front/back walls
+    return out.cut(_battery_keepout())                # (wedge ledges are already clear of it)
 
 
 def base(zb, ledge_angles=None):
@@ -686,6 +714,7 @@ def latch_features(b, top, zb):
     a_bot = pr["a_b0"] - c - 1.2 - nB
     # 45 deg underside into the wall; inner top corner chamfered so it keeps clear of the PCB edge in the swing
     ch_n = nB - (pr["nb0"] + pr["tb"] + 0.9 + 1.2)
+    a_bot -= 30.0                                     # v5.2: deep; the battery roof below sets the 45 deg underside
     boss = [(-8.0, a_bot - 8.0), (nB, a_bot + nB), (nB, 0.5 - ch_n - 2.0), (nB - ch_n, 0.5 - 2.0), (nB - ch_n, 0.5), (-8.0, 0.5)]
     hk = pr["hk"]
     n_far = pr["nb0"] + pr["tb"] + hk + 0.3
@@ -698,7 +727,7 @@ def latch_features(b, top, zb):
     for name, S, n, a, t in _clip_frames(zb):
         loc = _frame_loc(S, n, a, t)
         bs = _poly_solid(boss, -E_ / 2 - 1.6, E_ / 2 + 1.6).moved(loc).intersect(below).intersect(base_body(zb))
-        bs = bs.cut(battery_cut45())                                                    # keep off the battery, 45 deg underside
+        bs = bs.cut(battery_cut45())                                                    # 45 deg underside over the battery
         ch = _poly_solid(list(chan.exterior.coords)[:-1], -E_ / 2 - c, E_ / 2 + 5.0).moved(loc)
         b = b.fuse(bs).cut(ch)
         top = top.cut(_poly_solid(pocket, -E_ / 2 - ct, E_ / 2 + ct).moved(loc))

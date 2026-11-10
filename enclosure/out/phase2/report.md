@@ -1,6 +1,6 @@
 # Phase 2 report: full case v5 (20 deg, layout B, no button access)
 
-Tilt 20 deg, board centre 30.4 mm above the desk. Parts: top_shell, base, cable_clip, clip_front, clip_back.
+Tilt 20 deg, board centre 32.9 mm above the desk. Parts: top_shell, base, cable_clip, clip_front, clip_back.
 
 ## Interference against the STEP board (boolean volume)
 
@@ -22,7 +22,7 @@ Part against part: none overlap.
 
 | Part | Orientation | Result |
 |---|---|---|
-| base | floor down | 18 flagged layers (see below) |
+| base | floor down | 19 flagged layers (see below) |
 | top_shell | face-down (top face on the plate) | 5 flagged layers (see below) |
 | clip_front | flat (profile on the plate) | clean |
 | clip_back | flat (profile on the plate) | clean |
@@ -39,7 +39,7 @@ Top shell: the latch catch ledges (0.9 deep) are anchored on the outer wall and 
 
 ## Centre of gravity and tipping
 
-Total 84.2 g (board 20 g and battery 38 g are estimates). CG at X -0.21, Y 0.86, Z 17.33 mm. Smallest tipping angle **55.9 deg** (towards 0 deg; PLAN asks > 30).
+Total 85.8 g (board 20 g and battery 38 g are estimates). CG at X -0.13, Y 0.95, Z 18.34 mm. Smallest tipping angle **54.3 deg** (towards 0 deg; PLAN asks > 30).
 
 ## Key numbers
 

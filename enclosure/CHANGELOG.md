@@ -1,5 +1,13 @@
 # Enclosure changelog
 
+## Phase 2 v5.2 (2026-11-10)
+- Paul: Bambu reported floating regions on the base. Cause: the two front board ledges. With the battery
+  running to the front wall, the battery's 45 deg clearance cut ran parallel to the ledges' own underside and
+  left floating slivers that couldn't carry the board. Ledges over the battery are now solid wedges whose
+  underside is that 45 deg cut, ended square where thinner than 1 mm; the latch bosses likewise.
+- Board raised 2.5 mm (Paul) so those wedges reach 1.3 mm under the PCB: front 30.0 / back 52.6 mm,
+  tips at 54.3 deg. The USB-C insert needs no support (45 deg underside since v3).
+
 ## Phase 2 v5 (2026-11-10)
 - Paul: no button access. PWR and BOOT aren't used by his firmware, so the PWR pin, its guide tube and
   finger dimple, and the BOOT pinhole and guide are gone (BUTTON_ACCESS = False; the code stays for later).

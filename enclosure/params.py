@@ -540,3 +540,5 @@ LATCH_CLIP_BAR_IN = 1.0              # v4: inner shoulder width (was 1.6); with 
 
 # ---- v5 (Paul): remove the PWR pin / tube / dimple and the BOOT pinhole; plain walls
 BUTTON_ACCESS = False
+LEDGE_MIN_T = 1.0                    # v5.2: wedge ledges end square where they'd get thinner than this
+BOARD_Z_EXTRA = 2.5                  # v5.2 (Paul): board raised so the front ledges print as solid wedges (were floating slivers)
