@@ -5,7 +5,7 @@
   plate). Thicker everywhere: outer wall 2.0 -> 2.4 (6 perimeters), speaker divider 1.2 -> 2.0, speaker end
   walls 1.2 -> 2.4, lead slot 4.0 -> 3.0 (wider posts either side), grip rib 0.8 -> 1.6 wide, battery low
   walls 1.2 -> 2.0, board ledges 5 -> 6 wide, USB-C guide walls 1.6 -> 2.0. Floor stays 1.6 (logo unchanged).
-- Corner radius 8 -> 6.5 so the cell keeps 1 mm air at the corners with the thicker wall.
+- Corner radius 8 -> 6.5 so the 56 x 34.5 cell keeps 0.8 mm air at the corners with the thicker wall.
 - Case 52.9 x 62.8 (was 62.0), front 29.9 / back 52.7. Checks: board none, swing PASS, all three bases
   watertight, no floating spots (USB-C mouth painted), logo intact, tips at 53.6 deg. Print pack rebuilt.
 
