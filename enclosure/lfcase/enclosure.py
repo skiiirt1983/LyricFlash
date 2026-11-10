@@ -253,16 +253,16 @@ def base_shell(zb):
     (bx0, by0, bz0), (bx1, by1, bz1) = battery_box()
     # low wall along the battery's left long side (front and back are the case walls, right is the
     # speaker divider); lead gap at the back-left corner, where the cell's leads leave (Paul, C3)
-    b = b.fuse(_box((bx0 - 1.2, by0 - 0.01, bz0 - 0.01), (bx0, by1 + 0.01, bz0 + P.BATTERY_POCKET_WALL_H)))
+    b = b.fuse(_box((bx0 - P.BATTERY_LOW_WALL_T, by0 - 0.01, bz0 - 0.01), (bx0, by1 + 0.01, bz0 + P.BATTERY_POCKET_WALL_H)))
     if P.BATTERY_LEAD_GAP > 0:
         b = b.cut(_box((bx0 - 1.3, by1 - P.BATTERY_LEAD_GAP, bz0), (bx0 + 0.1, by1 + 1, bz0 + P.BATTERY_POCKET_WALL_H + 1)))
     # speaker pocket: divider wall + end walls (speaker stands, fires out the right wall)
     (sx0, sy0, sz0), (sx1, sy1, sz1) = speaker_box()
-    b = b.fuse(_box((bx1, sy0 - 1.2, sz0 - 0.01), (sx0, sy1 + 1.2, sz0 + P.SPK_DIVIDER_H)))
+    b = b.fuse(_box((bx1, sy0 - P.SPK_END_WALL, sz0 - 0.01), (sx0, sy1 + P.SPK_END_WALL, sz0 + P.SPK_DIVIDER_H)))
     # low wall continuing the divider along the battery's right side (front and back of the speaker)
-    b = b.fuse(_box((bx1, by0 - 0.01, bz0 - 0.01), (bx1 + 1.2, by1 + 0.01, bz0 + P.BATTERY_POCKET_WALL_H)))
-    for y in (sy0 - 1.2, sy1):
-        b = b.fuse(_box((sx0 - 0.01, y, sz0 - 0.01), (sx1 + 0.01, y + 1.2, sz1)))
+    b = b.fuse(_box((bx1, by0 - 0.01, bz0 - 0.01), (bx1 + P.BATTERY_LOW_WALL_T, by1 + 0.01, bz0 + P.BATTERY_POCKET_WALL_H)))
+    for y in (sy0 - P.SPK_END_WALL, sy1):
+        b = b.fuse(_box((sx0 - 0.01, y, sz0 - 0.01), (sx1 + 0.01, y + P.SPK_END_WALL, sz1)))
     return A.solidify(b)
 
 
@@ -629,9 +629,9 @@ def speaker_features(b, zb):
     # v5.3 (Paul): only on the -Y end. On the lead end the slot left the rib's top as a free-standing fin;
     # one rib still pushes the speaker against the lead-end wall with the same 0.15 grip.
     for y0_, y1_ in ((sy0 - 0.01, sy0 + gr),):
-        b = b.fuse(_box((xm - 0.4, y0_, sz0 - 0.01), (xm + 0.4, y1_, sz1 - 1.0)))
+        b = b.fuse(_box((xm - P.SPK_GRIP_RIB_W / 2, y0_, sz0 - 0.01), (xm + P.SPK_GRIP_RIB_W / 2, y1_, sz1 - 1.0)))
     # lead slot: +Y end wall (H3 is on the +Y side of the board), from mid-height to the top
-    b = b.cut(_box((xm - P.SPK_LEAD_SLOT_W / 2, sy1 - 0.1, zc - P.SPK_LEAD_SLOT_W / 2), (xm + P.SPK_LEAD_SLOT_W / 2, sy1 + 1.4, sz1 + 1)))
+    b = b.cut(_box((xm - P.SPK_LEAD_SLOT_W / 2, sy1 - 0.1, zc - P.SPK_LEAD_SLOT_W / 2), (xm + P.SPK_LEAD_SLOT_W / 2, sy1 + P.SPK_END_WALL + 0.2, sz1 + 1)))
     return A.solidify(b), dict(holes=len(pts), centre=(round(xm, 2), yc, round(zc, 2)))
 
 

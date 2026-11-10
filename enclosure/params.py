@@ -336,7 +336,7 @@ SPK_GRILLE_HOLE_D = 1.5
 SPK_GRILLE_PITCH = 2.6
 SPK_GRILLE_MARGIN = 3.0                    # grille area = speaker front minus this margin per side
 SPK_GRIP_RIB = 0.15                        # round 2 (was 0.25)
-SPK_LEAD_SLOT_W = 4.0                      # Paul 2026-11-09: leads leave dead centre of a 20 mm end (mid-width, mid-thickness)
+SPK_LEAD_SLOT_W = 3.0                      # Paul 2026-11-09: leads leave dead centre of a 20 mm end (mid-width, mid-thickness)
 SPK_PLACEMENT = "any secure spot"          # Paul 2026-11-09: speaker only plays while the mics are idle, so no keep-out from the mic holes
 
 # ============================================================================
@@ -449,9 +449,9 @@ LATCH_BEAM_T, LATCH_BEAM_L = 1.2, 10.0   # as tested in C7 (in-plane, bending al
 # ============================================================================
 TILT_DEG = 20.0                      # v4 (Paul): 12 wasn't enough; 20 = top of PLAN's 15-20
 BOARD_X = 0.0                        # layout B (Paul): board centred left-right; the case is as wide as the bezel ring
-CASE_WALL = 2.0
+CASE_WALL = 2.4                      # v7 (Paul: internals flimsy): 6 perimeters at 0.4 (was 2.0)
 CASE_FLOOR = 1.6
-CASE_CORNER_R = 8.0                  # 10 cut into the battery corners
+CASE_CORNER_R = 6.5                  # v7: 8 -> 6.5 so the battery corners keep ~0.8 air with the 2.4 wall (was 10 -> 8 earlier)
 CASE_AIR = 0.5                       # minimum air battery -> board stack
 CASE_RIGHT_ROOM = 9.0                # right side room (speaker standing) beyond the bezel
 BATTERY_POCKET_WALL_H = 4.0          # low walls around the battery (keeps it from sliding)
@@ -459,9 +459,9 @@ BOTTOM_RECESS = 0.5                  # recessed bottom: the case sits on a rim (
 BOTTOM_RIM_W = 3.0
 # Speaker can't sit over the battery (unsupported shelf in a floor-down print) -> it stands beside
 # the battery on the right, firing out the right wall. Case grows to ~70 x 54.
-SPK_DIVIDER = 1.2                    # wall between battery and speaker
+SPK_DIVIDER = 2.0                    # wall between battery and speaker (v7: was 1.2)
 BOARD_LEDGE_ANGLES = (-70.0, -110.0, 135.0)   # auto-picked: clear of every part + plug zones, LEDGE_AIR along the whole swing (was -50: 0.06 from a standoff)
-BOARD_LEDGE_W = 5.0
+BOARD_LEDGE_W = 6.0                  # v7: was 5
 BOARD_LEDGE_REACH = 1.5              # how far under the PCB edge (radially)
 BOARD_FAR_STOP_GAP = 0.30            # far-side stop (tilt-in sim decides the final gap)
 PORT_BAY_HALF_W = 14.0               # recess in the left wall around the USB-C (world Y, each side); 14 so both mic ducts exit inside it
@@ -535,7 +535,7 @@ SPK_DIVIDER_H = 16.0                 # layout B: divider height above the floor 
 MIC_HOLE_D_CASE = 2.0                # teardrop hole (was a D1.2 duct with a bar under each mic)
 MIC_HOLE_PCB_GAP = 0.6               # hole top this far below the PCB back
 BOOT_TUBE_LEN = 3.0                  # v3: guide length up to the surface (aims a 1 mm paperclip to +/-0.5 at the 1.8 mm plunger)
-USB_INSERT_SIDE_WALL = 1.6           # v3.1: guide walls either side of the receptacle; nothing wider behind the port wall
+USB_INSERT_SIDE_WALL = 2.0           # v3.1: guide walls either side of the receptacle; nothing wider behind the port wall
 LATCH_CLIP_BAR_IN = 1.0              # v4: inner shoulder width (was 1.6); with the 2.6 bar its 1.8:1 rise still fits
 
 # ---- v5 (Paul): remove the PWR pin / tube / dimple and the BOOT pinhole; plain walls
@@ -569,3 +569,8 @@ CABLE_CLIP_CLEAR = 1.5               # plain border round the clip in the textur
 TOP_SKIN = 0.6                       # v6.4: shell kept between latch pockets and any outside face (3 layers; 0.8 left the back hook touching)
 LATCH_ROOF_CLEAR = 0.5                # v6.4: pocket roof above the hook's lead-in slope (vertical)
 FLOOR_LOGO = "assets/logo_floor_cut.stl"   # v6.5 (Paul): logo + text engraved 0.5 into the floor top; "" = none
+
+# ---- v7 (Paul: "internals really flimsy, broke pieces round the speaker taking it off the plate")
+SPK_END_WALL = 2.4                   # speaker pocket end walls (were 1.2)
+SPK_GRIP_RIB_W = 1.6                 # grip rib width (was 0.8)
+BATTERY_LOW_WALL_T = 2.0             # battery low walls (were 1.2)

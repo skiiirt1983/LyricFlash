@@ -1,5 +1,14 @@
 # Enclosure changelog
 
+## Phase 2 v7 (2026-11-10)
+- Paul printed the base: the internals were very flimsy (pieces round the speaker broke taking it off the
+  plate). Thicker everywhere: outer wall 2.0 -> 2.4 (6 perimeters), speaker divider 1.2 -> 2.0, speaker end
+  walls 1.2 -> 2.4, lead slot 4.0 -> 3.0 (wider posts either side), grip rib 0.8 -> 1.6 wide, battery low
+  walls 1.2 -> 2.0, board ledges 5 -> 6 wide, USB-C guide walls 1.6 -> 2.0. Floor stays 1.6 (logo unchanged).
+- Corner radius 8 -> 6.5 so the cell keeps 1 mm air at the corners with the thicker wall.
+- Case 52.9 x 62.8 (was 62.0), front 29.9 / back 52.7. Checks: board none, swing PASS, all three bases
+  watertight, no floating spots (USB-C mouth painted), logo intact, tips at 53.6 deg. Print pack rebuilt.
+
 ## Phase 2 v6.5 (2026-11-10)
 - Paul's logo + "LYRIC FLASH" (his Bambu edit of base_panels.stl) applied to all three bases. Taken as the
   difference between his file and mine (84.6 mm3, 0.5 mm deep in the top of the floor, inside under the
