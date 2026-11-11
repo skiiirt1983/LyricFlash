@@ -1029,7 +1029,8 @@ def cable_cleat_features(b, zb):
         xr = xc + s_ * sw / 2
         xt = xr + s_ * hl
         # horn profile in XZ: top flat at zt (+ ear at the tip), underside rising 45 deg from the stem to the tip
-        prof = [(xr, zt - tip - hl), (xt, zt - tip), (xt, zt + ear), (xt - s_ * 1.6, zt + ear), (xt - s_ * 1.6, zt), (xr, zt)]
+        ew = getattr(P, "CLEAT_EAR_W", 1.6)
+        prof = [(xr, zt - tip - hl), (xt, zt - tip), (xt, zt + ear), (xt - s_ * ew, zt + ear), (xt - s_ * ew, zt), (xr, zt)]
         w = cq.Wire.makePolygon([cq.Vector(x, y1 + g, z) for x, z in prof], close=True)
         parts.append(cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, t, 0)))
     cleat = parts[0]

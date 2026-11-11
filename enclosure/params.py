@@ -668,3 +668,11 @@ CARRIER_MARKING = True               # raised FRONT / USB-C arrows on the counte
 CARRIER_MARK_H = 0.4
 SWITCH_WALL_Y = 4.0                  # switch 4 mm back (still under the USB-C bay): room on both sides now
 SWITCH_MOUTH_CHAMFER = 0.6
+
+# ---- v10.5 (Paul): bigger cleat horns, more to hook the cable onto
+CLEAT_HORN_L = 13.0                  # each horn beyond the stem (was 9): 32 mm tip to tip
+CLEAT_EAR = 3.5                      # turned-up tip height (was 2)
+CLEAT_EAR_W = 2.0                    # turned-up tip width (was 1.6)
+CLEAT_GAP = 5.5                      # horns to wall (was 5)
+CLEAT_TIP_T = 2.5                    # horn depth at the tip (was 2)
+CLEAT_Z_TOP = 16.0                   # horn tops (was 14): keeps the 45 deg undersides off the desk

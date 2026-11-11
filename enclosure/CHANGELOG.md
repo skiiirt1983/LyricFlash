@@ -1,5 +1,12 @@
 # Enclosure changelog
 
+## Phase 2 v10.5 (2026-11-11)
+- Paul: the cleat horns need to be bigger, with more to hook the cable onto. Horns 13 mm each side of the stem
+  (was 9), so 32 mm tip to tip (was 24). The turned-up ears are 3.5 mm tall x 2 mm (were 2 x 1.6). The gap behind
+  the horns for the cable is 5.5 mm (was 5), and the horn tips are 2.5 mm thick (were 2). The horn tops are at
+  16 mm (were 14) so the longer 45 deg undersides stay 0.5 mm off the desk. Prints with no support (checked on
+  the ribbed, panel and smooth bases). The no-cleat bases are unchanged.
+
 ## Phase 2 v10.4 (2026-11-11)
 - Paul: the three plate screws were very hard to line up (two would, the third wouldn't). Measured in the
   assembled model first: every tab hole is exactly on its post's pilot axis (offset 0.000 mm, angle 0.000 deg, both
