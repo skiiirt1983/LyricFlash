@@ -658,3 +658,13 @@ MAGNET_CORNER_U = 4.4                # v10.1: magnet blocks' inner corner trimme
 MAGNET_FIT = 0.05                    # base (PETG, pockets leaning 20 deg): coupon #2, dia 4.10, chosen
 MAGNET_FIT_SHELL = 0.10              # shell (PLA, pockets straight up): coupon #3, dia 4.20 (4.10 wouldn't sit flush)
 FLOOR_LOGO = "assets/logo_floor_mark_v10_3.stl"   # v10.3 (Paul): logo only (no text), 21.7 mm, 1.0 deep
+
+# ---- v10.4 (Paul): two plate screws; the third over-constrained the plate with the USB-C guide
+CARRIER_TABS = [(-17.5, -18.5), (0.0, 24.0)]   # A front-left, B back-centre (C, BF (-17.5, 18.3), removed)
+CARRIER_TAB_HOLE_D = 2.9             # M2.5 clearance
+CARRIER_SLOT_TAB = 0                 # tab A's hole is a slot along the line to tab B
+CARRIER_SLOT_HALF = 0.6              # +/-0.6 mm along that line (soaks up shrink between the posts and the plate)
+CARRIER_MARKING = True               # raised FRONT / USB-C arrows on the countersink face
+CARRIER_MARK_H = 0.4
+SWITCH_WALL_Y = 4.0                  # switch 4 mm back (still under the USB-C bay): room on both sides now
+SWITCH_MOUTH_CHAMFER = 0.6

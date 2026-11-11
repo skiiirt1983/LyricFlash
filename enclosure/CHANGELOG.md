@@ -1,5 +1,29 @@
 # Enclosure changelog
 
+## Phase 2 v10.4 (2026-11-11)
+- Paul: the three plate screws were very hard to line up (two would, the third wouldn't). Measured in the
+  assembled model first: every tab hole is exactly on its post's pilot axis (offset 0.000 mm, angle 0.000 deg, both
+  20 deg from vertical along the board normal), spacings match (A-B 45.962, A-C 36.800, B-C 18.405 mm) and every
+  tab sits on its post with 0.000 mm gap. So the cause was the tolerance stack plus over-constraint. Board standoffs
+  are +/-0.1. The M2 screws have +/-0.15 in their 2.3 mm plate holes. PETG shrink over 46 mm is 0.15-0.25 on the
+  plate and again on the base posts. The 40-55 mm tall posts drift 0.1-0.2 at the top. The 20 deg post tops print
+  as 0.2 stair-steps. And the USB-C web (zero gap) and guide (+/-0.10) already fix the board. That's about +/-0.4
+  typical (up to ~0.9) against +/-0.2-0.3 of capture per screw, with the USB-C and three screws all fixing the board.
+- **Two screws** (Paul installed it with two and it's solid): tab C, BF (-17.5, 18.3) on the back USB-C side, is
+  gone with its post and pilot hole. Kept: A front-left BF (-17.5, -18.5) and B back-centre BF (0, 24).
+- Tab B: round 2.9 mm hole (sets the plate's position). Tab A: **2.9 mm slot, +/-0.6 mm along the line to B**,
+  which soaks up the shrink between the plate and the posts. Holes and posts stay coaxial along the board normal.
+- **Marking**: raised (0.4 mm) arrow + FRONT and arrow + USB-C on the countersink face, the face you look at on the
+  bench. It reads correctly when the plate is the right way up. A physical key isn't possible on the board side:
+  where the plate touches the board, the board's back is mirror-symmetric (standoffs, header, J1/H3), so a flipped
+  plate still seats. In the base it only goes one way (flipped, tab A lands over the battery with no post).
+- **Switch**: moved 4 mm back (Y 0 -> 4, still under the USB-C bay) into the room post C left. The gap to the
+  front-left post grows from 5.3 to 9.3 mm, and the back side is open to the corner. 0.6 mm x 45 deg lead-in
+  round the pocket mouth.
+- **C12 carrier coupon** (coupon_carrier.py): the plate plus the two real posts on a bar, to try the screws before
+  a full base.
+- Checks: no interference; swing PASS; shell drop PASS; battery drop PASS; plate and coupon clean in the layer check.
+
 ## Phase 2 v10.3 (2026-11-11)
 - Paul: the floor logo wasn't legible printed. The "LYRIC FLASH" text is gone: the floor now carries only the mark
   (rounded square, lightning bolt, music notes). Logo-only source kept as assets/logo_floor_mark.stl (the 3 big

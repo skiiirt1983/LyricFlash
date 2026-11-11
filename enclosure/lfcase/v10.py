@@ -89,9 +89,48 @@ def carrier_bf():
         pl = pl.cut(cq.Solid.makeCylinder(1.15, 10, cq.Vector(x, y, Z_TOP - 5)))
         pl = pl.cut(cq.Solid.makeCone(P.M2_HEAD_D / 2 + 0.15, 1.15, P.M2_HEAD_D / 2 + 0.15 - 1.15,
                                       cq.Vector(x, y, _z_under() - 0.01)))
-    for x, y in P.CARRIER_TABS:                                     # M2.5 clearance
-        pl = pl.cut(cq.Solid.makeCylinder(1.45, 10, cq.Vector(x, y, Z_TOP - 5)))
-    return pl
+    tabs = P.CARRIER_TABS
+    for i, (x, y) in enumerate(tabs):                               # M2.5 clearance (2.9)
+        r = P.CARRIER_TAB_HOLE_D / 2
+        if i == P.CARRIER_SLOT_TAB:                                 # v10.4: slot along the line to the other tab
+            ox, oy = tabs[1 - i][0] - x, tabs[1 - i][1] - y
+            k = math.hypot(ox, oy)
+            ux, uy = ox / k * P.CARRIER_SLOT_HALF, oy / k * P.CARRIER_SLOT_HALF
+            slot = unary_union([Point(x - ux, y - uy).buffer(r, resolution=32), Point(x + ux, y + uy).buffer(r, resolution=32)]).convex_hull
+            pl = pl.cut(_extrude_bf(slot, Z_TOP - 5, Z_TOP + 5))
+        else:
+            pl = pl.cut(cq.Solid.makeCylinder(r, 10, cq.Vector(x, y, Z_TOP - 5)))
+    return pl.fuse(carrier_marking_bf()) if getattr(P, "CARRIER_MARKING", False) else pl
+
+
+def carrier_marking_bf():
+    """v10.4 (Paul installed the plate upside down once): raised marking on the face you see on the bench (the
+    countersink side). An arrow toward the front with FRONT, and an arrow toward the USB-C side with USB-C. Kept off
+    the battery's column and the tabs."""
+    z0, h = _z_under(), P.CARRIER_MARK_H
+    pl = cq.Plane(origin=(0, 0, z0), xDir=(1, 0, 0), normal=(0, 0, -1))   # reads correctly seen from that side
+    out = None
+
+    def text(s, x, y, size, rot=0.0):
+        return (cq.Workplane(pl).center(x, -y).transformed(rotate=(0, 0, rot))
+                .text(s, size, h, kind="bold", halign="center", valign="center").val())
+
+    def arrow(x, y, ang, L=6.0, w=1.0, head=2.6):
+        a = math.radians(ang)
+        ux, uy, nx, ny = math.cos(a), math.sin(a), -math.sin(a), math.cos(a)
+        tip = (x + ux * L / 2, y + uy * L / 2)
+        base = (x - ux * L / 2, y - uy * L / 2)
+        neck = (tip[0] - ux * head, tip[1] - uy * head)
+        pts = [(base[0] + nx * w / 2, base[1] + ny * w / 2), (neck[0] + nx * w / 2, neck[1] + ny * w / 2),
+               (neck[0] + nx * head * 0.6, neck[1] + ny * head * 0.6), tip,
+               (neck[0] - nx * head * 0.6, neck[1] - ny * head * 0.6), (neck[0] - nx * w / 2, neck[1] - ny * w / 2),
+               (base[0] - nx * w / 2, base[1] - ny * w / 2)]
+        return _extrude_bf(Polygon(pts), z0 - h, z0)
+    parts = [text("FRONT", -3.0, -8.0, 2.6), arrow(-3.0, -12.0, -90.0, L=5.0),
+             text("USB-C", -4.0, 2.5, 2.6), arrow(-4.5, 6.2, 180.0, L=6.0)]
+    for p in parts:
+        out = p if out is None else out.fuse(p)
+    return out.intersect(_extrude_bf(carrier_outline().buffer(-0.8), z0 - h - 1, z0 + 0.01))
 
 
 def carrier(zb):
@@ -234,6 +273,14 @@ def switch_wall(b, zb):
     frame = E._box((x0 + 0.5, yc - L / 2 - f - fw, 0), (xs + H - P.SWITCH_BACK_FREE, yc + L / 2 + f + fw, zc + W / 2 + f + fw))
     b = b.fuse(frame.intersect(E.base_body(zb)))
     b = b.cut(E._box((xs, yc - L / 2 - f, zc - W / 2 - f), (xs + H + 5, yc + L / 2 + f, zc + W / 2 + f)))
+    # v10.4: 0.6 x 45 deg lead-in round the pocket mouth (easier to start the press-fit with a finger)
+    xm = xs + H - P.SWITCH_BACK_FREE
+    c_ = P.SWITCH_MOUTH_CHAMFER
+    w0 = cq.Wire.makePolygon([cq.Vector(xm - c_, yc + sy * (L / 2 + f), zc + sz * (W / 2 + f))
+                              for sy, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1))], close=True)
+    w1 = cq.Wire.makePolygon([cq.Vector(xm + 0.01, yc + sy * (L / 2 + f + c_ + 0.01), zc + sz * (W / 2 + f + c_ + 0.01))
+                              for sy, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1))], close=True)
+    b = b.cut(cq.Solid.makeLoft([w0, w1], True))
     sl, sw = P.SWITCH_KNOB_SLOT
     b = b.cut(E._box((x0 - 5, yc - sl / 2, zc - sw / 2), (xs + 0.01, yc + sl / 2, zc + sw / 2)))
     return b, dict(centre=(round(xs, 2), yc, round(zc, 2)), knob_out=round(P.SWITCH_MEAS_KNOB - P.SWITCH_SKIN, 2))

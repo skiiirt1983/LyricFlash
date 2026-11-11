@@ -55,7 +55,7 @@ def main():
         "  2-4 base with the cable cleat on the back: ribbed, panels, smooth\n"
         "  5-7 the same bases without the cleat (filament 2, black PETG): print ONE of the six bases\n"
         "  8 the carrier plate the board screws to (filament 2, black PETG)\n"
-        "Hardware: 3x M2 x 3 flat head (board to plate), 3x M2.5 x 6 pan head (plate to base, self-tapping, no nuts),\n"
+        "Hardware: 3x M2 x 3 flat head (board to plate), 2x M2.5 x 6 pan head (plate to base, self-tapping, no nuts),\n"
         "8x 4 x 2 mm disc magnets (4 in the base corners, 4 in the shell; check they attract before pressing in).\n"
         "Cable: one turn round the cleat on the back takes any pull off the USB-C plug.\n"
         "stl/: the same parts as separate STLs, already in print orientation.\n\n"

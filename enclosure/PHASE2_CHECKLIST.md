@@ -13,7 +13,7 @@ Print pack: `out/lyricflash_print_pack.zip` (one plate per print). Filament **sl
 - **USB-C opening:** paint a support enforcer on the opening's top edge, as before. Clean it out fully and check
   the bare board's USB-C socket slides into the opening freely before assembly.
 
-**Hardware:** 3x M2 x 3 flat head (board to plate), 3x M2.5 x 6 pan head (plate to base; they self-tap into the
+**Hardware:** 3x M2 x 3 flat head (board to plate), 2x M2.5 x 6 pan head (plate to base; they self-tap into the
 posts, no nuts), 8x 4 x 2 mm disc magnets.
 
 `out/phase2/report.md` has every check: interference (none), both assembly paths (board + plate into the base,
@@ -31,13 +31,15 @@ shell onto the base: PASS), the battery drop path (PASS), the layer check, and t
 
 ## Assembly (no pressing on the screen, ever)
 1. **Board onto the carrier plate (on the bench):** board face-down on a soft cloth. Lay the plate on its back,
-   countersinks up, holes over the three standoffs. Fit the three M2 x 3 flat heads. Snug, don't crank: they
+   countersinks up, so the raised FRONT and USB-C arrows read correctly and point to the board's front and its
+   USB-C. Holes over the three standoffs. Fit the three M2 x 3 flat heads. Snug, don't crank: they
    thread into the board's own standoffs.
 2. **Battery:** stand it on its thin edge and lower it straight into its slot (right of centre), leads at the back
    and at the top. Nothing is over the slot. Plug the battery into J1 on the board.
 3. **Board + plate into the base:** hold the board by the plate, tilt it, and hook the USB-C into its opening in the
-   left wall first. Then lower the right side down. The three tabs land on their posts.
-4. **Screw the plate down:** three M2.5 x 6 pan heads through the tabs, straight down, from above. They cut their
+   left wall first. Then lower the right side down. The two tabs land on their posts.
+4. **Screw the plate down:** two M2.5 x 6 pan heads through the tabs, straight down, from above. Back-centre
+   (round hole) first, then the front-left one (its hole is a short slot, so it always finds the post). They cut their
    own thread in the posts' pilot holes: the first time is a little stiff; stop as soon as the head seats.
    Every screw is outside the board's edge.
 5. **Shell:** put it straight on from above, square to the screen, until the magnets pull it down. The rim inside
@@ -45,7 +47,7 @@ shell onto the base: PASS), the battery drop path (PASS), the layer check, and t
    through the seam.
 6. **Cable:** one turn round the cleat on the back (bases with the cleat).
 
-**Opening:** pull the shell straight up off the magnets. Then undo the three M2.5 screws and lift the board and plate
+**Opening:** pull the shell straight up off the magnets. Then undo the two M2.5 screws and lift the board and plate
 out, right side first, unhooking the USB-C last.
 
 ## Check and report
