@@ -6,6 +6,12 @@
   the horns for the cable is 5.5 mm (was 5), and the horn tips are 2.5 mm thick (were 2). The horn tops are at
   16 mm (were 14) so the longer 45 deg undersides stay 0.5 mm off the desk. Prints with no support (checked on
   the ribbed, panel and smooth bases). The no-cleat bases are unchanged.
+- PLA bases (Paul: an extra print profile for people who don't want PETG). make_pla_bases.py writes
+  base_*_pla.stl for all six styles. The only change is the base magnet pockets at dia 4.20, the PLA fit from Paul's
+  C11 coupon (#3, as in the PLA shell), instead of the PETG dia 4.10. Measured in the STLs: 4.20 in all four
+  corners. Watertight, one body, layer check as the PETG bases. Print with X-Y hole compensation 0 (the larger
+  pockets are already in the model).
+
 
 ## Phase 2 v10.4 (2026-11-11)
 - Paul: the three plate screws were very hard to line up (two would, the third wouldn't). Measured in the
