@@ -150,7 +150,7 @@ def dims(zb):
 # ------------------------------------------------------------------ top shell
 def top_shell(zb):
     s = outer_body(zb).intersect(halfspace_bf(zb, P.SEAM_Z, above=True))
-    bore = A.cyl(A.BORE_R, P.SEAM_Z - 2, P.GLASS_TOP_Z)
+    bore = A.cyl(A.BORE_R, P.SEAM_Z - 2, P.GLASS_TOP_Z + getattr(P, "LIP_GAP", 0.0))   # v10: lip clear of the glass
     lip = A.cyl(A.LIP_R, P.SEAM_Z - 2, A.LIP_TOP + 2)
     s = s.cut(to_wf(bore.fuse(lip).fuse(A.fold_reliefs(P.SEAM_Z - 2, P.GLASS_BOTTOM_Z - 0.05)), zb))
     if not getattr(P, "V10", False):                  # v10: the shell goes on last, no swing past it

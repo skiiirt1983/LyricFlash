@@ -46,8 +46,6 @@ def swing_designed(m, f, where, a):
 def drop_designed(m, f, where, d):
     if f == "base" and d <= 0.2:
         return "seam faces closing"
-    if f == "display" and d <= 0.2:
-        return "lip coming down onto the glass edge (straight on, no sliding)"
     return None
 
 

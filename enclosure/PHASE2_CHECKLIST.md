@@ -1,61 +1,60 @@
-# Phase 2: full case v9 (20° tilt, battery standing, no speaker), print and check
+# Phase 2: full case v10 (carrier plate + screws, magnets, switch in the wall), print and check
 
-One file: `out/phase2/lyricflash_case_project.3mf`. Everything is flat on the plate, fitted together in
-the **Assembly view**, and pre-assigned to a filament: **slot 1 = Iridium Gold PLA Metal**, **slot 2 =
-black PETG**. If the parts don't all fit on one plate, Bambu Studio puts the extras on a second plate.
+Print pack: `out/lyricflash_print_pack.zip` (one plate per print). Filament **slot 1 = Iridium Gold PLA Metal**,
+**slot 2 = black PETG**.
 
 | Part | Filament | Orientation on the plate |
 |---|---|---|
-| `top_shell` | gold (1) | face-down: the top face (with the screen ring) on the plate |
-| `base` | black PETG (2) | floor down |
-| `clip_front`, `clip_back` | black PETG (2), springy | flat |
+| `top_shell` | gold (1) | face-down: the top face (with the screen ring) on the plate; the rim points up |
+| `base` (one of six styles) | black PETG (2) | floor down |
+| `carrier_plate` | black PETG (2) | flat, board side down; the countersinks face up |
 
-**Settings:** 0.2 mm layers, 4 walls, 15 % gyroid, 0.4 mm nozzle.
-- **Base: supports OFF.** Nothing inside hangs over the battery any more (v3).
-- **Top shell, pin, clips, cable clip: supports OFF.**
-- **USB-C opening:** with the tilt, its top edge prints as a sloped ceiling. **Paint a support enforcer on
-  the opening's top edge** (that clears Bambu's floating-region warning). Clean the support out fully after
-  printing and check the bare board's USB-C socket slides into the opening freely before assembly.
+**Settings:** 0.2 mm layers, 4 walls, 15 % gyroid, 0.4 mm nozzle. Supports OFF everywhere, except:
+- **USB-C opening:** paint a support enforcer on the opening's top edge, as before. Clean it out fully and check
+  the bare board's USB-C socket slides into the opening freely before assembly.
+- The three nut slots in the posts have 5 mm bridged ceilings (slightly inclined). They print without support.
 
-`out/phase2/report.md` has every check: board interference (none), the tilt-in swing (PASS), the layer check,
-the battery drop path (PASS), the centre of gravity (tips at 33.0°, PLAN asks for > 30°).
+**Hardware:** 3x M2 x 3 flat head (board to plate), 3x M2.5 x 6 pan head + 3x M2.5 nut (plate to base),
+8x 4 x 2 mm disc magnets.
+
+`out/phase2/report.md` has every check: interference (none), both assembly paths (board + plate into the base,
+shell onto the base: PASS), the battery drop path (PASS), the layer check, and the centre of gravity.
 
 ## Before assembly
-- Check the USB-C opening and both mic holes (Ø2.0, inside the USB-C recess, either side of the port) are clear.
-- There is no access to the PWR or BOOT buttons (v5, Paul: not used). The board powers up from USB or the
-  battery; the underside switch is the off switch. To flash in recovery mode, open the case.
-- **Switch (optional):** solder the SS-12D00 into the battery's red lead first. Slide it into the floor
-  pocket at the back, just left of the battery's slot, from the battery side, knob down through the slot.
-  Nothing is pressed in: it slides sideways and the end lips hold it, as on C4. The pocket is 0.2 mm roomier
-  than v8 all round (Paul: the body wouldn't go in).
+- **Magnets:** press one into each corner pocket of the base and one into each corner pocket of the shell
+  (snug fit; a drop of CA glue if one is loose). **Check polarity first:** each shell magnet must attract
+  the base magnet under it. Stack the pairs before pressing them in and mark the faces that meet.
+- **Nuts:** slide an M2.5 nut into each post's slot (it opens toward the front of the case). It's a snug fit:
+  push it in with a small screwdriver until it sits under the screw hole. Check by looking down the hole.
+- **Switch:** solder the SS-12D00 into the battery's red lead. From inside the case, push the body into its
+  pocket in the left wall under the USB-C, knob first through the slot. It's a firm press-fit (Paul's rule:
+  cheap parts that get handled get the best fit). The knob should stand about 1.85 mm out of the wall and slide
+  end to end.
+- There is no access to the PWR or BOOT buttons (not used). The switch is the off switch.
 
 ## Assembly (no pressing on the screen, ever)
-1. **Latch clips:** slide each 6 mm clip sideways into its channel, hook facing the outer wall, beam pointing
-   up. Both clips are the same part. One goes on the back wall left of the middle, the other on the front
-   wall's left part. No force: 0.25 mm per side.
-2. **Battery:** stand it on its thin edge and lower it straight down into the slot along the right wall, leads
-   at the back end and at the top. Nothing is over the slot, so it goes in without tilting. It has 0.5 mm of air
-   at each side and 1 mm at each end. Its left side closes the switch pocket.
-3. **Board:** put a soft cloth on the table, put the gold top shell face-down on it, and drop the board in
-   glass-first. The glass rests on the lip. Plug in the battery (J1). There is no speaker any more (v9).
-4. **Base:** hold it upside down over the board. Hook the USB-C opening over the board's USB-C receptacle
-   first (left side), then swing the right side down. It should come down on its own weight until the
-   latches touch, with nothing rubbing on the way (the simulation keeps 0.2 mm of air everywhere else).
-   **Snap the latches by squeezing the base and the gold shell together at the two latch spots (back wall,
-   left of the middle, and the front wall's left part).** Don't push on the middle of the base: the board is
-   already clamped, and the snap force should go clip-to-shell, not through the screen.
-5. **Cable:** take the cable round to the back and give it one turn round the cleat at the bottom of the back
-   wall (under one horn, over the other). A tug on the cable is then taken by the cleat, not the USB-C plug.
-   Bases without the cleat: nothing to do.
+1. **Board onto the carrier plate (on the bench):** board face-down on a soft cloth. Lay the plate on its back,
+   countersinks up, holes over the three standoffs. Fit the three M2 x 3 flat heads. Snug, don't crank: they
+   thread into the board's own standoffs.
+2. **Battery:** stand it on its thin edge and lower it straight into its slot (right of centre), leads at the back
+   and at the top. Nothing is over the slot. Plug the battery into J1 on the board.
+3. **Board + plate into the base:** hold the board by the plate, tilt it, and hook the USB-C into its opening in the
+   left wall first. Then lower the right side down. The three tabs land on their posts.
+4. **Screw the plate down:** three M2.5 x 6 pan heads through the tabs into the nuts, straight down, from above.
+   Every screw is outside the board's edge.
+5. **Shell:** put it straight on from above, square to the screen, until the magnets pull it down. The rim inside
+   the base walls lines it up. It closes with no force on the screen: the bezel lip stands 0.25 mm clear of the glass, and the magnets pull
+   through the seam.
+6. **Cable:** one turn round the cleat on the back (bases with the cleat).
 
-**Opening:** case face-down on the cloth, pull the base's right end up to unsnap both latches, then swing it
-off about the USB-C. Lift the battery straight out.
+**Opening:** pull the shell straight up off the magnets. Then undo the three M2.5 screws and lift the board and plate
+out, right side first, unhooking the USB-C last.
 
 ## Check and report
 | | Check | Report |
 |---|---|---|
-| 1 | Base swings on with no rubbing or forcing at any point | smooth / rubs where |
-| 2 | Both latches click, case doesn't rattle, opens by hand | click (both / one / none), rattle (yes / no), opening (easy / firm / too hard) |
+| 1 | Board + plate go in USB-C first and settle on the posts without forcing; screws pull it down flat | OK / rubs where |
+| 2 | Shell: seats flush all round, magnets hold it firmly, comes off by hand, no rattle | flush (yes / gap where), hold (firm / weak / too strong), rattle (yes / no) |
 | 3 | USB-C mouth flush with the face, gap even all round | sunk / level / slightly proud / clearly proud; gap even (yes / touches where) |
 | 4 | USB-C opening top edge printed clean | clean / droops |
 | 5 | Plug a cable in 20 times while holding the case | board moves (no / yes), latches hold |

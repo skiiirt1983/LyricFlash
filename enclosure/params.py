@@ -644,3 +644,5 @@ SWITCH_FRAME_T = 1.6
 SWITCH_BACK_FREE = 0.6               # the body's back stands this far out of the frame (pins free)
 SWITCH_PATCH_HALF = 7.0              # flat patch in the texture round the knob
 FLOOR_LOGO = "assets/logo_floor_cut_v10.stl"   # v10: refit (concepts/fit_logo.py) into the floor left open by the posts + switch
+LIP_GAP = 0.25                       # v10: bezel lip stands this far above the glass. The board is screwed down,
+LIP_T = 1.0 + LIP_GAP                #   so the magnets' pull goes through the seam, never onto the screen

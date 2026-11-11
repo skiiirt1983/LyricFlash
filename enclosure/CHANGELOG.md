@@ -1,5 +1,32 @@
 # Enclosure changelog
 
+## Phase 2 v10 (2026-11-11)
+Paul's new rules (DESIGN_RULES.md): never force the expensive parts, but give cheap handled parts the best fit;
+screw the board down; make the shell-to-base joint clean and solid.
+- **Board screwed down via a printed carrier plate.** The plate takes the board's three M2 standoffs (M2 x 3 flat
+  heads from below, countersunk). Three tabs past the board's edge screw onto square posts in the base (M2.5 x 6 pan
+  head into an M2.5 nut in a slot in each post), so every screw is reached from straight above, never through the
+  screen. The posts are tied into the nearest wall; the nut slots open to the front so their ceilings print as
+  5 mm bridges. The board ledges are gone. The board is 3.3 mm higher so the plate clears the battery: case 47.8 mm
+  at the front, 70.7 at the back (footprint unchanged, 52.9 x 62.8).
+- **Shell: latch clips replaced by magnets and an alignment rim.** Four 4 x 2 magnet pairs sit in the corners
+  (bosses with 45 deg undersides in the base, pockets in the shell). A 1.2 mm rim hangs 2.5 mm below the shell
+  inside the base walls, 0.15 mm clear, so the seam closes square and can't shift. The shell goes on last, straight
+  down along the screen's normal. The hinge relief in the shell is gone (the base no longer swings past it).
+- **Battery moved 5.6 mm left** (the ledges no longer constrain it) so both right corners take magnets.
+- **Switch moved to the left wall, under the USB-C.** Pressed into a pocket sized to Paul's measured body
+  (8.75 x 3.97 x 3.94, +0.05 a side), knob out through a 1 mm skin (sticks out ~1.85 mm), flat patch in the
+  texture round it. The floor pocket is gone. The old floor pocket bound because it left 2 mm for the pins; the
+  wired pins need 8 mm.
+- Logo refit into the floor that's left (concepts/fit_logo.py): 14.7 x 23.3 mm, centred.
+- New checks (simulate_v10.py): board + plate swung into the base about the USB-C, and the shell dropped on along
+  the normal. Both keep >= 0.2 mm to the board, screen and plate except designed contacts (USB-C web; plate tabs
+  settling onto the posts beside the hinge; seam faces). The shell stays >= 0.25 mm from the screen all the way
+  down; the rim guides at 0.15 mm on the base wall.
+- **Bezel lip 0.25 mm clear of the glass** (LIP_GAP). The board is screwed down now, so the shell no longer
+  clamps it; the magnets' pull goes through the seam, never onto the screen. Shell 0.25 mm taller to keep the
+  lip 1.0 mm thick.
+
 ## Phase 2 v9 (2026-11-10)
 - Paul: the flat battery couldn't get past the board ledges. The two front ledges and the back one hung over
   its ends, and the old checks never tested the battery's way in (my miss). The board's underside leaves no
