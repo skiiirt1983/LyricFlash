@@ -245,4 +245,8 @@ def switch_keepout(zb):
     x0 = E.footprint()[0]
     zc = P.CASE_FLOOR + P.SWITCH_FLOOR_GAP + P.SWITCH_MEAS_W / 2
     yc = P.SWITCH_WALL_Y
-    return E._box((x0 - 6, yc - P.SWITCH_PATCH_HALF, -1), (x0 + 0.3, yc + P.SWITCH_PATCH_HALF, zc + P.SWITCH_PATCH_HALF))
+    top = zc + P.SWITCH_PATCH_HALF
+    # 45 deg roof outward, so the ribs / panels above the patch end in a printable slope, not a flat overhang
+    prof = [(x0 + 0.3, -1.0), (x0 + 0.3, top), (x0 - 6.0, top + 6.3), (x0 - 6.0, -1.0)]
+    w = cq.Wire.makePolygon([cq.Vector(x, yc - P.SWITCH_PATCH_HALF, z) for x, z in prof], close=True)
+    return cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, 2 * P.SWITCH_PATCH_HALF, 0))
