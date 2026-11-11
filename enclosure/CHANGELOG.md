@@ -1,5 +1,10 @@
 # Enclosure changelog
 
+## Phase 2 v10.2 (2026-11-11)
+- Magnet pocket fits from Paul's C11 coupon (coupon_magnets.py): base (PETG, pockets leaning 20 deg) stays at
+  dia 4.10 (#2); shell (PLA, pockets straight up) goes to dia 4.20 (#3). At 4.10 the PLA pocket wouldn't let the
+  magnet sit flush, and at 4.00 it wouldn't go in. Separate MAGNET_FIT / MAGNET_FIT_SHELL.
+
 ## Phase 2 v10.1 (2026-11-11)
 - Paul: no nuts. The M2.5 x 6 screws self-tap into a 2.2 mm pilot hole in each post (PETG); the nut slots and
   their bridged ceilings are gone. The base's only flagged layers are the known USB-C mouth spots again.

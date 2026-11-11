@@ -653,3 +653,7 @@ POST_HOLE_DEPTH = 5.0                # screw reaches 3.6 below the tab; 1.4 to s
 MAGNET_WALL = 1.2                    # plastic round each base magnet, sides and below
 BATTERY_STAND_X1 = 16.13             # cell 0.5 further left so the right corner blocks stay clear of its way in
 MAGNET_CORNER_U = 4.4                # v10.1: magnet blocks' inner corner trimmed at this distance (diagonal) from the magnet
+
+# ---- v10.2 (Paul's C11 magnet coupon, 2026-11-11)
+MAGNET_FIT = 0.05                    # base (PETG, pockets leaning 20 deg): coupon #2, dia 4.10, chosen
+MAGNET_FIT_SHELL = 0.10              # shell (PLA, pockets straight up): coupon #3, dia 4.20 (4.10 wouldn't sit flush)

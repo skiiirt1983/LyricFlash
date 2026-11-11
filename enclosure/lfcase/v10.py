@@ -208,7 +208,7 @@ def shell_features(top, zb):
     top = top.fuse(rim)
     for mx, my in magnet_points():
         mb = _wf_to_bf_xy(mx, my, S)
-        top = top.cut(E.to_wf(cq.Solid.makeCylinder(P.MAGNET_D / 2 + P.MAGNET_FIT, P.MAGNET_H + P.MAGNET_DEPTH_EXTRA + 0.5,
+        top = top.cut(E.to_wf(cq.Solid.makeCylinder(P.MAGNET_D / 2 + P.MAGNET_FIT_SHELL, P.MAGNET_H + P.MAGNET_DEPTH_EXTRA + 0.5,
                                                     cq.Vector(mb[0], mb[1], S - 0.5)), zb))
     return top
 
