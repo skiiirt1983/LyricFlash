@@ -3,6 +3,8 @@
 A parametric, 3D-printed case for LyricFlash on the Waveshare ESP32-S3-Touch-AMOLED-1.75.
 The design brief is PLAN.md (kept with Paul). All dimensions live in `params.py`.
 
+Design rules from Paul: `DESIGN_RULES.md` (read first).
+
 Status: **Phase 2 v9 built** (20 deg tilt, no speaker, battery standing on its edge; 52.9 x 62.8 mm, 44.5 / 67.4 mm tall) (full case, all checks in `out/phase2/report.md`). Print and assembly steps:
 `PHASE2_CHECKLIST.md`. Phase 1 (fit tests) is in `PHASE1_CHECKLIST.md`, the USB-C tolerance stack-up in
 `USB_STACKUP.md`, and every decision in `CHANGELOG.md`.
