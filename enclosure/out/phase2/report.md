@@ -39,7 +39,7 @@ Real cell lowered straight into its pocket (centred with 0.2 mm air; against eit
 
 ## Centre of gravity and tipping
 
-Total 109.5 g (board 20 g and battery 38 g are estimates). CG at X 4.17, Y 1.41, Z 29.85 mm. Smallest tipping angle **35.5 deg** (towards 0 deg; PLAN asks > 30).
+Total 109.9 g (board 20 g and battery 38 g are estimates). CG at X 4.16, Y 1.52, Z 29.8 mm. Smallest tipping angle **35.5 deg** (towards 0 deg; PLAN asks > 30).
 
 ## Key numbers
 
