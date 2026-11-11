@@ -38,7 +38,10 @@ def free_floor(base):
 def outline_2d(mesh):
     """Footprint of a logo cut mesh: union of its projected triangles (holes kept)."""
     tri = mesh.vertices[mesh.faces][:, :, :2]
-    return unary_union([sg.Polygon(t).buffer(0.005) for t in tri if sg.Polygon(t).area > 1e-6])
+    u = unary_union([sg.Polygon(t).buffer(0.005) for t in tri if sg.Polygon(t).area > 1e-6])
+    # smooth away the triangle-union crumbs (0.01-0.02 mm, far below print resolution): clean, extrudable outline
+    u = u.buffer(0.02, join_style=2).buffer(-0.02, join_style=2).simplify(0.01)
+    return unary_union([g for g in getattr(u, "geoms", [u]) if g.area > 0.5])
 
 
 def ring_width(poly):

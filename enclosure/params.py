@@ -657,3 +657,4 @@ MAGNET_CORNER_U = 4.4                # v10.1: magnet blocks' inner corner trimme
 # ---- v10.2 (Paul's C11 magnet coupon, 2026-11-11)
 MAGNET_FIT = 0.05                    # base (PETG, pockets leaning 20 deg): coupon #2, dia 4.10, chosen
 MAGNET_FIT_SHELL = 0.10              # shell (PLA, pockets straight up): coupon #3, dia 4.20 (4.10 wouldn't sit flush)
+FLOOR_LOGO = "assets/logo_floor_mark_v10_3.stl"   # v10.3 (Paul): logo only (no text), 21.7 mm, 1.0 deep
