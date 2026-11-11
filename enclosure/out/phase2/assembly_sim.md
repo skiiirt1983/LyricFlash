@@ -36,7 +36,7 @@ Surface-sample check, spacing 0.12 mm (good to about +/-0.06 mm). Rule: >= 0.2 m
 | 0.1 mm | base 0.1, display 0.29 | seam faces closing | none |
 | 0.2 mm | base 0.15, display 0.29 | - | none |
 | 0.3 mm | base 0.15, display 0.29 | - | none |
-| 0.5 mm | base 0.15, display 0.29 | - | none |
+| 0.5 mm | base 0.15, display 0.3 | - | none |
 | 0.75 mm | base 0.15, display 0.3 | - | none |
 | 1 mm | base 0.15, display 0.3 | - | none |
 | 1.5 mm | base 0.15, display 0.31 | - | none |
@@ -46,7 +46,7 @@ Surface-sample check, spacing 0.12 mm (good to about +/-0.06 mm). Rule: >= 0.2 m
 | 3.5 mm | display 0.33 | - | none |
 | 4 mm | display 0.47 | - | none |
 | 5 mm | display 0.47 | - | none |
-| 6 mm | display 0.48 | - | none |
+| 6 mm | display 0.49 | - | none |
 | 8 mm | all > 1.0 | - | none |
 | 10 mm | all > 1.0 | - | none |
 | 12 mm | all > 1.0 | - | none |
