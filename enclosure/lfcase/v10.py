@@ -132,16 +132,16 @@ def posts(b, zb):
         walls = {"x-": (abs(p[0] - (x0 + w)), (x0 - 1, p[1])), "y-": (abs(p[1] - (y0 + w)), (p[0], y0 - 1)),
                  "y+": (abs(p[1] - (y1 - w)), (p[0], y1 + 1))}
         side, (d, (wx, wy)) = min(walls.items(), key=lambda kv: kv[1][0])
-        post = cq.Solid.makeCylinder(P.POST_R, 200, cq.Vector(p[0], p[1], 0))
+        post = E._box((p[0] - P.POST_HALF, p[1] - P.POST_HALF, 0), (p[0] + P.POST_HALF, p[1] + P.POST_HALF, 200))  # square:
+        # the nut slot keeps a ~2 mm wall each side right to the mouth (a round post narrows to nothing there)
         fw = P.POST_FIN_W / 2
         fin = E._box((min(p[0], wx) - (fw if side != "x-" else 0), min(p[1], wy) - (fw if side == "x-" else 0), 0),
                      (max(p[0], wx) + (fw if side != "x-" else 0), max(p[1], wy) + (fw if side == "x-" else 0), 200))
         b = b.fuse(post.fuse(fin).intersect(below).intersect(body))
         # screw hole (BF, along the normal) and nut slot, open away from the wall
-        dx, dy = p[0] - wx, p[1] - wy
-        n = math.hypot(dx, dy)
-        dx, dy = dx / n, dy / n
-        ang = math.atan2(dy, dx)
+        # slot opens along -Y (toward the front; +Y on a front-wall post): with the 20 deg tilt its ceiling then
+        # rises along the slot, so every layer bridges the 5 mm slot wall to wall (sideways it would cantilever)
+        ang = math.radians(90.0 if side == "y-" else -90.0)
         hole = cq.Solid.makeCylinder(1.4, P.POST_HOLE_DEPTH + 1, cq.Vector(tx, ty, zu - P.POST_HOLE_DEPTH))
         nz1 = zu - P.NUT_TOP_DEPTH
         nz0 = nz1 - P.NUT_T - P.NUT_T_CLEAR

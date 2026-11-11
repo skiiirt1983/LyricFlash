@@ -122,6 +122,11 @@ def print_rotations(info):
     s_w = E.bf_point_to_wf((math.cos(a), math.sin(a), 0), zb) - o
     l_w = E.bf_point_to_wf((-math.sin(a), math.cos(a), 0), zb) - o
     rots["pwr_pin"] = np.array([s_w, np.cross(l_w, s_w), l_w])
+    if getattr(P, "CARRIER", False):                  # v10 carrier: top (board side) face on the plate
+        bx = E.bf_point_to_wf((1, 0, 0), zb) - o
+        by = E.bf_point_to_wf((0, 1, 0), zb) - o
+        bz = E.bf_point_to_wf((0, 0, 1), zb) - o
+        rots["carrier"] = np.array([bx, -by, -bz])
     for name, S, n, a_, t_, *_ in E._clip_frames(zb):
         rots[f"clip_{name}"] = np.array([n, a_, t_])                  # clip profile flat on the plate
     out = {}
@@ -174,7 +179,7 @@ def printable(parts, info, out_dir=None):
     return res
 
 
-MATERIAL = {"top_shell": "gold", "base": "black", "pwr_pin": "gold", "clip_front": "black", "clip_back": "black",
+MATERIAL = {"top_shell": "gold", "base": "black", "pwr_pin": "gold", "carrier": "black", "clip_front": "black", "clip_back": "black",
             "cable_clip": "black"}
 
 
@@ -233,7 +238,6 @@ def sections(parts, info):
     g = load_board(verbose=False)
     board = {k: E.to_wf(g[k], zb) for k in ("pcb", "display", "pmma_frame", "usb_c", "mic1", "mic2", "key2", "key1")}
     col = {"top_shell": GOLD, "base": (0.32, 0.32, 0.36)}
-    name, S0, n, a, t, *_ = [f for f in E._clip_frames(zb) if f[0] == "front"][0]
     (bx0_, _, _), (bx1_, _, _) = E.battery_box()
     bxc = (bx0_ + bx1_) / 2
     cuts = [
@@ -243,9 +247,25 @@ def sections(parts, info):
          f"Section through the battery (X = {bxc:.1f}), side view"),
         ("front", ((0.0, 0.0, 10.0), (0.0, 1.0, 0.0)), ((0, -1, 0), (0, 0, 1)), (0, 0, zb * 0.6), 0.9,
          "Section front-to-back middle (Y = 0): standing battery on the right, board above"),
-        ("latch", (tuple(S0), tuple(-t)), (tuple(t), tuple(a)), tuple(S0 - 2 * a + 2 * n), 4.5,
-         "Section through the front latch clip"),
     ]
+    for f in E._clip_frames(zb):
+        if f[0] == "front":
+            name, S0, n, a, t, *_ = f
+            cuts.append(("latch", (tuple(S0), tuple(-t)), (tuple(t), tuple(a)), tuple(S0 - 2 * a + 2 * n), 4.5,
+                         "Section through the front latch clip"))
+    if getattr(P, "V10", False):
+        tx, ty = P.CARRIER_TABS[0]
+        pw = E.bf_point_to_wf((tx, ty, P.STANDOFF_Z[0] - P.CARRIER_T), zb)
+        mx, my = E.footprint()[0] + P.CASE_CORNER_R, E.footprint()[2] + P.CASE_CORNER_R
+        sz = P.CASE_FLOOR + P.SWITCH_FLOOR_GAP + P.SWITCH_MEAS_W / 2
+        cuts += [
+            ("post", ((pw[0], 0.0, 10.0), (-1.0, 0.0, 0.0)), ((1, 0, 0), (0, 0, 1)), (pw[0], pw[1], pw[2] - 4), 3.0,
+             "Front-left post: plate tab, M2.5 screw hole and nut slot (X through the tab)"),
+            ("switch", ((0.0, P.SWITCH_WALL_Y, 10.0), (0.0, 1.0, 0.0)), ((0, -1, 0), (0, 0, 1)),
+             (E.footprint()[0] + 4, P.SWITCH_WALL_Y, sz), 6.0, "Switch pocket in the left wall (Y through the switch)"),
+            ("magnet", ((mx, 0.0, 10.0), (-1.0, 0.0, 0.0)), ((1, 0, 0), (0, 0, 1)), (mx, my, pw[2] - 6), 3.5,
+             "Front-left corner: magnet pockets in the base boss and the shell, shell rim"),
+        ]
     for nm, clip, cam, target, zoom, title in cuts:
         s = Scene(size=(1600, 1200))
         for k, v in board.items():
@@ -254,7 +274,7 @@ def sections(parts, info):
         if P.SPEAKER:
             s.add(E.speaker_dummy(), (0.5, 0.5, 0.55), clip=clip)
         for k, v in parts.items():
-            s.add(v, col.get(k, (0.3, 0.5, 0.9)), clip=clip)
+            s.add(v, col.get(k, (0.95, 0.55, 0.15)), clip=clip)
         s.camera(cam, target=target, zoom=zoom)
         save_labelled(s, str(OUT / f"section_{nm}.png"), title=title)
 
@@ -262,7 +282,7 @@ def sections(parts, info):
 def export(parts, info):
     from lfcase.export import write_3mf_project, write_step
     rots = print_rotations(info)
-    order = [k for k in ["top_shell", "base", "clip_front", "clip_back", "pwr_pin", "cable_clip"] if k in parts]
+    order = [k for k in ["top_shell", "base", "carrier", "clip_front", "clip_back", "pwr_pin", "cable_clip"] if k in parts]
     from lfcase import logo
     plist = [dict(name=k, shape_assembled=parts[k], R=rots[k], rotate=rotate, material=MATERIAL[k],
                   mesh_post=(logo.cut if k == "base" else None)) for k in order]
@@ -290,13 +310,14 @@ def report(parts, info, chk, lay, cg, sim_rows):
     pair = [r for r in chk if r[1] != "board/battery/speaker"]
     L += ["", "Part against part: " + ("none overlap." if not pair else "; ".join(f"{a}/{b} {h}" for a, b, h, _, _ in pair)), ""]
     ok_sim = all(not r[2] for r in sim_rows)
-    L += ["## Assembly (tilt-in swing)", "",
-          f"**{'PASS' if ok_sim else 'FAIL'}**: nothing comes within 0.2 mm on the way in except designed contacts. "
-          "Details in `assembly_sim.md`.", ""]
+    L += ["## Assembly (v10: board + carrier swung into the base, then the shell straight down)", "",
+          f"**{'PASS' if ok_sim else 'FAIL'}**: nothing comes within 0.2 mm of the board, screen or carrier on either path "
+          "except designed contacts (printed-to-printed guides >= 0.1 mm). Details in `assembly_sim.md`.", ""]
     L += ["## Printability (layer check, print orientation)", "",
           "| Part | Orientation | Result |", "|---|---|---|"]
     orient = {"top_shell": "face-down (top face on the plate)", "base": "floor down", "pwr_pin": "on its flat side",
               "clip_front": "flat (profile on the plate)", "clip_back": "flat (profile on the plate)",
+              "carrier": "flat, top (board side) on the plate; countersinks face up",
               }
     for k, iss in lay.items():
         bad = [i for i in iss if i[1] in ("FLOATING", "LONG BRIDGE")]
@@ -323,21 +344,35 @@ def report(parts, info, chk, lay, cg, sim_rows):
           "- PWR and BOOT buttons: no access (Paul, v5: not used by the firmware). Walls are plain.",
           (f"- Speaker: {info['speaker']['holes']} x D{P.SPK_GRILLE_HOLE_D} grille holes (teardrop) in the right wall."
            if info.get("speaker") else "- Speaker: none (Paul, v9). The battery stands on its edge along the right wall."),
-          f"- Switch: C4 K3 pocket in the floor at {info['switch']['centre']}.",
-          f"- Latches: 2 identical PETG clips (C7 v5 notch 1: hook {P.LATCH_HOOK}, {P.LATCH_CATCH_DEG:g} deg): "
-          + "; ".join(f"{c[0]} on wall {c[1]} at {c[2]:g}, {c[3]:g} mm wide" for c in P.LATCH_CLIPS) + ".",
+          (f"- Switch: SS-12D00 pressed into the left wall at {info['switch']['centre']}, knob out "
+           f"{info['switch'].get('knob_out')} mm through a {P.SWITCH_SKIN} mm skin."
+           if getattr(P, "SWITCH_WALL", False) else f"- Switch: C4 K3 pocket in the floor at {info['switch']['centre']}."),
+          (f"- Latches: 2 identical PETG clips (C7 v5 notch 1: hook {P.LATCH_HOOK}, {P.LATCH_CATCH_DEG:g} deg): "
+           + "; ".join(f"{c[0]} on wall {c[1]} at {c[2]:g}, {c[3]:g} mm wide" for c in P.LATCH_CLIPS) + "."
+           if P.LATCH_CLIPS else
+           f"- Shell: alignment rim ({P.RIM_T} mm, {P.RIM_DEPTH} deep, {P.RIM_CLEAR} clear) inside the base wall, "
+           f"4 corner magnet pairs ({P.MAGNET_D:g} x {P.MAGNET_H:g}), goes on last along the board normal."),
+          (f"- Board: carrier plate ({P.CARRIER_T} mm PETG) on the 3 standoffs with M2 x 3 flat heads; 3 tabs on base posts, "
+           f"M2.5 x 6 pan head + M2.5 nut each (nut slides into a slot in the post)." if getattr(P, "CARRIER", False) else ""),
           ""]
     (OUT / "report.md").write_text("\n".join(L) + "\n")
 
 
 def main():
+    import params as P
     import simulate_case as SC
     parts, info = build()
     chk = check(parts, info)
     ins = insertion_check(parts)
     info["insertion"] = ins
-    mov = {k: v for k, v in parts.items() if k not in ("top_shell", "cable_clip")}
-    sim_rows = SC.run(mov, zb=info["zb"], out=OUT / "assembly_sim.md", top=parts["top_shell"])
+    if getattr(P, "V10", False):
+        import simulate_v10 as SV
+        ok_s, ok_d, sr, dr = SV.run(parts, info["zb"], out=OUT / "assembly_sim.md")
+        sim_rows = sr + dr
+        info["sim_v10"] = (ok_s, ok_d)
+    else:
+        mov = {k: v for k, v in parts.items() if k not in ("top_shell", "cable_clip")}
+        sim_rows = SC.run(mov, zb=info["zb"], out=OUT / "assembly_sim.md", top=parts["top_shell"])
     lay = printable(parts, info)
     cg = cg_and_tip(parts, info)
     render(parts, info)

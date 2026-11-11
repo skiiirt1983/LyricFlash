@@ -25,8 +25,7 @@ FILES = {  # file in the pack: (source stl, plate name, material)
     "base_ribbed_nocleat.stl": ("base_ribbed_nocleat.stl", "Base - ribbed, no cleat", "black"),
     "base_panels_nocleat.stl": ("base_panels_nocleat.stl", "Base - panels, no cleat", "black"),
     "base_smooth_nocleat.stl": ("base_smooth_nocleat.stl", "Base - smooth, no cleat", "black"),
-    "latch_clip_front.stl": ("clip_front.stl", "Latch clips (PETG)", "black"),
-    "latch_clip_back.stl": ("clip_back.stl", "Latch clips (PETG)", "black"),
+    "carrier_plate.stl": ("carrier.stl", "Carrier plate (PETG)", "black"),
 }
 
 
@@ -40,7 +39,7 @@ def main():
         meshes[name] = dict(name=name[:-4], mesh=trimesh.load(STL / src), material=mat, plate_name=plate)
     plates = [[meshes["top_shell.stl"]], [meshes["base_ribbed.stl"]], [meshes["base_panels.stl"]],
               [meshes["base_smooth.stl"]], [meshes["base_ribbed_nocleat.stl"]], [meshes["base_panels_nocleat.stl"]],
-              [meshes["base_smooth_nocleat.stl"]], [meshes["latch_clip_front.stl"], meshes["latch_clip_back.stl"]]]
+              [meshes["base_smooth_nocleat.stl"]], [meshes["carrier_plate.stl"]]]
     write_3mf_plates(plates, OUT / "lyricflash_print_plates.3mf")
     # fallback: one 3MF per plate (works whatever Bambu does with multi-plate files)
     (OUT / "3mf_per_plate").mkdir()
@@ -55,7 +54,9 @@ def main():
         "  1 top shell (filament 1, Iridium Gold PLA Metal), face-down\n"
         "  2-4 base with the cable cleat on the back: ribbed, panels, smooth\n"
         "  5-7 the same bases without the cleat (filament 2, black PETG): print ONE of the six bases\n"
-        "  8 the two latch clips (filament 2, PETG: they flex)\n"
+        "  8 the carrier plate the board screws to (filament 2, black PETG)\n"
+        "Hardware: 3x M2 x 3 flat head (board to plate), 3x M2.5 x 6 pan head + 3x M2.5 nut (plate to base),\n"
+        "8x 4 x 2 mm disc magnets (4 in the base corners, 4 in the shell; check they attract before pressing in).\n"
         "Cable: one turn round the cleat on the back takes any pull off the USB-C plug.\n"
         "stl/: the same parts as separate STLs, already in print orientation.\n\n"
         "Base: supports off, except paint a support enforcer on the top edge of the USB-C opening.\n"
