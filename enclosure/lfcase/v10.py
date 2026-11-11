@@ -119,8 +119,8 @@ def _hex_bf(cx, cy, z0, z1, af, ang):
 
 
 def posts(b, zb):
-    """A post under each tab, tied into the nearest wall by a fin. Top = the tab's underside plane. Screw hole along
-    the board normal, and an M2.5 nut slot entering from the cavity side."""
+    """A post under each tab, tied into the nearest wall by a fin. Top = the tab's underside plane. Pilot hole along
+    the board normal for the M2.5 x 6 to self-tap into."""
     x0, x1, y0, y1 = E.footprint()
     w = P.CASE_WALL
     zu = _z_under()
@@ -132,24 +132,14 @@ def posts(b, zb):
         walls = {"x-": (abs(p[0] - (x0 + w)), (x0 - 1, p[1])), "y-": (abs(p[1] - (y0 + w)), (p[0], y0 - 1)),
                  "y+": (abs(p[1] - (y1 - w)), (p[0], y1 + 1))}
         side, (d, (wx, wy)) = min(walls.items(), key=lambda kv: kv[1][0])
-        post = E._box((p[0] - P.POST_HALF, p[1] - P.POST_HALF, 0), (p[0] + P.POST_HALF, p[1] + P.POST_HALF, 200))  # square:
-        # the nut slot keeps a ~2 mm wall each side right to the mouth (a round post narrows to nothing there)
+        post = E._box((p[0] - P.POST_HALF, p[1] - P.POST_HALF, 0), (p[0] + P.POST_HALF, p[1] + P.POST_HALF, 200))
         fw = P.POST_FIN_W / 2
         fin = E._box((min(p[0], wx) - (fw if side != "x-" else 0), min(p[1], wy) - (fw if side == "x-" else 0), 0),
                      (max(p[0], wx) + (fw if side != "x-" else 0), max(p[1], wy) + (fw if side == "x-" else 0), 200))
         b = b.fuse(post.fuse(fin).intersect(below).intersect(body))
-        # screw hole (BF, along the normal) and nut slot, open away from the wall
-        # slot opens along -Y (toward the front; +Y on a front-wall post): with the 20 deg tilt its ceiling then
-        # rises along the slot, so every layer bridges the 5 mm slot wall to wall (sideways it would cantilever)
-        ang = math.radians(90.0 if side == "y-" else -90.0)
-        hole = cq.Solid.makeCylinder(1.4, P.POST_HOLE_DEPTH + 1, cq.Vector(tx, ty, zu - P.POST_HOLE_DEPTH))
-        nz1 = zu - P.NUT_TOP_DEPTH
-        nz0 = nz1 - P.NUT_T - P.NUT_T_CLEAR
-        nut = _hex_bf(tx, ty, nz0, nz1, P.NUT_AF + P.NUT_AF_FIT, ang)
-        slot = (cq.Workplane("XY").workplane(offset=nz0).center(tx, ty)
-                .transformed(rotate=(0, 0, math.degrees(ang))).center(6, 0)
-                .rect(12, P.NUT_AF + P.NUT_AF_FIT).extrude(nz1 - nz0).val())
-        b = b.cut(E.to_wf(hole.fuse(nut).fuse(slot), zb))
+        # v10.1 (Paul): the M2.5 x 6 self-taps into a pilot hole along the board normal; no nut, no slot
+        hole = cq.Solid.makeCylinder(P.POST_PILOT_D / 2, P.POST_HOLE_DEPTH + 1, cq.Vector(tx, ty, zu - P.POST_HOLE_DEPTH))
+        b = b.cut(E.to_wf(hole, zb))
         info.append(dict(tab=(tx, ty), wf=tuple(round(float(v), 2) for v in p), wall=side))
     return b, info
 
@@ -170,17 +160,20 @@ def magnet_bosses(b, zb):
     for mx, my in magnet_points():
         mb = _wf_to_bf_xy(mx, my, S)
         top = E.bf_point_to_wf((mb[0], mb[1], S), zb)[2]
-        # profile: the magnet's rim circle pulled out 12 mm into the corner (beyond the walls)
+        # v10.1: a solid corner block. Straight sides down past the pocket (MAGNET_WALL of plastic round the magnet,
+        # plus the seam's tilt across the block), then a 45 deg underside back into the walls. (v10's pure cone
+        # narrowed so fast that the pocket broke out through its side.)
         sx, sy = np.sign(mx), np.sign(my)
-        prof = unary_union([Point(mx, my).buffer(P.MAGNET_D / 2 + P.MAGNET_RIM),
-                            box(min(mx, mx + 12 * sx), min(my, my + 12 * sy), max(mx, mx + 12 * sx), max(my, my + 12 * sy)),
-                            box(min(mx, mx + 12 * sx), my - (P.MAGNET_D / 2 + P.MAGNET_RIM), max(mx, mx + 12 * sx), my + (P.MAGNET_D / 2 + P.MAGNET_RIM)),
-                            box(mx - (P.MAGNET_D / 2 + P.MAGNET_RIM), min(my, my + 12 * sy), mx + (P.MAGNET_D / 2 + P.MAGNET_RIM), max(my, my + 12 * sy))])
-        prof = prof.convex_hull
-        depth = 30.0
-        pl = cq.Plane(origin=(0, 0, top + 2.0), xDir=(1, 0, 0), normal=(0, 0, -1))
-        pts = [(x, -y) for x, y in list(prof.exterior.coords)[:-1]]
-        boss = cq.Workplane(pl).polyline(pts).close().extrude(depth, taper=45).val()
+        r = P.MAGNET_D / 2 + P.MAGNET_WALL
+        x0_, x1_ = sorted((mx - r * sx, mx + 12 * sx))
+        ry = r + (P.MAGNET_H + P.MAGNET_DEPTH_EXTRA + P.MAGNET_WALL) * math.sin(T) + 0.4   # the pocket leans with the tilt
+        y0_, y1_ = sorted((my - ry * sy, my + 12 * sy))
+        z_str = top - (P.MAGNET_H + P.MAGNET_DEPTH_EXTRA + P.MAGNET_WALL + 2 * r * math.tan(T))
+        straight = E._box((x0_, y0_, z_str), (x1_, y1_, top + 4.0))
+        pl = cq.Plane(origin=(0, 0, z_str + 0.01), xDir=(1, 0, 0), normal=(0, 0, -1))
+        pts = [(x0_, -y0_), (x1_, -y0_), (x1_, -y1_), (x0_, -y1_)]
+        taper = cq.Workplane(pl).polyline(pts).close().extrude(30.0, taper=45).val()
+        boss = straight.fuse(taper)
         boss = boss.intersect(cav).intersect(below)
         b = b.fuse(boss)
         pockets.append(E.to_wf(cq.Solid.makeCylinder(P.MAGNET_D / 2 + P.MAGNET_FIT, P.MAGNET_H + P.MAGNET_DEPTH_EXTRA + 0.5,

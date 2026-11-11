@@ -1,5 +1,14 @@
 # Enclosure changelog
 
+## Phase 2 v10.1 (2026-11-11)
+- Paul: no nuts. The M2.5 x 6 screws self-tap into a 2.2 mm pilot hole in each post (PETG); the nut slots and
+  their bridged ceilings are gone. The base's only flagged layers are the known USB-C mouth spots again.
+- Paul: the base magnet pockets didn't work (photo, all four corners). v10's corner bosses were a pure 45 deg cone
+  that narrowed so fast the pocket broke out through its side. Now each corner is a solid block: straight sides
+  with 1.2 mm round the magnet and below it (deeper toward the middle, since the pocket leans with the 20 deg
+  tilt), then a 45 deg underside into the walls. Checked: a full 1 mm shell of plastic round every pocket.
+- Cell 0.5 mm further left so the right corner blocks stay clear of its way in. Logo refit (14.7 x 23.4 mm).
+
 ## Phase 2 v10 (2026-11-11)
 Paul's new rules (DESIGN_RULES.md): never force the expensive parts, but give cheap handled parts the best fit;
 screw the board down; make the shell-to-base joint clean and solid.

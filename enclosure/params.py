@@ -646,3 +646,9 @@ SWITCH_PATCH_HALF = 7.0              # flat patch in the texture round the knob
 FLOOR_LOGO = "assets/logo_floor_cut_v10.stl"   # v10: refit (concepts/fit_logo.py) into the floor left open by the posts + switch
 LIP_GAP = 0.25                       # v10: bezel lip stands this far above the glass. The board is screwed down,
 LIP_T = 1.0 + LIP_GAP                #   so the magnets' pull goes through the seam, never onto the screen
+
+# ---- v10.1 (Paul): no nuts (M2.5 x 6 self-taps into the post), solid magnet corner blocks
+POST_PILOT_D = 2.2                   # M2.5 self-tapping pilot in PETG
+POST_HOLE_DEPTH = 5.0                # screw reaches 3.6 below the tab; 1.4 to spare
+MAGNET_WALL = 1.2                    # plastic round each base magnet, sides and below
+BATTERY_STAND_X1 = 16.13             # cell 0.5 further left so the right corner blocks stay clear of its way in

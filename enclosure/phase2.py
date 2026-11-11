@@ -353,7 +353,7 @@ def report(parts, info, chk, lay, cg, sim_rows):
            f"- Shell: alignment rim ({P.RIM_T} mm, {P.RIM_DEPTH} deep, {P.RIM_CLEAR} clear) inside the base wall, "
            f"4 corner magnet pairs ({P.MAGNET_D:g} x {P.MAGNET_H:g}), goes on last along the board normal."),
           (f"- Board: carrier plate ({P.CARRIER_T} mm PETG) on the 3 standoffs with M2 x 3 flat heads; 3 tabs on base posts, "
-           f"M2.5 x 6 pan head + M2.5 nut each (nut slides into a slot in the post)." if getattr(P, "CARRIER", False) else ""),
+           f"M2.5 x 6 pan head each, self-tapping into a 2.2 mm pilot in the post (no nuts)." if getattr(P, "CARRIER", False) else ""),
           ""]
     (OUT / "report.md").write_text("\n".join(L) + "\n")
 

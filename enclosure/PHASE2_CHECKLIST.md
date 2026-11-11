@@ -12,10 +12,9 @@ Print pack: `out/lyricflash_print_pack.zip` (one plate per print). Filament **sl
 **Settings:** 0.2 mm layers, 4 walls, 15 % gyroid, 0.4 mm nozzle. Supports OFF everywhere, except:
 - **USB-C opening:** paint a support enforcer on the opening's top edge, as before. Clean it out fully and check
   the bare board's USB-C socket slides into the opening freely before assembly.
-- The three nut slots in the posts have 5 mm bridged ceilings (slightly inclined). They print without support.
 
-**Hardware:** 3x M2 x 3 flat head (board to plate), 3x M2.5 x 6 pan head + 3x M2.5 nut (plate to base),
-8x 4 x 2 mm disc magnets.
+**Hardware:** 3x M2 x 3 flat head (board to plate), 3x M2.5 x 6 pan head (plate to base; they self-tap into the
+posts, no nuts), 8x 4 x 2 mm disc magnets.
 
 `out/phase2/report.md` has every check: interference (none), both assembly paths (board + plate into the base,
 shell onto the base: PASS), the battery drop path (PASS), the layer check, and the centre of gravity.
@@ -24,8 +23,6 @@ shell onto the base: PASS), the battery drop path (PASS), the layer check, and t
 - **Magnets:** press one into each corner pocket of the base and one into each corner pocket of the shell
   (snug fit; a drop of CA glue if one is loose). **Check polarity first:** each shell magnet must attract
   the base magnet under it. Stack the pairs before pressing them in and mark the faces that meet.
-- **Nuts:** slide an M2.5 nut into each post's slot (it opens toward the front of the case). It's a snug fit:
-  push it in with a small screwdriver until it sits under the screw hole. Check by looking down the hole.
 - **Switch:** solder the SS-12D00 into the battery's red lead. From inside the case, push the body into its
   pocket in the left wall under the USB-C, knob first through the slot. It's a firm press-fit (Paul's rule:
   cheap parts that get handled get the best fit). The knob should stand about 1.85 mm out of the wall and slide
@@ -40,7 +37,8 @@ shell onto the base: PASS), the battery drop path (PASS), the layer check, and t
    and at the top. Nothing is over the slot. Plug the battery into J1 on the board.
 3. **Board + plate into the base:** hold the board by the plate, tilt it, and hook the USB-C into its opening in the
    left wall first. Then lower the right side down. The three tabs land on their posts.
-4. **Screw the plate down:** three M2.5 x 6 pan heads through the tabs into the nuts, straight down, from above.
+4. **Screw the plate down:** three M2.5 x 6 pan heads through the tabs, straight down, from above. They cut their
+   own thread in the posts' pilot holes: the first time is a little stiff; stop as soon as the head seats.
    Every screw is outside the board's edge.
 5. **Shell:** put it straight on from above, square to the screen, until the magnets pull it down. The rim inside
    the base walls lines it up. It closes with no force on the screen: the bezel lip stands 0.25 mm clear of the glass, and the magnets pull
