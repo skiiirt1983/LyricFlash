@@ -1,5 +1,17 @@
 # Enclosure changelog
 
+## Phase 2 v10.3 (2026-11-11)
+- Paul: the floor logo wasn't legible printed. The "LYRIC FLASH" text is gone: the floor now carries only the mark
+  (rounded square, lightning bolt, music notes). Logo-only source kept as assets/logo_floor_mark.stl (the 3 big
+  pieces of Paul's cut, original size) so the text can't come back by accident.
+- Refit with concepts/fit_logo.py (now tries 0 and 90 deg, keeps MARGIN 1.5, thickens thin strokes, sets the
+  depth): **21.7 x 21.7 mm** (scale 1.126 of Paul's mark; the square shape gives the same size at either
+  rotation), centred in the open floor at (-9.5, 1.5), 1.52 mm from the nearest wall, post, block or the switch.
+- **1.0 mm deep** (5 layers at 0.2; was 0.5). The floor is 1.6 mm there, so 0.6 mm stays under it.
+- Thinnest stroke, the square's outline: **0.92 mm** after scaling, so no thickening was needed (>= 0.8). The
+  bolt's tip and one note corner come to a point, as drawn.
+- Asset: assets/logo_floor_mark_v10_3.stl (cut from z 0.6 to 1.65).
+
 ## Phase 2 v10.2 (2026-11-11)
 - Magnet pocket fits from Paul's C11 coupon (coupon_magnets.py): base (PETG, pockets leaning 20 deg) stays at
   dia 4.10 (#2); shell (PLA, pockets straight up) goes to dia 4.20 (#3). At 4.10 the PLA pocket wouldn't let the
