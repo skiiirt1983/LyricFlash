@@ -14,7 +14,7 @@ Part against part: none overlap.
 
 ## Assembly (v10: board + carrier swung into the base, then the shell straight down)
 
-**FAIL**: nothing comes within 0.2 mm of the board, screen or carrier on either path except designed contacts (printed-to-printed guides >= 0.1 mm). Details in `assembly_sim.md`.
+**PASS**: nothing comes within 0.2 mm of the board, screen or carrier on either path except designed contacts (printed-to-printed guides >= 0.1 mm). Details in `assembly_sim.md`.
 
 ## Printability (layer check, print orientation)
 
