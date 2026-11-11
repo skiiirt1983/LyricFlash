@@ -271,7 +271,7 @@ def step_board_in():
             labels.append(("1. USB-C into its\nopening first", hinge, (hinge[0] - 10, hinge[1] - 300), BLUE))
             labels.append(("2. Lower this\nside down", tuple(pts[8]), (pts[8][0] + 60, pts[8][1] - 140), ORANGE))
         else:
-            labels.append(("Seated: the three tabs\nrest on their posts", None, (cam.W / 2, 80), "#888"))
+            labels.append(("Seated: the two tabs\nrest on their posts", None, (cam.W / 2, 80), "#888"))
         save_img(img, cam, OUT + f"step_{name}.png", arrows=arrows, labels=labels, curves=curves)
 
 
