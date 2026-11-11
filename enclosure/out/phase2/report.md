@@ -39,14 +39,14 @@ Real cell lowered straight into its pocket (centred with 0.2 mm air; against eit
 
 ## Centre of gravity and tipping
 
-Total 113.0 g (board 20 g and battery 38 g are estimates). CG at X 3.49, Y 1.96, Z 29.78 mm. Smallest tipping angle **36.4 deg** (towards 0 deg; PLAN asks > 30).
+Total 109.5 g (board 20 g and battery 38 g are estimates). CG at X 4.17, Y 1.41, Z 29.85 mm. Smallest tipping angle **35.5 deg** (towards 0 deg; PLAN asks > 30).
 
 ## Key numbers
 
 - Mic holes: D2.0 teardrop straight through the USB recess wall, 6.1 / 6.3 mm from the mics (no collar, no duct: Paul).
 - PWR and BOOT buttons: no access (Paul, v5: not used by the firmware). Walls are plain.
 - Speaker: none (Paul, v9). The battery stands on its edge along the right wall.
-- Switch: SS-12D00 pressed into the left wall at (-25.43, 0.0, 4.19), knob out 1.85 mm through a 1.0 mm skin.
+- Switch: SS-12D00 pressed into the left wall at (-25.43, 4.0, 4.19), knob out 1.85 mm through a 1.0 mm skin.
 - Shell: alignment rim (1.2 mm, 2.5 deep, 0.15 clear) inside the base wall, 4 corner magnet pairs (4 x 2), goes on last along the board normal.
 - Board: carrier plate (2.4 mm PETG) on the 3 standoffs with M2 x 3 flat heads; 3 tabs on base posts, M2.5 x 6 pan head each, self-tapping into a 2.2 mm pilot in the post (no nuts).
 

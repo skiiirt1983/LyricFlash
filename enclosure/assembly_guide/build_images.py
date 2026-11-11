@@ -249,7 +249,7 @@ def step_carrier():
     p = px(cam, (-13.75, 14.7, glass_top + 3.5 + 14.4))
     save_img(img, cam, OUT + "step_carrier.png", arrows=arrows,
              labels=[("Board glass-side DOWN\non a soft cloth", g, (g[0] + 300, g[1] + 120), "#1f6b3a"),
-                     ("Plate: countersinks up,\nholes over the 3 standoffs", p, (p[0] - 120, p[1] - 200), ORANGE)])
+                     ("Plate: countersinks up, FRONT and\nUSB-C arrows readable", p, (p[0] - 120, p[1] - 220), ORANGE)])
 
 
 def step_board_in():

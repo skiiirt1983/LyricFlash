@@ -325,8 +325,9 @@ bullets(["Lay the board glass-side down on a soft cloth.",
          "Line the holes up over the board's three metal standoffs.",
          "Fit the three M2 × 3 flat heads. Snug them, don't crank them: they go into the board's own standoffs."],
         M, y - 4, W - 2 * M, 10, gap=3)
-img("step_carrier.png", M, y - 330, W - 2 * M, 270, anchor="c")
-y -= 350
+yb = y - 92                                     # below the four bullets
+img("step_carrier.png", M, yb - 262, W - 2 * M, 255, anchor="c")
+y = yb - 290
 y = step_head(5, "Plug in the battery", y)
 bullets(["Plug the battery into J1 on the back of the board.",
          "!Check the battery polarity with a meter first (see Before you start)."], M, y - 4, (W - 2 * M) / 2 - 10, 10, gap=3)
