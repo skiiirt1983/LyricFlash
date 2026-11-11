@@ -29,7 +29,7 @@ c.setFont("SansB", 20)
 c.drawString(M, H - 40, "Checklist for install")
 c.setFont("Sans", 10)
 c.setFillColor(HexColor("#cbd5e1"))
-c.drawRightString(W - M, H - 38, "LyricFlash case · design v9")
+c.drawRightString(W - M, H - 38, "LyricFlash case · design v10.1")
 
 y = H - 96
 c.setFillColor(INK)
@@ -38,16 +38,18 @@ c.drawString(M, y, "Unit / print: ______________________     Base style: ribbed 
 y -= 16
 
 rows = [
-    ("Base swings on with no rubbing or forcing at any point", "smooth / rubs where"),
-    ("Both latches click, case doesn't rattle, opens by hand", "click: both / one / none · rattle: y / n · opening: easy / firm / too hard"),
+    ("Magnets: all 8 seated flush, each shell magnet attracts the base magnet under it", "OK / one loose (glued) / wrong way round"),
+    ("Switch: presses into the wall firmly, knob stands out and slides end to end, cuts power", "OK / too tight / loose / rubs"),
+    ("Battery goes in and comes out by hand, no forcing; doesn't rattle when closed", "OK / tight where / rattles"),
+    ("Board screws to the plate with the 3 M2 x 3; heads flush in the countersinks", "OK / proud / stripped"),
+    ("Board + plate go in USB-C first and settle on the posts without forcing", "OK / rubs where"),
+    ("Three M2.5 x 6 bite and hold; plate doesn't move", "OK / stripped / plate rocks"),
+    ("Shell: seats flush all round, magnets hold it firmly, comes off by hand, no rattle", "flush: y / gap where · hold: firm / weak / too strong"),
     ("USB-C mouth flush with the face, gap even all round", "sunk / level / slightly proud / clearly proud · gap even: y / touches where"),
     ("USB-C opening top edge printed clean", "clean / droops"),
-    ("Plug a cable in 20 times while holding the case", "board moves: no / yes · latches hold"),
+    ("Plug a cable in 20 times while holding the case", "board moves: no / yes"),
     ("Mics: play a song from ~1 m, LyricFlash identifies it as reliably as with the bare board", "same / worse / much worse"),
-    ("Battery goes in and comes out by hand, no forcing; doesn't rattle when closed", "OK / tight where / rattles"),
-    ("Switch: slides end to end, knob below the bottom face, cuts power", "OK / rubs / sticks out"),
     ("Cable cleat: one turn holds; a light tug from any side doesn't pull on the plug, slide or tip the case", "OK / slips / too fiddly"),
-    ("Face-down on the table: the glass doesn't touch", "OK / touches"),
     ("Touch works right to the edge, no lit pixels hidden by the lip", "OK / hidden where"),
 ]
 
@@ -105,7 +107,7 @@ for k in range(max(0, int((y - 50) // 22))):
 
 c.setFont("Sans", 8)
 c.setFillColor(GREY)
-c.drawString(M, 22, "LyricFlash case · checklist for install · design v9 (2026-11-10)")
+c.drawString(M, 22, "LyricFlash case · checklist for install · design v10.1 (2026-11-11)")
 c.showPage()
 c.save()
 print("saved", OUT)

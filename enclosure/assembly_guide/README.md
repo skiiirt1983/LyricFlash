@@ -1,6 +1,6 @@
 # Assembly guide
 
-- `LyricFlash_Assembly_Guide.pdf`: illustrated step-by-step assembly (design v9).
+- `LyricFlash_Assembly_Guide.pdf`: illustrated step-by-step assembly (design v10.1).
 - `LyricFlash_Checklist_for_Install.pdf`: one-page check-and-report sheet for each build.
 
 ## Rebuild after a design change
@@ -12,7 +12,7 @@ python3 build_pdf.py         # assembly guide
 python3 build_checklist.py   # checklist
 ```
 
-The printed parts come from the project 3MF in their assembled positions. The board, battery and switch
-are simple shapes placed from the numbers in `lfr.py` (`ZB`, `BAT_X0/X1`, `switch_wf`): update those if the
-layout moves. `img/board_back.png` is a crop of `../out/phase0/board_back.png`. Step text lives in
+The printed parts come from the project 3MF in their assembled positions. The board, battery, switch, magnets
+and plate screws are simple shapes placed from the numbers in `lfr.py` (`ZB`, `BAT_X0/X1`, `switch_wf`,
+`MAGNET_XY`, `TABS_BF`): update those if the layout moves. The carrier plate comes from the 3MF. `img/board_back.png` is a crop of `../out/phase0/board_back.png`. Step text lives in
 `build_pdf.py`; checklist rows in `build_checklist.py`.

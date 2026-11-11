@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 
 TILT = math.radians(20.0)
-ZB = 47.5                       # board origin height (v9 report: board centre 47.5 mm above the desk)
+ZB = 50.85                      # board origin height (v10.1 report: board centre 50.85 mm above the desk)
 import os
 PROJ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "out", "phase2", "lyricflash_case_project.3mf")
 
@@ -169,8 +169,10 @@ def board_bf(highlight=None):
     return parts
 
 
-# v9: cell stands on its thin edge along the right wall. Pocket x 10.96..22.26, y -29..29, z 1.6..38.1
-BAT_X0, BAT_X1 = 10.96, 22.26
+# v10.1: cell stands on its thin edge right of centre. Pocket x 4.83..16.13, y -29..29, z 1.6..38.1
+BAT_X0, BAT_X1 = 4.83, 16.13
+SEAM_Z = 3.0                     # board frame
+X_OUT = -26.43                   # outside face of the left wall
 
 
 def battery_wf(color="#3c6fb4"):
@@ -185,12 +187,51 @@ def battery_leads_wf():
     return [a, b]
 
 
-def switch_wf(color="#2f9e6e"):
-    # pocket left of the cell at the back: x 6.26..10.96, centre Y 22.7, knob down through the floor
-    cx = BAT_X0 - 4.7 / 2
-    body = box_mesh((cx - 1.75, 22.7 - 4.25, 3.4), (cx + 1.75, 22.7 + 4.25, 6.9), color, "switch")
-    knob = box_mesh((cx - 0.75, 22.7 - 0.75, 0.4), (cx + 0.75, 22.7 + 0.75, 3.4), "#e8e8e8", "knob")
+def switch_wf(color="#2f9e6e", out=0.0):
+    """SS-12D00 pressed into the left wall under the USB-C: body inside, knob out through the wall.
+    out: pull it this far into the case (for the 'push it in' step)."""
+    x_face = X_OUT + 1.0 + out           # knob face of the body sits on the 1 mm skin
+    zc = 1.6 + 0.6 + 3.97 / 2
+    body = box_mesh((x_face, -4.375, zc - 1.985), (x_face + 3.94, 4.375, zc + 1.985), color, "switch")
+    knob = box_mesh((x_face - 2.85, -0.75, zc - 0.75), (x_face, 0.75, zc + 0.75), "#e8e8e8", "knob")
     return [body, knob]
+
+
+def seam_point(x, y):
+    """World point on the seam plane above world (x, y)."""
+    yb = (y + SEAM_Z * math.sin(TILT)) / math.cos(TILT)
+    return p_bf_to_wf((x, yb, SEAM_Z))
+
+
+MAGNET_XY = [(-19.93, -24.93), (-19.93, 24.93), (19.93, -24.93), (19.93, 24.93)]
+
+
+def magnets_wf(color="#c9ccd2", lift=0.0):
+    """The four base magnets (4 x 2 discs) in their corner pockets, tops flush with the seam."""
+    out = []
+    n = Rx(TILT) @ np.array([0, 0, 1.0])
+    for x, y in MAGNET_XY:
+        p = seam_point(x, y)
+        m = cyl_mesh(2.0, -2.0, 0.0, color, "magnet", n=36).moved(Rx(TILT), p + n * lift)
+        out.append(m)
+    return out
+
+
+TABS_BF = [(-17.5, -18.5), (0.0, 24.0), (-17.5, 18.3)]   # carrier tabs (board frame), plate top at z -3.5
+
+
+def tab_screws_wf(color="#9aa0aa", lift=0.0):
+    """M2.5 x 6 pan heads in the three carrier tabs (head on top of the tab)."""
+    out = []
+    for x, y in TABS_BF:
+        head = cyl_mesh(2.25, -3.5, -1.9, color, "screw", n=36, c=(x, y)).moved(None, (0, 0, lift))
+        shank = cyl_mesh(1.25, -9.5, -3.5, color, "screw", n=24, c=(x, y)).moved(None, (0, 0, lift))
+        out += [bf_to_wf(head), bf_to_wf(shank)]
+    return out
+
+
+def tab_points_wf():
+    return [p_bf_to_wf((x, y, -3.5)) for x, y in TABS_BF]
 
 
 # ------------------------------------------------------------------ renderer
