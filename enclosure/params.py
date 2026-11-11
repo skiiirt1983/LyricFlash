@@ -609,3 +609,36 @@ SWITCH_MEAS_H = 3.94                 # body height, knob face to pin face
 SWITCH_MEAS_KNOB = 2.85              # knob sticks out of the body this far
 SWITCH_MEAS_TO_PINS = 8.57           # knob-side body face to the pin tips (pins 4.63 past the body)
 SWITCH_MEAS_TO_WIRES = 12.0          # knob-side body face to the end of the soldered wires (8.06 past the body)
+
+# ---- v10 (Paul, 2026-11-11): see DESIGN_RULES.md and lfcase/v10.py
+V10 = True
+CARRIER = True                       # board screwed to a printed carrier plate, plate screwed to base posts
+CARRIER_T = 2.4
+CARRIER_TABS = [(-17.5, -18.5), (0.0, 24.0), (-17.5, 18.3)]   # BF tab centres, all past the PCB edge (r 23);
+# the left-back one clears the USB-C bay's cheek (WF x <= -22.0)
+CARRIER_TAB_R = 4.0
+M2_HEAD_D = 3.8                      # Paul's M2 x 3 flat (countersunk) heads
+POST_R = 4.2
+POST_FIN_W = 3.0                     # fin tying each post into its nearest wall
+POST_HOLE_DEPTH = 6.0
+NUT_AF, NUT_AF_FIT = 5.0, 0.05       # M2.5 nut across flats; snug (press) fit in its slot
+NUT_T, NUT_T_CLEAR = 2.0, 0.15
+NUT_TOP_DEPTH = 1.0                  # nut slot starts this far below the post top
+LATCH_CLIPS = ()                     # v10: latch clips replaced by magnets + alignment rim
+BOARD_Z_EXTRA = 0.0                  # the solver now also keeps the carrier plate clear of the battery
+BATTERY_STAND_X1 = 16.63             # v10: cell moved left (ledges are gone) so the right corners take magnets
+MAGNET_D, MAGNET_H = 4.0, 2.0        # Paul's 4 x 2 discs
+MAGNET_FIT = 0.05                    # radius over the magnet: pressed in
+MAGNET_DEPTH_EXTRA = 0.1
+MAGNET_RIM = 0.8
+RIM_CLEAR, RIM_T, RIM_DEPTH = 0.15, 1.2, 2.5   # alignment rim under the shell, inside the base's walls
+RIM_BOARD_R = 24.95                  # rim kept outside the shell's bore (24.63): attached to solid shell,
+                                     # clear of the screen (24.48)
+SWITCH_WALL = True                   # switch in the left wall (floor pocket gone)
+SWITCH_WALL_Y = 0.0
+SWITCH_SKIN = 1.0
+SWITCH_PRESS = 0.05                  # pocket per side over Paul's measured body: snug press fit
+SWITCH_FLOOR_GAP = 0.6
+SWITCH_FRAME_T = 1.6
+SWITCH_BACK_FREE = 0.6               # the body's back stands this far out of the frame (pins free)
+SWITCH_PATCH_HALF = 7.0              # flat patch in the texture round the knob

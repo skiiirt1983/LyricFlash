@@ -54,7 +54,16 @@ def board_z():
     for _ in range(40):
         mid = (lo + hi) / 2
         lo, hi = (lo, mid) if ok(mid) else (mid, hi)
-    _ZB["zb"] = round(hi + 0.005 + P.BOARD_Z_EXTRA, 2)
+    zb = round(hi + 0.005 + P.BOARD_Z_EXTRA, 2)
+    if getattr(P, "CARRIER", False):                  # v10: carrier plate clear of the battery too
+        from lfcase import v10
+        (bx0, by0, _), (bx1, by1, bz1) = battery_box()
+        while True:
+            z = v10.carrier_lowest_over(zb, (bx0 - air, by0 - air, bx1 + air, by1 + air))
+            if z is None or z >= bz1 + air:
+                break
+            zb = round(zb + 0.1, 2)
+    _ZB["zb"] = zb
     return _ZB["zb"]
 
 
@@ -144,7 +153,8 @@ def top_shell(zb):
     bore = A.cyl(A.BORE_R, P.SEAM_Z - 2, P.GLASS_TOP_Z)
     lip = A.cyl(A.LIP_R, P.SEAM_Z - 2, A.LIP_TOP + 2)
     s = s.cut(to_wf(bore.fuse(lip).fuse(A.fold_reliefs(P.SEAM_Z - 2, P.GLASS_BOTTOM_Z - 0.05)), zb))
-    s = s.cut(hinge_relief(zb))
+    if not getattr(P, "V10", False):                  # v10: the shell goes on last, no swing past it
+        s = s.cut(hinge_relief(zb))
     s = _chamfer_face_outer(s, bf_point_to_wf((0, 0, 1), zb) - bf_point_to_wf((0, 0, 0), zb), P.TOP_EDGE_CHAMFER, top=True)
     return A.solidify(s)
 
@@ -355,6 +365,8 @@ def board_ledges(zb, angles=None):
 
 
 def base(zb, ledge_angles=None):
+    if getattr(P, "CARRIER", False):                  # v10: the carrier plate holds the board, no ledges
+        return A.solidify(base_shell(zb))
     b = base_shell(zb).fuse(board_ledges(zb, ledge_angles))
     return A.solidify(b)
 
@@ -814,7 +826,10 @@ def build_all(zb=None, log=print):
     spk = None
     if P.SPEAKER:
         log("speaker"); b, spk = speaker_features(b, zb)
-    log("switch"); b, sw = switch_features(b, zb)
+    if getattr(P, "SWITCH_WALL", False):
+        sw = None                                     # v10: in the left wall, after the texture
+    else:
+        log("switch"); b, sw = switch_features(b, zb)
     if P.BUTTON_ACCESS:
         log("BOOT pinhole"); b, boot = boot_features(b, zb)
     tex = getattr(P, "TEXTURE", "ribs" if P.RIBS else None)
@@ -826,9 +841,19 @@ def build_all(zb=None, log=print):
         log("cable clip (built in)"); b = cable_clip_features(b, zb)
     if P.CLEAT:
         log("cable cleat (back)"); b = cable_cleat_features(b, zb)
+    if getattr(P, "V10", False):
+        from lfcase import v10
+        log("switch (left wall)"); b, sw = v10.switch_wall(b, zb)
+        log("carrier posts"); b, post_info = v10.posts(b, zb)
+        log("magnet bosses"); b = v10.magnet_bosses(b, zb)
+        b = A.solidify(b)
     log("top shell"); top = top_shell(zb)
     log("latches"); b, top, lat = latch_features(b, top, zb)
+    if getattr(P, "V10", False):
+        log("shell rim + magnets"); top = A.solidify(v10.shell_features(top, zb))
     parts = {"top_shell": top, "base": b}
+    if getattr(P, "CARRIER", False):
+        parts["carrier"] = v10.carrier(zb)
     if P.BUTTON_ACCESS:
         parts["pwr_pin"] = pwr_pin(zb)
     parts.update(latch_clips(zb))
@@ -967,6 +992,9 @@ def _texture_keepouts(zb):
         ks.append(_clip_clear_zone(zb))
     if P.CLEAT:
         ks.append(_cleat_clear_zone(zb))
+    if getattr(P, "SWITCH_WALL", False):
+        from lfcase import v10
+        ks.append(v10.switch_keepout(zb))
     return cq.Compound.makeCompound(ks) if ks else _box((0, 0, -50), (0.01, 0.01, -49))
 
 
