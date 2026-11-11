@@ -260,7 +260,7 @@ def sections(parts, info):
         sz = P.CASE_FLOOR + P.SWITCH_FLOOR_GAP + P.SWITCH_MEAS_W / 2
         cuts += [
             ("post", ((pw[0], 0.0, 10.0), (-1.0, 0.0, 0.0)), ((1, 0, 0), (0, 0, 1)), (pw[0], pw[1], pw[2] - 4), 3.0,
-             "Front-left post: plate tab, M2.5 screw hole and nut slot (X through the tab)"),
+             "Front-left post: plate tab and M2.5 pilot hole (X through the tab)"),
             ("switch", ((0.0, P.SWITCH_WALL_Y, 10.0), (0.0, 1.0, 0.0)), ((0, -1, 0), (0, 0, 1)),
              (E.footprint()[0] + 4, P.SWITCH_WALL_Y, sz), 6.0, "Switch pocket in the left wall (Y through the switch)"),
             ("magnet", ((mx, 0.0, 10.0), (-1.0, 0.0, 0.0)), ((1, 0, 0), (0, 0, 1)), (mx, my, pw[2] - 6), 3.5,
