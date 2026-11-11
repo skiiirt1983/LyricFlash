@@ -601,3 +601,11 @@ LATCH_CLIPS = (("front", "y-", -15.0, 6.0, 0.8), ("back", "y+", -4.0, 6.0, 1.6))
 # both on front/back walls well clear of the USB-C hinge line, so the swing moves them straight down onto the catch
 FLOOR_LOGO = "assets/logo_floor_cut_v9.stl"   # v9 (Paul): logo centred in the open floor left of the battery slot and
                                      # scaled x1.323 (largest that keeps 1.5 mm from every wall/feature); depth unchanged
+
+# ---- Paul's measurements of his SS-12D00 switch (2026-11-11, calipers)
+SWITCH_MEAS_L = 8.75                 # body length (slide direction)
+SWITCH_MEAS_W = 3.97                 # body width
+SWITCH_MEAS_H = 3.94                 # body height, knob face to pin face
+SWITCH_MEAS_KNOB = 2.85              # knob sticks out of the body this far
+SWITCH_MEAS_TO_PINS = 8.57           # knob-side body face to the pin tips (pins 4.63 past the body)
+SWITCH_MEAS_TO_WIRES = 12.0          # knob-side body face to the end of the soldered wires (8.06 past the body)
