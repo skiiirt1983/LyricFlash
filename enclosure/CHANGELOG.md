@@ -6,7 +6,8 @@
 - Paul: the base magnet pockets didn't work (photo, all four corners). v10's corner bosses were a pure 45 deg cone
   that narrowed so fast the pocket broke out through its side. Now each corner is a solid block: straight sides
   with 1.2 mm round the magnet and below it (deeper toward the middle, since the pocket leans with the 20 deg
-  tilt), then a 45 deg underside into the walls. Checked: a full 1 mm shell of plastic round every pocket.
+  tilt), then a 45 deg underside into the walls. The block's inner corner is trimmed on the diagonal so the
+  board's plate tabs keep >= 0.2 mm on the way in. Checked: a full 1 mm shell of plastic round every pocket.
 - Cell 0.5 mm further left so the right corner blocks stay clear of its way in. Logo refit (14.7 x 23.4 mm).
 
 ## Phase 2 v10 (2026-11-11)

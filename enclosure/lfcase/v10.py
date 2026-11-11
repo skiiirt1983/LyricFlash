@@ -169,11 +169,17 @@ def magnet_bosses(b, zb):
         ry = r + (P.MAGNET_H + P.MAGNET_DEPTH_EXTRA + P.MAGNET_WALL) * math.sin(T) + 0.4   # the pocket leans with the tilt
         y0_, y1_ = sorted((my - ry * sy, my + 12 * sy))
         z_str = top - (P.MAGNET_H + P.MAGNET_DEPTH_EXTRA + P.MAGNET_WALL + 2 * r * math.tan(T))
-        straight = E._box((x0_, y0_, z_str), (x1_, y1_, top + 4.0))
+        # inner corner trimmed on the diagonal (v10.1): keeps the board's plate tabs >= 0.2 clear in the swing.
+        # Offsets measured inboard from the magnet centre; the cut removes everything past u = MAGNET_CORNER_U.
+        k = P.MAGNET_CORNER_U * math.sqrt(2)
+        off = [(k, 0), (0, k), (0, 45), (45, 45), (45, 0)]
+        diag = cq.Solid.extrudeLinear(cq.Face.makeFromWires(cq.Wire.makePolygon(
+            [cq.Vector(mx - ox * sx, my - oy * sy, -50) for ox, oy in off], close=True)), cq.Vector(0, 0, 400))
+        straight = E._box((x0_, y0_, z_str), (x1_, y1_, top + 4.0)).cut(diag)
         pl = cq.Plane(origin=(0, 0, z_str + 0.01), xDir=(1, 0, 0), normal=(0, 0, -1))
         pts = [(x0_, -y0_), (x1_, -y0_), (x1_, -y1_), (x0_, -y1_)]
         taper = cq.Workplane(pl).polyline(pts).close().extrude(30.0, taper=45).val()
-        boss = straight.fuse(taper)
+        boss = straight.fuse(taper).cut(diag)
         boss = boss.intersect(cav).intersect(below)
         b = b.fuse(boss)
         pockets.append(E.to_wf(cq.Solid.makeCylinder(P.MAGNET_D / 2 + P.MAGNET_FIT, P.MAGNET_H + P.MAGNET_DEPTH_EXTRA + 0.5,
