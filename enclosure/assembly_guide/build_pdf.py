@@ -87,7 +87,7 @@ def footer():
     page[0] += 1
     c.setFont("Sans", 8)
     c.setFillColor(GREY)
-    c.drawString(M, 22, "LyricFlash case: assembly guide · design v10.1 (2026-11-11)")
+    c.drawString(M, 22, "LyricFlash case: assembly guide · design v10.4 (2026-11-11)")
     c.drawRightString(W - M, 22, str(page[0]))
 
 
@@ -158,15 +158,15 @@ c.setFillColor(HexColor("#e5e7eb"))
 c.drawString(M, H - 122, "Assembly guide")
 c.setFont("Sans", 10.5)
 c.setFillColor(HexColor("#cbd5e1"))
-c.drawString(M, H - 160, "For the Waveshare ESP32-S3-Touch-AMOLED-1.75 · 20° tilted desk case · design v10.1")
-c.drawString(M, H - 176, "9 steps · 6 screws, 8 magnets · no glue")
+c.drawString(M, H - 160, "For the Waveshare ESP32-S3-Touch-AMOLED-1.75 · 20° tilted desk case · design v10.4")
+c.drawString(M, H - 176, "9 steps · 5 screws, 8 magnets · no glue")
 img("hero.png", M, 250, W - 2 * M, H - 214 - 270, anchor="c")
 box(M, 60, W - 2 * M, 170)
 img("hero_back.png", M + 10, 70, 230, 150, anchor="c")
 y = para("How it goes together", M + 260, 205, 260, 13, "SansB")
 y = bullets(["Magnets, the switch and the battery go into the black base.",
              "The display board screws onto a printed carrier plate, on the bench.",
-             "Board and plate go into the base USB-C first; three screws hold the plate down.",
+             "Board and plate go into the base USB-C first; two screws hold the plate down.",
              "The gold shell goes on last, held by the magnets. The cable turns round the cleat."], M + 262, y - 4, 268, 9.8, gap=2)
 footer()
 c.showPage()
@@ -214,7 +214,7 @@ c.setFont("SansB", 13)
 c.setFillColor(INK)
 c.drawString(M, y2, "Hardware")
 yb = bullets(["3× M2 × 3 flat head (countersunk): board to the plate",
-              "3× M2.5 × 6 pan head: plate to the base (they cut their own thread, no nuts)",
+              "2× M2.5 × 6 pan head: plate to the base (they cut their own thread, no nuts)",
               "8× 4 × 2 mm disc magnets: 4 in the base, 4 in the shell"], M, y2 - 22, colw, 9.8, gap=2)
 c.setFont("SansB", 13)
 c.setFillColor(INK)
@@ -240,7 +240,7 @@ img("map.png", M - 10, 150, 320, 540, anchor="c")
 img("exploded.png", M + 300, 150, W - 2 * M - 300, 540, anchor="c")
 note("Three layers: the gold top shell, the display board on its carrier plate, and the black base. The battery "
      "stands on its edge right of centre. The switch is in the left wall under the USB-C port and the two microphone "
-     "holes. Magnets sit in all four corners, and the plate screws to three posts on the left and at the back.",
+     "holes. Magnets sit in all four corners, and the plate screws to two posts, front-left and back-centre.",
      M, 140, W - 2 * M, BLUE)
 footer()
 c.showPage()
@@ -321,7 +321,8 @@ header("Board onto its plate", "Steps 4–5")
 y = H - 100
 y = step_head(4, "Screw the board to the carrier plate (on the bench)", y)
 bullets(["Lay the board glass-side down on a soft cloth.",
-         "Put the carrier plate on its back, countersinks facing up, holes over the board's three metal standoffs.",
+         "Put the carrier plate on its back, countersinks facing up. The raised FRONT and USB-C arrows should read correctly and point to the board's front and its USB-C. If you see them mirrored, flip the plate.",
+         "Line the holes up over the board's three metal standoffs.",
          "Fit the three M2 × 3 flat heads. Snug them, don't crank them: they go into the board's own standoffs."],
         M, y - 4, W - 2 * M, 10, gap=3)
 img("step_carrier.png", M, y - 330, W - 2 * M, 270, anchor="c")
@@ -339,7 +340,7 @@ y = H - 100
 y = step_head(6, "USB-C first, then lower it down", y)
 bullets(["Hold the board by its plate, glass up, tilted.",
          "Put the board's USB-C socket into its opening in the left wall first.",
-         "Then lower the right side down. The three plate tabs land on their posts. Nothing should rub on the way.",
+         "Then lower the right side down. The two plate tabs land on their posts. Nothing should rub on the way.",
          "Keep the battery wires clear so they don't get pinched under the plate."],
         M, y - 4, W - 2 * M, 10, gap=3)
 y -= 120
@@ -355,7 +356,8 @@ c.showPage()
 header("Fix it and close it", "Steps 7–8")
 y = H - 100
 y = step_head(7, "Screw the plate down", y)
-bullets(["Three M2.5 × 6 pan heads, straight down through the plate's tabs into the posts. All three sit outside the screen.",
+bullets(["Two M2.5 × 6 pan heads, straight down through the plate's tabs into the posts, both outside the screen.",
+         "Back-centre first (round hole). Then the front-left one: its hole is a short slot, so it always finds its post.",
          "They cut their own thread the first time, so it's a little stiff. Stop as soon as the head seats.",
          "No nuts needed."], M, y - 4, colw, 10, gap=3)
 img("step_screws.png", M + colw + 15, y - 250, W - 2 * M - colw - 15, 260, anchor="c")
@@ -386,7 +388,7 @@ c.setFont("SansB", 12)
 c.setFillColor(INK)
 c.drawString(M, y, "Opening the case later")
 bullets(["Pull the gold shell straight up off the magnets.",
-         "Undo the three M2.5 screws. Lift the board and plate out, right side first, unhooking the USB-C last.",
+         "Undo the two M2.5 screws. Lift the board and plate out, right side first, unhooking the USB-C last.",
          "Lift the battery straight out."], M, y - 18, W - 2 * M, 10, gap=2)
 footer()
 c.showPage()

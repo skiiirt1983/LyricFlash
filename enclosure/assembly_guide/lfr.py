@@ -173,6 +173,7 @@ def board_bf(highlight=None):
 BAT_X0, BAT_X1 = 4.83, 16.13
 SEAM_Z = 3.0                     # board frame
 X_OUT = -26.43                   # outside face of the left wall
+SWITCH_Y = 4.0                   # v10.4: switch centre (world Y)
 
 
 def battery_wf(color="#3c6fb4"):
@@ -192,8 +193,9 @@ def switch_wf(color="#2f9e6e", out=0.0):
     out: pull it this far into the case (for the 'push it in' step)."""
     x_face = X_OUT + 1.0 + out           # knob face of the body sits on the 1 mm skin
     zc = 1.6 + 0.6 + 3.97 / 2
-    body = box_mesh((x_face, -4.375, zc - 1.985), (x_face + 3.94, 4.375, zc + 1.985), color, "switch")
-    knob = box_mesh((x_face - 2.85, -0.75, zc - 0.75), (x_face, 0.75, zc + 0.75), "#e8e8e8", "knob")
+    yc = SWITCH_Y
+    body = box_mesh((x_face, yc - 4.375, zc - 1.985), (x_face + 3.94, yc + 4.375, zc + 1.985), color, "switch")
+    knob = box_mesh((x_face - 2.85, yc - 0.75, zc - 0.75), (x_face, yc + 0.75, zc + 0.75), "#e8e8e8", "knob")
     return [body, knob]
 
 
@@ -217,7 +219,7 @@ def magnets_wf(color="#c9ccd2", lift=0.0):
     return out
 
 
-TABS_BF = [(-17.5, -18.5), (0.0, 24.0), (-17.5, 18.3)]   # carrier tabs (board frame), plate top at z -3.5
+TABS_BF = [(-17.5, -18.5), (0.0, 24.0)]   # v10.4: two carrier tabs (board frame), plate top at z -3.5
 
 
 def tab_screws_wf(color="#9aa0aa", lift=0.0):

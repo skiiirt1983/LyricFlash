@@ -29,7 +29,7 @@ c.setFont("SansB", 20)
 c.drawString(M, H - 40, "Checklist for install")
 c.setFont("Sans", 10)
 c.setFillColor(HexColor("#cbd5e1"))
-c.drawRightString(W - M, H - 38, "LyricFlash case · design v10.1")
+c.drawRightString(W - M, H - 38, "LyricFlash case · design v10.4")
 
 y = H - 96
 c.setFillColor(INK)
@@ -41,9 +41,9 @@ rows = [
     ("Magnets: all 8 seated flush, each shell magnet attracts the base magnet under it", "OK / one loose (glued) / wrong way round"),
     ("Switch: presses into the wall firmly, knob stands out and slides end to end, cuts power", "OK / too tight / loose / rubs"),
     ("Battery goes in and comes out by hand, no forcing; doesn't rattle when closed", "OK / tight where / rattles"),
-    ("Board screws to the plate with the 3 M2 x 3; heads flush in the countersinks", "OK / proud / stripped"),
+    ("Board screws to the plate with the 3 M2 x 3, FRONT/USB-C arrows the right way; heads flush", "OK / proud / stripped / plate flipped"),
     ("Board + plate go in USB-C first and settle on the posts without forcing", "OK / rubs where"),
-    ("Three M2.5 x 6 bite and hold; plate doesn't move", "OK / stripped / plate rocks"),
+    ("Both M2.5 x 6 line up without forcing (slot at the front-left), bite and hold; plate doesn't move", "OK / hard to line up / stripped / plate rocks"),
     ("Shell: seats flush all round, magnets hold it firmly, comes off by hand, no rattle", "flush: y / gap where · hold: firm / weak / too strong"),
     ("USB-C mouth flush with the face, gap even all round", "sunk / level / slightly proud / clearly proud · gap even: y / touches where"),
     ("USB-C opening top edge printed clean", "clean / droops"),
@@ -107,7 +107,7 @@ for k in range(max(0, int((y - 50) // 22))):
 
 c.setFont("Sans", 8)
 c.setFillColor(GREY)
-c.drawString(M, 22, "LyricFlash case · checklist for install · design v10.1 (2026-11-11)")
+c.drawString(M, 22, "LyricFlash case · checklist for install · design v10.4 (2026-11-11)")
 c.showPage()
 c.save()
 print("saved", OUT)

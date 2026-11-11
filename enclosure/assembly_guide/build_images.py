@@ -145,7 +145,7 @@ def layout_map():
     for i, t in enumerate(lfr.tab_points_wf()):
         p = px(cam, t)
         if i == 0:
-            L.append(("Screw posts (3)", p, (p[0] + 40, p[1] + 200), "#888c94"))
+            L.append(("Screw posts (2)", p, (p[0] + 40, p[1] + 200), "#888c94"))
     m = lfr.seam_point(*lfr.MAGNET_XY[1])
     p = px(cam, m)
     L.append(("Magnets in\nall 4 corners", p, (p[0] + 40, p[1] - 150), MAGL))
@@ -192,21 +192,21 @@ def step_magnets():
 def step_switch():
     b = P("base", BASE_IN)
     c = b.V[b.F].mean(1)
-    keep = (c[:, 0] < -12) & (np.abs(c[:, 1]) < 14) & (c[:, 2] < 18)      # cut-away: just the left wall's bottom
+    keep = (c[:, 0] < -12) & (np.abs(c[:, 1] - lfr.SWITCH_Y) < 14) & (c[:, 2] < 18)      # cut-away: just the left wall's bottom
     rest = [lfr.Mesh(b.V, b.F[keep], BASE_IN, "base")]
     sw_out = lfr.switch_wf(ORANGE, out=9.0)
-    box = lfr.box_mesh((-27, -12, 0), (-8, 12, 14), "#000")
+    box = lfr.box_mesh((-27, lfr.SWITCH_Y - 12, 0), (-8, lfr.SWITCH_Y + 12, 14), "#000")
     R = lfr.view_matrix(20, 28)                 # from inside the case, looking at the left wall
     img, cam = lfr.raster(rest + sw_out, R=R, W=1000, bounds_meshes=[box], pad=0.03)
-    a0 = px(cam, (-12.0, 0, 4.2))
-    a1 = px(cam, (-19.5, 0, 4.2))
-    k = px(cam, (-26.43, 0, 4.2))
+    a0 = px(cam, (-12.0, lfr.SWITCH_Y, 4.2))
+    a1 = px(cam, (-19.5, lfr.SWITCH_Y, 4.2))
+    k = px(cam, (-26.43, lfr.SWITCH_Y, 4.2))
     save_img(img, cam, OUT + "step_switch.png", arrows=[(a0, a1, INK, {})],
              labels=[("Knob first, through\nthe slot in the wall", k, (k[0] + 60, k[1] - 230), SW)])
     seated = base_set(battery=False, switch=True, magnets=False)
-    box = lfr.box_mesh((-32, -14, 0), (-20, 14, 16), "#000")
+    box = lfr.box_mesh((-32, lfr.SWITCH_Y - 14, 0), (-20, lfr.SWITCH_Y + 14, 16), "#000")
     img, cam = lfr.raster(seated, R=lfr.view_matrix(-160, 12), W=900, bounds_meshes=[box], pad=0.04)
-    k = px(cam, (-28.2, 0, 4.2))
+    k = px(cam, (-28.2, lfr.SWITCH_Y, 4.2))
     save_img(img, cam, OUT + "step_switch_out.png",
              labels=[("Knob stands ~1.85 mm\nout of the wall", k, (k[0] - 20, k[1] - 230), SW)])
 
