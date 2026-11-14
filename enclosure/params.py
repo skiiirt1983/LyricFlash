@@ -681,3 +681,9 @@ CLEAT_Z_TOP = 16.0                   # horn tops (was 14): keeps the 45 deg unde
 CARRIER_MARK_SIZE = 5.0              # text height (was 2.6)
 CARRIER_MARK_STROKE = 1.0            # thinnest stroke after thickening (>= 0.9 measured; two 0.4 lines + overlap)
 CARRIER_MARK_DEPTH = 0.6             # debossed 3 layers into the countersink face (was raised 0.4)
+
+# ---- v10.7 (Paul: the front screw only went in with the board pushed toward the USB-C). The USB-C locates the
+# board, so the screws must only clamp. Tab A: oversize round hole (about +/-0.75 mm every way) + M2.5 washer.
+CARRIER_FLOAT_TABS = (0,)            # tab A, front-left
+CARRIER_FLOAT_HOLE_D = 4.0           # M2.5 + washer (DIN 125: 2.7 / 6.0) covers it with 1 mm all round
+CARRIER_SLOT_TAB = None              # the v10.4 slot is replaced by the oversize hole

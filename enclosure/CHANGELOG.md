@@ -1,5 +1,13 @@
 # Enclosure changelog
 
+## Phase 2 v10.7 (2026-11-14)
+- Paul: the front-left plate screw only went in with the board pushed toward the USB-C, which is forcing the
+  board. v10.4's slot on tab A only gave room along the line to tab B (mostly front-to-back; +/-0.23 mm sideways),
+  and Paul's board sat a little to the right of where that post wanted it. The USB-C (web + guide) is what locates
+  the board, so the screws must only clamp. Tab A now has an oversize 4.0 mm round hole (about +/-0.75 mm in every
+  direction around the M2.5) and the screw clamps through an M2.5 flat washer (DIN 125, 6 mm OD, 1 mm of overlap all
+  round). Tab B unchanged (round 2.9, went in fine). Plate only: base, fits and checks unchanged. Hardware +1 washer.
+
 ## Phase 2 v10.6 (2026-11-14)
 - Paul: the plate's direction marking wasn't legible (v10.4's raised 2.6 mm text was too small to print). Now
   5 mm bold letters, debossed 0.6 mm (3 layers) into the countersink face, with strokes thickened to >= 0.9 mm

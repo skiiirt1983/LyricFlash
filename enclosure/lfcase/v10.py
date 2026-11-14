@@ -93,6 +93,9 @@ def carrier_bf():
     tabs = P.CARRIER_TABS
     for i, (x, y) in enumerate(tabs):                               # M2.5 clearance (2.9)
         r = P.CARRIER_TAB_HOLE_D / 2
+        if i in getattr(P, "CARRIER_FLOAT_TABS", ()):              # v10.7: oversize, clamped through a washer
+            pl = pl.cut(cq.Solid.makeCylinder(P.CARRIER_FLOAT_HOLE_D / 2, 10, cq.Vector(x, y, Z_TOP - 5)))
+            continue
         if i == P.CARRIER_SLOT_TAB:                                 # v10.4: slot along the line to the other tab
             ox, oy = tabs[1 - i][0] - x, tabs[1 - i][1] - y
             k = math.hypot(ox, oy)

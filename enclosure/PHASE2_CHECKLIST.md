@@ -14,7 +14,7 @@ Print pack: `out/lyricflash_print_pack.zip` (one plate per print). Filament **sl
   the bare board's USB-C socket slides into the opening freely before assembly.
 
 **Hardware:** 3x M2 x 3 flat head (board to plate), 2x M2.5 x 6 pan head (plate to base; they self-tap into the
-posts, no nuts), 8x 4 x 2 mm disc magnets.
+posts, no nuts), 1x M2.5 flat washer (front-left screw), 8x 4 x 2 mm disc magnets.
 
 `out/phase2/report.md` has every check: interference (none), both assembly paths (board + plate into the base,
 shell onto the base: PASS), the battery drop path (PASS), the layer check, and the centre of gravity.
@@ -39,7 +39,8 @@ shell onto the base: PASS), the battery drop path (PASS), the layer check, and t
 3. **Board + plate into the base:** hold the board by the plate, tilt it, and hook the USB-C into its opening in the
    left wall first. Then lower the right side down. The two tabs land on their posts.
 4. **Screw the plate down:** two M2.5 x 6 pan heads through the tabs, straight down, from above. Back-centre
-   (round hole) first, then the front-left one (its hole is a short slot, so it always finds the post). They cut their
+   first. Then the front-left one, through an M2.5 washer: its hole is oversize (4 mm), so it finds the post
+   wherever the board sits. Never push the board sideways to line a screw up. They cut their
    own thread in the posts' pilot holes: the first time is a little stiff; stop as soon as the head seats.
    Every screw is outside the board's edge.
 5. **Shell:** put it straight on from above, square to the screen, until the magnets pull it down. The rim inside
