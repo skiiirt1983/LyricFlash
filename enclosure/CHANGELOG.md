@@ -1,5 +1,13 @@
 # Enclosure changelog
 
+## Phase 2 v10.6 (2026-11-14)
+- Paul: the plate's direction marking wasn't legible (v10.4's raised 2.6 mm text was too small to print). Now
+  5 mm bold letters, debossed 0.6 mm (3 layers) into the countersink face, with strokes thickened to >= 0.9 mm
+  (measured 0.95; the font's own stroke at 5 mm is 0.59). FRONT with an arrow to the front across the wide part of
+  the plate, and an arrow to the USB-C side with USB across the middle, both reading correctly on the bench. Cutting
+  it in instead of raising it frees the whole plate (raised marks had to stay off the battery's column) and leaves
+  the plate's underside, fits and checks unchanged. carrier_pla.stl is the same plate for the PLA profile.
+
 ## Phase 2 v10.5 (2026-11-11)
 - Paul: the cleat horns need to be bigger, with more to hook the cable onto. Horns 13 mm each side of the stem
   (was 9), so 32 mm tip to tip (was 24). The turned-up ears are 3.5 mm tall x 2 mm (were 2 x 1.6). The gap behind

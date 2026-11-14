@@ -321,7 +321,7 @@ header("Board onto its plate", "Steps 4–5")
 y = H - 100
 y = step_head(4, "Screw the board to the carrier plate (on the bench)", y)
 bullets(["Lay the board glass-side down on a soft cloth.",
-         "Put the carrier plate on its back, countersinks facing up. The raised FRONT and USB-C arrows should read correctly and point to the board's front and its USB-C. If you see them mirrored, flip the plate.",
+         "Put the carrier plate on its back, countersinks facing up. The FRONT and USB arrows cut into it should read correctly and point to the board's front and its USB-C. If you see them mirrored, flip the plate.",
          "Line the holes up over the board's three metal standoffs.",
          "Fit the three M2 × 3 flat heads. Snug them, don't crank them: they go into the board's own standoffs."],
         M, y - 4, W - 2 * M, 10, gap=3)

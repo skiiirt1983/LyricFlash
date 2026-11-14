@@ -676,3 +676,8 @@ CLEAT_EAR_W = 2.0                    # turned-up tip width (was 1.6)
 CLEAT_GAP = 5.5                      # horns to wall (was 5)
 CLEAT_TIP_T = 2.5                    # horn depth at the tip (was 2)
 CLEAT_Z_TOP = 16.0                   # horn tops (was 14): keeps the 45 deg undersides off the desk
+
+# ---- v10.6 (Paul): the plate's direction marking was too small to print
+CARRIER_MARK_SIZE = 5.0              # text height (was 2.6)
+CARRIER_MARK_STROKE = 1.0            # thinnest stroke after thickening (>= 0.9 measured; two 0.4 lines + overlap)
+CARRIER_MARK_DEPTH = 0.6             # debossed 3 layers into the countersink face (was raised 0.4)

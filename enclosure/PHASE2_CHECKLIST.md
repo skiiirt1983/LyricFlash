@@ -31,8 +31,8 @@ shell onto the base: PASS), the battery drop path (PASS), the layer check, and t
 
 ## Assembly (no pressing on the screen, ever)
 1. **Board onto the carrier plate (on the bench):** board face-down on a soft cloth. Lay the plate on its back,
-   countersinks up, so the raised FRONT and USB-C arrows read correctly and point to the board's front and its
-   USB-C. Holes over the three standoffs. Fit the three M2 x 3 flat heads. Snug, don't crank: they
+   countersinks up, so the FRONT and USB arrows cut into it read correctly and point to the board's front and
+   its USB-C. Holes over the three standoffs. Fit the three M2 x 3 flat heads. Snug, don't crank: they
    thread into the board's own standoffs.
 2. **Battery:** stand it on its thin edge and lower it straight into its slot (right of centre), leads at the back
    and at the top. Nothing is over the slot. Plug the battery into J1 on the board.

@@ -15,6 +15,7 @@ import math
 import cadquery as cq
 import numpy as np
 from shapely.geometry import Point, Polygon, box
+from shapely import affinity
 from shapely.ops import nearest_points, unary_union
 
 import params as P
@@ -100,37 +101,70 @@ def carrier_bf():
             pl = pl.cut(_extrude_bf(slot, Z_TOP - 5, Z_TOP + 5))
         else:
             pl = pl.cut(cq.Solid.makeCylinder(r, 10, cq.Vector(x, y, Z_TOP - 5)))
-    return pl.fuse(carrier_marking_bf()) if getattr(P, "CARRIER_MARKING", False) else pl
+    return pl.cut(carrier_marking_bf()) if getattr(P, "CARRIER_MARKING", False) else pl
+
+
+def _text_poly(s, size):
+    """Bold text as a shapely outline (unit frame: u right, v up), from cadquery's font, tessellated."""
+    t = cq.Workplane("XY").text(s, size, 1.0, kind="bold", halign="center", valign="center").val()
+    tris = []
+    for f in t.Faces():
+        if abs(f.normalAt().z + 1) < 1e-6:                          # bottom faces at z = 0
+            vs, ts = f.tessellate(0.01)
+            pts = [(p.x, p.y) for p in vs]
+            tris += [Polygon([pts[i] for i in tri]) for tri in ts]
+    return unary_union([p.buffer(0.002) for p in tris if p.area > 1e-8])
+
+
+def _arrow_poly(cu, cv, ang, L, w, head):
+    a = math.radians(ang)
+    ux, uy, nx, ny = math.cos(a), math.sin(a), -math.sin(a), math.cos(a)
+    tip = (cu + ux * L / 2, cv + uy * L / 2)
+    base = (cu - ux * L / 2, cv - uy * L / 2)
+    neck = (tip[0] - ux * head, tip[1] - uy * head)
+    return Polygon([(base[0] + nx * w / 2, base[1] + ny * w / 2), (neck[0] + nx * w / 2, neck[1] + ny * w / 2),
+                    (neck[0] + nx * head * 0.62, neck[1] + ny * head * 0.62), tip,
+                    (neck[0] - nx * head * 0.62, neck[1] - ny * head * 0.62), (neck[0] - nx * w / 2, neck[1] - ny * w / 2),
+                    (base[0] - nx * w / 2, base[1] - ny * w / 2)])
+
+
+def stroke_width(poly):
+    """Thinnest stroke: 2 r for the largest r whose opening (erode, dilate) keeps >= 98 % of the area."""
+    lo, hi = 0.05, 2.0
+    for _ in range(25):
+        r = (lo + hi) / 2
+        kept = poly.buffer(-r, join_style=1).buffer(r, join_style=1).area / poly.area
+        lo, hi = (r, hi) if kept >= 0.98 else (lo, r)
+    return 2 * lo
+
+
+def carrier_marking_poly():
+    """v10.6 (Paul: v10.4's 2.6 mm raised text was too small to print). Big debossed marking on the countersink face,
+    laid out as you see it on the bench (board face-down): u right, v up = toward the board's front.
+    FRONT with an arrow to the front across the wide part, and an arrow to the USB-C side with USB across the
+    middle. Strokes thickened to >= CARRIER_MARK_STROKE."""
+    s = P.CARRIER_MARK_SIZE
+    front = affinity.translate(_text_poly("FRONT", s), 0, 8.0)
+    up = _arrow_poly(0.0, 13.6, 90.0, L=5.4, w=1.8, head=3.2)
+    usb = affinity.translate(_text_poly("USB", s), 3.0, -1.2)
+    left = _arrow_poly(-6.6, -1.2, 180.0, L=6.0, w=1.8, head=3.2)
+    g = unary_union([front, up, usb, left])
+    w0 = stroke_width(unary_union([front, usb]))
+    d = max(0.0, (P.CARRIER_MARK_STROKE - w0) / 2)
+    g = g.buffer(d, join_style=1) if d > 0 else g
+    # bench frame -> board frame: u = x, v = -y (the bench view is the plate flipped about X)
+    g = affinity.scale(g, 1.0, -1.0, origin=(0, 0))
+    keep = carrier_outline().buffer(-1.0)
+    for x, y in P.MOUNT_HOLES_XY:                                   # clear of the countersinks
+        keep = keep.difference(Point(x, y).buffer(P.M2_HEAD_D / 2 + 1.0))
+    return g.intersection(keep), w0, d
 
 
 def carrier_marking_bf():
-    """v10.4 (Paul installed the plate upside down once): raised marking on the face you see on the bench (the
-    countersink side). An arrow toward the front with FRONT, and an arrow toward the USB-C side with USB-C. Kept off
-    the battery's column and the tabs."""
-    z0, h = _z_under(), P.CARRIER_MARK_H
-    pl = cq.Plane(origin=(0, 0, z0), xDir=(1, 0, 0), normal=(0, 0, -1))   # reads correctly seen from that side
-    out = None
-
-    def text(s, x, y, size, rot=0.0):
-        return (cq.Workplane(pl).center(x, -y).transformed(rotate=(0, 0, rot))
-                .text(s, size, h, kind="bold", halign="center", valign="center").val())
-
-    def arrow(x, y, ang, L=6.0, w=1.0, head=2.6):
-        a = math.radians(ang)
-        ux, uy, nx, ny = math.cos(a), math.sin(a), -math.sin(a), math.cos(a)
-        tip = (x + ux * L / 2, y + uy * L / 2)
-        base = (x - ux * L / 2, y - uy * L / 2)
-        neck = (tip[0] - ux * head, tip[1] - uy * head)
-        pts = [(base[0] + nx * w / 2, base[1] + ny * w / 2), (neck[0] + nx * w / 2, neck[1] + ny * w / 2),
-               (neck[0] + nx * head * 0.6, neck[1] + ny * head * 0.6), tip,
-               (neck[0] - nx * head * 0.6, neck[1] - ny * head * 0.6), (neck[0] - nx * w / 2, neck[1] - ny * w / 2),
-               (base[0] - nx * w / 2, base[1] - ny * w / 2)]
-        return _extrude_bf(Polygon(pts), z0 - h, z0)
-    parts = [text("FRONT", -3.0, -8.0, 2.6), arrow(-3.0, -12.0, -90.0, L=5.0),
-             text("USB-C", -4.0, 2.5, 2.6), arrow(-4.5, 6.2, 180.0, L=6.0)]
-    for p in parts:
-        out = p if out is None else out.fuse(p)
-    return out.intersect(_extrude_bf(carrier_outline().buffer(-0.8), z0 - h - 1, z0 + 0.01))
+    """Debossed marking (cut CARRIER_MARK_DEPTH into the countersink face)."""
+    poly, _, _ = carrier_marking_poly()
+    z0 = _z_under()
+    return _extrude_bf(poly, z0 - 1.0, z0 + P.CARRIER_MARK_DEPTH)
 
 
 def carrier(zb):
