@@ -22,6 +22,7 @@
 #include "song_history.h"
 #include "recognition_audio.h"
 #include "weather.h"
+#include "spotify.h"
 #include "weather_visual.h"
 #include "char_wheel.h"
 #include "lvgl.h"
@@ -1534,13 +1535,13 @@ static void home_recording_update(const lf_recog_snapshot_t *song,uint64_t curre
 
 /* 1.0.7: shown only when Play is pressed and something is missing; red,
    under the Play button, gone after a few seconds. */
-static const char LF_WARN_BOTH[]="No Wi-Fi and no AudD key";
+static const char LF_WARN_BOTH[]="No Wi-Fi and no Song ID";
 static const char LF_WARN_WIFI[]="Wi-Fi not connected";
-static const char LF_WARN_KEY[]="AudD key not entered";
+static const char LF_WARN_KEY[]="Link Spotify or add AudD key";
 static const char *home_setup_warning(void)
 {
     const bool wifi=lf_network_is_connected();
-    const bool key=lf_recog_has_token();
+    const bool key=lf_recog_has_token() || lf_spotify_linked();
     if(!wifi && !key)return LF_WARN_BOTH;
     if(!wifi)return LF_WARN_WIFI;
     if(!key)return LF_WARN_KEY;
@@ -2959,7 +2960,8 @@ static lv_obj_t *device_line(lv_obj_t *parent,const char *text,int top,
    the outcome of the most recent scan. Never shows the key itself. */
 static const char *song_id_status_text(void)
 {
-    if(!lf_recog_has_token())return "No key - add it in web settings";
+    if(lf_spotify_linked())return "Spotify linked";
+    if(!lf_recog_has_token())return "Not set up - link Spotify or add AudD key";
     lf_recog_snapshot_t r;
     lf_recog_snapshot(&r);
     if(r.audd_api_error_code>=900 && r.audd_api_error_code<=902)
@@ -3046,9 +3048,9 @@ static void build_device_settings_now(void)
     }else{
         device_line(content,"Connecting...",308,&lv_font_montserrat_20,0xFFFFFF);
     }
-    device_line(content,"SONG ID (AUDD)",380,&lv_font_montserrat_16,0x87B8D9);
+    device_line(content,"SONG ID",380,&lv_font_montserrat_16,0x87B8D9);
     const char *song_id=song_id_status_text();
-    const bool song_ok=strcmp(song_id,"Connected")==0;
+    const bool song_ok=strcmp(song_id,"Connected")==0 || strcmp(song_id,"Spotify linked")==0;
     device_line(content,song_id,403,song_ok?&lv_font_montserrat_20:&lv_font_montserrat_16,
                 song_ok?0x86E3AE:0xFFD866);
     device_line(content,"IP ADDRESS",465,&lv_font_montserrat_16,0x87B8D9);

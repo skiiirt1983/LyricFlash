@@ -16,6 +16,7 @@
 #include "web_device_html.h"
 #include "web_weather_html.h"
 #include "captive_dns.h"
+#include "spotify.h"
 #include "esp_https_ota.h"
 #include "esp_crt_bundle.h"
 #include <stdatomic.h>
@@ -878,6 +879,12 @@ static esp_err_t handle_song_status(httpd_req_t *req)
     if(!reply)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
     cJSON_AddStringToObject(reply,"state",lf_recog_state_name(s.state));
     cJSON_AddBoolToObject(reply,"token_configured",lf_recog_has_token());
+    {
+        char id[40]={0};
+        cJSON_AddBoolToObject(reply,"spotify_client_set",lf_spotify_client_id(id,sizeof id));
+        cJSON_AddBoolToObject(reply,"spotify_linked",lf_spotify_linked());
+        cJSON_AddStringToObject(reply,"spotify_redirect_uri",LF_SPOTIFY_REDIRECT_URI);
+    }
     cJSON_AddStringToObject(reply,"message",s.message);
     cJSON_AddStringToObject(reply,"firmware_version",LF_VERSION);
     cJSON_AddStringToObject(reply,"transport_phase",s.transport_phase);
@@ -990,12 +997,99 @@ static esp_err_t handle_song_token(httpd_req_t *req)
     cJSON_AddBoolToObject(reply,"configured",lf_recog_has_token());
     return send_json(req,reply);
 }
+/* ---------- 1.1.0 Spotify link ---------- */
+static bool read_small_json(httpd_req_t *req, char *body, size_t cap)
+{
+    if(req->content_len<2||(size_t)req->content_len>=cap)return false;
+    int got=0;
+    while(got<req->content_len){
+        const int n=httpd_req_recv(req,body+got,req->content_len-got);
+        if(n<=0)return false;
+        got+=n;
+    }
+    body[got]=0;
+    return true;
+}
+static esp_err_t handle_spotify_client(httpd_req_t *req)
+{
+    if(!manual_audio_header(req))
+        return httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Manual action required");
+    char body[160];
+    if(!read_small_json(req,body,sizeof body))
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid request");
+    cJSON *root=cJSON_Parse(body);
+    const cJSON *id=cJSON_GetObjectItemCaseSensitive(root,"client_id");
+    const bool ok=cJSON_IsString(id)&&lf_spotify_save_client_id(id->valuestring);
+    cJSON_Delete(root);
+    if(!ok)return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,
+                                      "Client ID must be the 32-character ID from your Spotify app");
+    return httpd_resp_sendstr(req,"{\"saved\":true}");
+}
+static esp_err_t handle_spotify_link(httpd_req_t *req)
+{
+    if(!manual_audio_header(req))
+        return httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Manual action required");
+    if(in_ap||!lf_network_is_connected())
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Connect the device to your home Wi-Fi first");
+    char *url=malloc(1024);
+    if(!url)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    if(!lf_spotify_begin_link(address,url,1024)){
+        free(url);
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Save your Spotify Client ID first");
+    }
+    cJSON *reply=cJSON_CreateObject();
+    if(reply)cJSON_AddStringToObject(reply,"url",url);
+    free(url);
+    return send_json(req,reply);
+}
+static esp_err_t handle_spotify_unlink(httpd_req_t *req)
+{
+    if(!manual_audio_header(req))
+        return httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Manual action required");
+    lf_spotify_unlink();
+    return httpd_resp_sendstr(req,"{\"linked\":false}");
+}
+/* Spotify -> LyricFlash website -> here, with the one-time code. */
+static esp_err_t handle_spotify_callback(httpd_req_t *req)
+{
+    /* Buffers on the heap: the token exchange below does a TLS handshake on
+       this web-server task, so keep its stack free for that. */
+    char *query=calloc(1,1400),*code=calloc(1,1100);
+    char state[64]={0},error[64]={0};
+    bool ok=false;
+    if(!query||!code){free(query);free(code);
+        return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");}
+    const char *message="Spotify linking was cancelled or failed. Go back and try again.";
+    if(httpd_req_get_url_query_str(req,query,1400)==ESP_OK){
+        if(httpd_query_key_value(query,"error",error,sizeof error)==ESP_OK)
+            message="Spotify did not allow access. Go back and try again.";
+        else if(httpd_query_key_value(query,"code",code,1100)==ESP_OK &&
+                httpd_query_key_value(query,"state",state,sizeof state)==ESP_OK){
+            ok=lf_spotify_finish_link(code,state);
+            if(ok)message="Spotify is linked. Press Play on LyricFlash while music plays on Spotify.";
+        }
+    }
+    memset(query,0,1400);memset(code,0,1100);
+    free(query);free(code);
+    char page[700];
+    snprintf(page,sizeof page,
+        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" "
+        "content=\"width=device-width,initial-scale=1\"><title>LyricFlash · Spotify</title>"
+        "<style>body{font-family:system-ui,sans-serif;background:#050910;color:#e8f2ff;"
+        "display:grid;place-items:center;min-height:90vh;margin:0;padding:20px;text-align:center}"
+        "a{color:#7cc4ff}</style></head><body><main><h1>%s</h1><p>%s</p>"
+        "<p><a href=\"/#recognition\">Back to LyricFlash settings</a></p></main></body></html>",
+        ok?"Spotify linked":"Not linked",message);
+    httpd_resp_set_type(req,"text/html; charset=utf-8");
+    httpd_resp_set_hdr(req,"Cache-Control","no-store");
+    return httpd_resp_sendstr(req,page);
+}
 static esp_err_t handle_song_start(httpd_req_t *req)
 {
     if(!manual_audio_header(req))
         return httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Manual action required");
-    if(!lf_recog_has_token())
-        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Configure an AudD token first");
+    if(!lf_recog_has_token() && !lf_spotify_linked())
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Link Spotify or configure an AudD token first");
     if(!lf_network_is_connected())
         return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Connect to Wi-Fi first");
     if(!lf_recog_start()){
@@ -1795,7 +1889,7 @@ static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
-    cfg.max_uri_handlers=32; /* 1.0.4: captive portal API route */
+    cfg.max_uri_handlers=40; /* 1.1.0: Spotify link routes */
     cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
     /* 1.0.4: phones probing a captive portal open several connections at
        once; allow more and recycle the oldest idle one instead of refusing. */
@@ -1830,7 +1924,11 @@ static bool serve(void)
         {.uri="/wifi",.method=HTTP_POST,.handler=handle_wifi},
         {.uri="/api/wifi-scan",.method=HTTP_GET,.handler=handle_scan},
         {.uri="/update",.method=HTTP_POST,.handler=handle_update},
-        {.uri="/captive",.method=HTTP_GET,.handler=handle_captive_api}
+        {.uri="/captive",.method=HTTP_GET,.handler=handle_captive_api},
+        {.uri="/api/spotify/client",.method=HTTP_POST,.handler=handle_spotify_client},
+        {.uri="/api/spotify/link",.method=HTTP_POST,.handler=handle_spotify_link},
+        {.uri="/api/spotify/unlink",.method=HTTP_POST,.handler=handle_spotify_unlink},
+        {.uri="/spotify/callback",.method=HTTP_GET,.handler=handle_spotify_callback}
     };
     for(size_t i=0;i<sizeof(routes)/sizeof(routes[0]);i++)
         if(httpd_register_uri_handler(server,&routes[i])!=ESP_OK) return false;

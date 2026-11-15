@@ -73,6 +73,8 @@ cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/lyrics.c tests/test_lyri
 /tmp/lyricflash_test_lyrics
 cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/captive_dns_logic.c tests/test_captive_dns.c -o /tmp/lyricflash_test_captive_dns
 /tmp/lyricflash_test_captive_dns
+cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/spotify_logic.c tests/test_spotify_logic.c -o /tmp/lyricflash_test_spotify
+/tmp/lyricflash_test_spotify
 cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/image_policy.c tests/test_image_policy.c -o /tmp/lyricflash_test_image
 /tmp/lyricflash_test_image
 cc -std=c11 -Wall -Wextra -Werror -pedantic -Imain main/service_errors.c tests/test_service_errors.c -o /tmp/lyricflash_test_api

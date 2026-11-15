@@ -7,6 +7,7 @@
 #include "lyrics.h"
 #include "song_cache.h"
 #include "lyric_sync.h"
+#include "spotify.h"
 #include "bsp/esp32_s3_touch_amoled_1_75.h"
 #include "esp_codec_dev.h"
 #include "esp_http_client.h"
@@ -402,6 +403,36 @@ static void worker(void *arg)
     uint32_t frames=0;
     lf_scan_audio_metrics_t metrics={0};
     bool metrics_published=false;
+    /* 1.1.0: a linked Spotify account names the song and its exact position,
+       with no microphone. Nothing playing there falls back to AudD. */
+    if(lf_spotify_linked()){
+        if(!lf_network_is_connected()){status(LF_RECOG_ERROR,"Connect to Wi-Fi to identify music");goto done;}
+        set_transport_phase("spotify");
+        lf_spotify_now_t now={0};
+        const lf_spotify_result_t sp=lf_spotify_now_playing(&now);
+        if(atomic_load(&stop_flag))goto done;
+        if(sp==LF_SPOTIFY_OK && now.playing){
+            portENTER_CRITICAL(&result_mux);
+            snprintf(result.title,sizeof result.title,"%s",now.title);
+            snprintf(result.artist,sizeof result.artist,"%s",now.artist);
+            result.http_status=200;
+            result.audd_api_error_code=0;
+            result.audd_timecode_ms=now.progress_ms;
+            result.audd_timecode_valid=true;
+            result.capture_start_ms=now.received_ms; /* position measured here */
+            result.captured_frames=0;
+            portEXIT_CRITICAL(&result_mux);
+            status(LF_RECOG_MATCH,"Song identified on Spotify");
+            lookup_lyrics_after_match();
+            goto done;
+        }
+        if(sp==LF_SPOTIFY_OK){status(LF_RECOG_NO_MATCH,"Spotify is paused");goto done;}
+        if(sp!=LF_SPOTIFY_NOTHING || !lf_recog_has_token()){
+            status(sp==LF_SPOTIFY_NOTHING?LF_RECOG_NO_MATCH:LF_RECOG_ERROR,lf_spotify_result_text(sp));
+            goto done;
+        }
+        status(LF_RECOG_CAPTURE,"Nothing on Spotify; listening with AudD");
+    }
     if(!load_token(token)){status(LF_RECOG_ERROR,"Set an AudD token in Device Settings");goto done;}
     if(!lf_network_is_connected()){status(LF_RECOG_ERROR,"Connect to Wi-Fi to identify music");goto done;}
     wav=(uint8_t*)heap_caps_malloc(LF_SCAN_WAV_BYTES,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
@@ -475,20 +506,22 @@ bool lf_recog_start(void)
     lf_pcm_snapshot_t pcm={0};
     lf_pcm_snapshot(&pcm);
     if(pcm.state==LF_PCM_RUNNING)return false;
-    if(!lf_recog_has_token()||!lf_network_is_connected())return false;
+    const bool spotify=lf_spotify_linked();
+    if((!lf_recog_has_token() && !spotify)||!lf_network_is_connected())return false;
     bool expected=false;
     if(!atomic_compare_exchange_strong(&worker_active,&expected,true))return false;
-    atomic_store(&active_state,LF_RECOG_CAPTURE);
+    atomic_store(&active_state,spotify?LF_RECOG_UPLOAD:LF_RECOG_CAPTURE);
     atomic_store(&stop_flag,false);
     lf_lyrics_t *previous=NULL;
     portENTER_CRITICAL(&result_mux);
     previous=lyrics_cache;lyrics_cache=NULL;
     memset(&result,0,sizeof result);
     snprintf(result.lyrics_state,sizeof result.lyrics_state,"not_checked");
-    result.state=LF_RECOG_CAPTURE;
+    result.state=spotify?LF_RECOG_UPLOAD:LF_RECOG_CAPTURE;
     result.stage_started_ms=lf_recog_now_ms();
     result.attempts=atomic_fetch_add(&attempts,1)+1;
-    snprintf(result.message,sizeof result.message,"Recording up to 10 seconds");
+    snprintf(result.message,sizeof result.message,"%s",
+             spotify?"Asking Spotify what's playing":"Recording up to 10 seconds");
     portEXIT_CRITICAL(&result_mux);
     if(previous)heap_caps_free(previous);
     if(xTaskCreate(worker,"lf_song_recog",14336,NULL,tskIDLE_PRIORITY+1,NULL)!=pdPASS){

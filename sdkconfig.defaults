@@ -87,3 +87,5 @@ CONFIG_LWIP_MAX_SOCKETS=16
 # hints) send more than the 512-byte default of request headers; the web
 # server then dropped the connection ("The connection was reset").
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=2048
+# 1.1.0: Spotify's link callback carries a long one-time code in the URL.
+CONFIG_HTTPD_MAX_URI_LEN=2048
