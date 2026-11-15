@@ -208,9 +208,17 @@ def _scoop(zb):
     L, Wd = g["sz1"] - g["sz0"], g["sy"]
     zc_s = (g["sz0"] + g["sz1"]) / 2
     ext = dep + 1.5
-    wp = (cq.Workplane("YZ", origin=(x_floor, 0, 0)).center(g["yc"], zc_s).slot2D(L, Wd, 90)
-          .workplane(offset=ext).slot2D(L + 2 * ext, Wd + 2 * ext, 90).loft(ruled=True))
-    return wp.val()
+    from shapely.geometry import LineString
+    half = max(L - Wd, 0.0) / 2
+    seg = LineString([(g["yc"], zc_s - half), (g["yc"], zc_s + half)])
+    p0 = list(seg.buffer(Wd / 2, resolution=16).exterior.coords)[:-1]
+    p1 = list(seg.buffer(Wd / 2 + ext, resolution=16).exterior.coords)[:-1]
+    assert len(p0) == len(p1)
+    sc = (cq.Workplane("YZ", origin=(x_floor, 0, 0)).polyline(p0).close()
+          .workplane(offset=ext).polyline(p1).close().loft(ruled=True).val())
+    if sc.Volume() < 0:
+        sc = cq.Solid(sc.wrapped.Reversed())
+    return sc
 
 
 def pwr_button(b, zb):
