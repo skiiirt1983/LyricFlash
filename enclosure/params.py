@@ -719,3 +719,12 @@ PWR_REST_GAP = 0.28                  # nub to plunger at rest. C6 coupon: 0.2. T
                                      # degree) and drifts 0.09 mm/deg toward the nub, so 0.2 came within 0.11 mm of it
 PWR_NUB_Z = (-1.4, -0.9)             # nub height (BF z), lower half of the plunger face (-1.3..-0.5): a shorter overlap
                                      # with the plunger's height, so the swing is past it before the drift builds up
+
+# ---- v11b (Paul's photo, 2026-11-15): with the back screw (tab B) lined up, the front post's pilot sits ~1.1 mm toward
+# the USB-C (-X) from the middle of tab A's hole. The round 3.6 mm hole (v10.7, +/-0.55 every way) can't take a
+# one-sided error. Tab A's hole is now a slot along X, centred on where the pilot really is. Plate only.
+CARRIER_FLOAT_TABS = ()
+CARRIER_XSLOT_TABS = (0,)            # tab A, front-left
+CARRIER_XSLOT_D = 3.0                # M2.5 + 0.25 each side across the slot (Y)
+CARRIER_XSLOT_OFF0 = 0.5             # slot end centres, mm toward the USB-C from the model's hole centre:
+CARRIER_XSLOT_OFF1 = 1.7             # screw axis can sit anywhere -0.25 .. -1.95 (pilot measured ~ -1.1)

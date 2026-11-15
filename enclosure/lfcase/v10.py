@@ -73,9 +73,12 @@ def carrier_outline():
     bosses = [Point(x, y).buffer(2.6) for x, y in P.MOUNT_HOLES_XY]
     core = unary_union(bosses).convex_hull
     arms = []
-    for tx, ty in P.CARRIER_TABS:
+    for i, (tx, ty) in enumerate(P.CARRIER_TABS):
         q = nearest_points(core, Point(tx, ty))[0]
-        arms.append(unary_union([Point(q.x, q.y).buffer(3.0), Point(tx, ty).buffer(P.CARRIER_TAB_R)]).convex_hull)
+        parts_ = [Point(q.x, q.y).buffer(3.0), Point(tx, ty).buffer(P.CARRIER_TAB_R)]
+        if i in getattr(P, "CARRIER_XSLOT_TABS", ()):               # v11: the tab reaches toward the USB-C with the slot
+            parts_.append(Point(tx - P.CARRIER_XSLOT_OFF1, ty).buffer(P.CARRIER_TAB_R))
+        arms.append(unary_union(parts_).convex_hull)
     shp = unary_union([core] + arms)
     keep = [box(-10.93, -20.4, 10.92, -17.2),                       # pin header (down to BF z -5.8)
             box(-11.63, 14.92, -2.6, 21.6), box(2.3, 14.92, 11.32, 21.6),   # J1 / H3 plugs + wires
@@ -93,9 +96,10 @@ def carrier_bf():
     tabs = P.CARRIER_TABS
     for i, (x, y) in enumerate(tabs):                               # M2.5 clearance (2.9)
         r = P.CARRIER_TAB_HOLE_D / 2
-        if i in getattr(P, "CARRIER_XSLOT_TABS", ()):              # v10.7b: short slot toward the USB-C side (-X)
-            sl = unary_union([Point(x, y).buffer(r, resolution=32),
-                              Point(x - P.CARRIER_XSLOT_LEN, y).buffer(r, resolution=32)]).convex_hull
+        if i in getattr(P, "CARRIER_XSLOT_TABS", ()):              # v11: slot toward the USB-C side (-X), see params
+            rs = P.CARRIER_XSLOT_D / 2
+            sl = unary_union([Point(x - P.CARRIER_XSLOT_OFF0, y).buffer(rs, resolution=32),
+                              Point(x - P.CARRIER_XSLOT_OFF1, y).buffer(rs, resolution=32)]).convex_hull
             pl = pl.cut(_extrude_bf(sl, Z_TOP - 5, Z_TOP + 5))
             continue
         if i in getattr(P, "CARRIER_FLOAT_TABS", ()):              # v10.7: oversize, clamped through a washer
