@@ -39,8 +39,8 @@ shell onto the base: PASS), the battery drop path (PASS), the layer check, and t
 3. **Board + plate into the base:** hold the board by the plate, tilt it, and hook the USB-C into its opening in the
    left wall first. Then lower the right side down. The two tabs land on their posts.
 4. **Screw the plate down:** two M2.5 x 6 pan heads through the tabs, straight down, from above. Back-centre
-   first. Then the front-left one: its hole is a short slot toward the USB-C side, so it finds the post where
-   the board rests. Never push the board sideways to line a screw up. They cut their
+   first. Then the front-left one: its hole is a little oversize (3.6 mm), so it finds the post where the
+   board rests. Never push the board sideways to line a screw up. They cut their
    own thread in the posts' pilot holes: the first time is a little stiff; stop as soon as the head seats.
    Every screw is outside the board's edge.
 5. **Shell:** put it straight on from above, square to the screen, until the magnets pull it down. The rim inside

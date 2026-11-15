@@ -694,3 +694,8 @@ CARRIER_SLOT_TAB = None              # the v10.4 slot is replaced by the oversiz
 CARRIER_FLOAT_TABS = ()
 CARRIER_XSLOT_TABS = (0,)
 CARRIER_XSLOT_LEN = 1.0
+
+# ---- v10.7c (Paul: the front hole just needed to be bigger). Plain round hole, no slot, no washer.
+CARRIER_XSLOT_TABS = ()
+CARRIER_FLOAT_TABS = (0,)            # tab A, front-left
+CARRIER_FLOAT_HOLE_D = 3.6           # +/-0.55 mm round the M2.5; the 5 mm pan head still overlaps it 0.7 all round

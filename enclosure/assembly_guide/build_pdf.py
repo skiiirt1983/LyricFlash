@@ -358,7 +358,7 @@ header("Fix it and close it", "Steps 7–8")
 y = H - 100
 y = step_head(7, "Screw the plate down", y)
 bullets(["Two M2.5 × 6 pan heads, straight down through the plate's tabs into the posts, both outside the screen.",
-         "Back-centre first. Then the front-left one: its hole is a short slot toward the USB-C side, so it finds the post where the board rests.",
+         "Back-centre first. Then the front-left one: its hole is a little oversize, so it finds the post where the board rests.",
          "!Never push the board sideways to line up a screw.",
          "They cut their own thread the first time, so it's a little stiff. Stop as soon as the head seats.",
          "No nuts needed."], M, y - 4, colw, 10, gap=3)

@@ -3,10 +3,10 @@
 ## Phase 2 v10.7 (2026-11-15)
 - Paul: the front-left plate screw only went in with the board pushed toward the USB-C. Both boards (original and
   Rev 1.1) measure the same as the model (standoff spacings, USB-C to standoff, diameter), so the board isn't the
-  cause. Paul: no nut or washer; the hole just needs to move slightly to the right. Done in the plate so the printed
-  base stays: tab A's hole is a 2.9 mm slot running 1.0 mm toward the USB-C side (-X) from its old centre. That lines
-  up exactly as moving the base's hole right by 0-1.0 mm would. The M2.5 pan head (5 mm) covers the slot, so no
-  washer is needed. (A first try, a 4 mm hole + washer, was dropped.) Tab B unchanged. Plate only.
+  cause. Paul: no nut or washer, the front hole just needed to be bigger. Tab A's hole is now a plain 3.6 mm
+  round hole (was 2.9): about +/-0.55 mm every way round the M2.5 (was +/-0.2). The 5 mm pan head still overlaps it
+  by 0.7 mm all round, so no washer. (A 4 mm hole + washer and a 1 mm slot were tried first and dropped.)
+  Tab B unchanged (2.9). Plate only: the printed base stays.
 
 ## Phase 2 v10.6 (2026-11-14)
 - Paul: the plate's direction marking wasn't legible (v10.4's raised 2.6 mm text was too small to print). Now
