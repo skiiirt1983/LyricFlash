@@ -43,7 +43,7 @@ rows = [
     ("Battery goes in and comes out by hand, no forcing; doesn't rattle when closed", "OK / tight where / rattles"),
     ("Board screws to the plate with the 3 M2 x 3, FRONT/USB-C arrows the right way; heads flush", "OK / proud / stripped / plate flipped"),
     ("Board + plate go in USB-C first and settle on the posts without forcing", "OK / rubs where"),
-    ("Both M2.5 x 6 go in without pushing the board (washer on the front-left), bite and hold; plate doesn't move", "OK / hard to line up / stripped / plate rocks"),
+    ("Both M2.5 x 6 go in without pushing the board (slot at the front-left), bite and hold; plate doesn't move", "OK / hard to line up / stripped / plate rocks"),
     ("Shell: seats flush all round, magnets hold it firmly, comes off by hand, no rattle", "flush: y / gap where · hold: firm / weak / too strong"),
     ("USB-C mouth flush with the face, gap even all round", "sunk / level / slightly proud / clearly proud · gap even: y / touches where"),
     ("USB-C opening top edge printed clean", "clean / droops"),

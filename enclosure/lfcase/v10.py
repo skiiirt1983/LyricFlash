@@ -93,6 +93,11 @@ def carrier_bf():
     tabs = P.CARRIER_TABS
     for i, (x, y) in enumerate(tabs):                               # M2.5 clearance (2.9)
         r = P.CARRIER_TAB_HOLE_D / 2
+        if i in getattr(P, "CARRIER_XSLOT_TABS", ()):              # v10.7b: short slot toward the USB-C side (-X)
+            sl = unary_union([Point(x, y).buffer(r, resolution=32),
+                              Point(x - P.CARRIER_XSLOT_LEN, y).buffer(r, resolution=32)]).convex_hull
+            pl = pl.cut(_extrude_bf(sl, Z_TOP - 5, Z_TOP + 5))
+            continue
         if i in getattr(P, "CARRIER_FLOAT_TABS", ()):              # v10.7: oversize, clamped through a washer
             pl = pl.cut(cq.Solid.makeCylinder(P.CARRIER_FLOAT_HOLE_D / 2, 10, cq.Vector(x, y, Z_TOP - 5)))
             continue

@@ -687,3 +687,10 @@ CARRIER_MARK_DEPTH = 0.6             # debossed 3 layers into the countersink fa
 CARRIER_FLOAT_TABS = (0,)            # tab A, front-left
 CARRIER_FLOAT_HOLE_D = 4.0           # M2.5 + washer (DIN 125: 2.7 / 6.0) covers it with 1 mm all round
 CARRIER_SLOT_TAB = None              # the v10.4 slot is replaced by the oversize hole
+
+# ---- v10.7b (Paul: no nut/washer; the front hole just needs to move slightly toward the right). Done in the plate
+# so the printed base stays: tab A's hole becomes a 2.9 slot running 1.0 mm toward the USB-C side, which lines up
+# exactly as moving the base's hole right would. The M2.5 pan head (5 mm) covers it, no washer.
+CARRIER_FLOAT_TABS = ()
+CARRIER_XSLOT_TABS = (0,)
+CARRIER_XSLOT_LEN = 1.0
