@@ -728,3 +728,10 @@ CARRIER_XSLOT_TABS = (0,)            # tab A, front-left
 CARRIER_XSLOT_D = 3.0                # M2.5 + 0.25 each side across the slot (Y)
 CARRIER_XSLOT_OFF0 = 0.5             # slot end centres, mm toward the USB-C from the model's hole centre:
 CARRIER_XSLOT_OFF1 = 1.7             # screw axis can sit anywhere -0.25 .. -1.95 (pilot measured ~ -1.1)
+
+# v11b: the tab extended toward the USB-C swept within 0.04-0.19 mm of the front post/wall in the swing check, so no
+# extension; the slot is a little shorter and the tab keeps ~1.05 mm of plate beyond it.
+CARRIER_XSLOT_EXT = 0.0
+CARRIER_XSLOT_D = 2.9
+CARRIER_XSLOT_OFF0 = 0.6             # screw axis can sit -0.35 .. -1.75 mm toward the USB-C (pilot measured ~ -1.1)
+CARRIER_XSLOT_OFF1 = 1.5
