@@ -293,6 +293,15 @@ def shell_features(top, zb):
     rb = recess.BoundingBox()                                       # the whole USB-C bay: recess, cheeks, insert
     rim = rim.cut(E._box((-200, rb.ymin - P.CASE_WALL - 0.6, -50), (E.footprint()[0] + P.CASE_WALL + 4.0,
                                                                   rb.ymax + P.CASE_WALL + 0.6, 300)))
+    # v11f (Paul): the rim on the right and the front is in the way of the SD card's tab and the display's flex folds
+    # (his clipped-off prints seat better). Keep the left and back rims: two perpendicular sides locate the shell, the
+    # four corner magnets hold it.
+    x0_, x1_, y0_, y1_ = E.footprint()
+    for side in getattr(P, "RIM_DROP_SIDES", ()):
+        if side == "x+":
+            rim = rim.cut(E._box((x1_ - P.CASE_WALL - 4.5, -200, -50), (200, 200, 300)))
+        elif side == "y-":
+            rim = rim.cut(E._box((-200, -200, -50), (200, y0_ + P.CASE_WALL + 4.5, 300)))
     rim = cq.Compound.makeCompound([s for s in rim.Solids() if s.Volume() > 5.0])   # no scraps
     top = top.fuse(rim)
     for mx, my in magnet_points():

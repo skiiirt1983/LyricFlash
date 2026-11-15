@@ -775,3 +775,12 @@ PWR_FACE_W = 7.0                     # 8 mm and below -4.9 were tried; 7 wide wi
 PWR_FACE_BOT = -6.0
 PWR_TARGET_FORCE = 2.4               # N from the blade, ~4.9 N with the switch: firmer because the face is bigger and flush
 PWR_FACE_TOP_CHAMFER = 2.5           # 45 deg cut on the head's top corners (and the tunnel ceiling): shortens its bridge below 10 mm
+
+# ---- v11f (Paul's photos): the shell's right and front rim rails were in the way and the shell sat with a gap, worst on the right
+# and the front. The SD card's tab (socket Y -7.8..8.3 on the +X side) and the display's flex fold (-Y) stick out past the PCB
+# edge into the rim's space (X 22.7..23.9). He clipped those rails off and it seated better.
+RIM_DROP_SIDES = ("x+", "y-")        # no rim on the right and the front; the left and back rims + 4 corner magnets locate the shell
+# reliefs in the shell's bore (angle, width along the edge, depth beyond the bore radius 24.63):
+#   90 (back flex fold) and 270 (front flex fold, 1.8: folds stick out further than the STEP) as before;
+#   0 = the right: SD card tab at Y -7.8..8.3 (STEP). The shell's wall is only ~1.8 thick there, so 0.6 deep keeps 1.0 of skin (bore is 24.83, outer wall 26.43).
+FOLD_RELIEFS = ((90.0, 16.0, 1.2), (270.0, 16.0, 1.8), (0.0, 17.5, 0.6))

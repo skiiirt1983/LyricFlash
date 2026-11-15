@@ -154,9 +154,11 @@ def plug_keepout():
 def fold_reliefs(z0, z1):
     """Notches in the top-shell bore for the display flex folds."""
     out = None
-    for a in P.FOLD_RELIEF_ANGLES:
-        hw = P.FOLD_RELIEF_W / 2
-        n = cq.Solid.makeBox(P.FOLD_RELIEF_DEPTH + 2.0, 2 * hw, z1 - z0, pnt=cq.Vector(BORE_R - 2.0, -hw, z0))
+    # v11f: (angle, width, depth) per relief when P.FOLD_RELIEFS is set (SD card tab on the right, flex fold at the front)
+    reliefs = getattr(P, "FOLD_RELIEFS", None) or [(a, P.FOLD_RELIEF_W, P.FOLD_RELIEF_DEPTH) for a in P.FOLD_RELIEF_ANGLES]
+    for a, w, dep in reliefs:
+        hw = w / 2
+        n = cq.Solid.makeBox(dep + 2.0, 2 * hw, z1 - z0, pnt=cq.Vector(BORE_R - 2.0, -hw, z0))
         n = at_angle(n, a)
         out = n if out is None else out.fuse(n)
     return out
