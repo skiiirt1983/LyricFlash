@@ -735,3 +735,17 @@ CARRIER_XSLOT_EXT = 0.0
 CARRIER_XSLOT_D = 2.9
 CARRIER_XSLOT_OFF0 = 0.6             # screw axis can sit -0.35 .. -1.75 mm toward the USB-C (pilot measured ~ -1.1)
 CARRIER_XSLOT_OFF1 = 1.5
+
+# ---- v11c (Paul: "can it be a real button pressed by a finger, not a pen"): the 3 x 2 mm pad in a 1.5 mm recess becomes a
+# vertical bar like a phone's side key, face flush-ish with the wall, in the finger scoop. Taller bar = deeper 45 deg
+# support ramp = taller (stiffer) blade, so the blade thickness is solved for the same beam force.
+PWR_FACE_W, PWR_FACE_H = 3.5, 6.0    # button face (across, tall), mm
+PWR_FACE_PROUD = 0.2                 # face stands this far out of the wall's outer surface (was recessed 1.5)
+PWR_BLADE_THK = None                 # None = solve for PWR_TARGET_FORCE
+PWR_TARGET_FORCE = 1.8               # N, beam force at rest gap + switch travel (the v11 design; C6 coupon 1.5)
+PWR_DIMPLE_D = 10.0                  # finger scoop on the wall normal round the bar
+PWR_DIMPLE_DEPTH = 0.8
+PWR_PATCH_HALF = 8.0
+PWR_PATCH_BELOW, PWR_PATCH_ABOVE = 6.0, 6.0
+PWR_FACE_W, PWR_FACE_H = 3.0, 5.0    # 3.5 x 6 would need a 0.62 mm blade; 3 x 5 gets 0.67 (blade was 0.72 with the 3 x 2 pad)
+PWR_TARGET_FORCE = 2.1               # N from the blade: ~4.6 N with the switch's own ~2.5 N (coupon ~4.0). A finger, not a pen
