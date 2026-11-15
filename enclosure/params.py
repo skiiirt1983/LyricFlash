@@ -739,7 +739,7 @@ CARRIER_XSLOT_OFF1 = 1.5
 # ---- v11c (Paul: "can it be a real button pressed by a finger, not a pen"): the 3 x 2 mm pad in a 1.5 mm recess becomes a
 # vertical bar like a phone's side key, face flush-ish with the wall, in the finger scoop. Taller bar = deeper 45 deg
 # support ramp = taller (stiffer) blade, so the blade thickness is solved for the same beam force.
-PWR_FACE_W, PWR_FACE_H = 3.5, 6.0    # button face (across, tall), mm
+
 PWR_FACE_PROUD = 0.2                 # face stands this far out of the wall's outer surface (was recessed 1.5)
 PWR_BLADE_THK = None                 # None = solve for PWR_TARGET_FORCE
 PWR_TARGET_FORCE = 1.8               # N, beam force at rest gap + switch travel (the v11 design; C6 coupon 1.5)
@@ -747,5 +747,30 @@ PWR_DIMPLE_D = 10.0                  # finger scoop on the wall normal round the
 PWR_DIMPLE_DEPTH = 0.8
 PWR_PATCH_HALF = 8.0
 PWR_PATCH_BELOW, PWR_PATCH_ABOVE = 6.0, 6.0
-PWR_FACE_W, PWR_FACE_H = 3.0, 5.0    # 3.5 x 6 would need a 0.62 mm blade; 3 x 5 gets 0.67 (blade was 0.72 with the 3 x 2 pad)
+
 PWR_TARGET_FORCE = 2.1               # N from the blade: ~4.6 N with the switch's own ~2.5 N (coupon ~4.0). A finger, not a pen
+
+# ---- v11d (Paul): the base's pilot holes were too small: with the front screw in, the back one wouldn't start, and he had to
+# tap each screw in by hand first. A printed 2.2 mm hole comes out ~0.2 smaller, and a self-tapping M2.5 needs ~2.2 in the
+# plastic. Pilot 2.4 (printed ~2.2) with a 45 deg funnel at the mouth so the tip finds the hole (it also forgives a post
+# that is a little off the plate's hole). The carrier plate goes back to the v10.7 3.6 mm round front hole: Paul doesn't
+# think the plate was the problem, and the v11b slot was never printed. (coupon_pilot.py prints 2.2 .. 2.6 to choose.)
+POST_PILOT_D = 2.4
+POST_PILOT_LEAD = 0.8
+CARRIER_XSLOT_TABS = ()
+CARRIER_FLOAT_TABS = (0,)
+CARRIER_FLOAT_HOLE_D = 3.6
+
+# ---- v11e (Paul): bigger face, sticks out more, bigger scoop; the opening may move. Head and neck: inside the case the bar
+# must stay under the shell rim (BF z 0.1), but in and outside the wall it can rise to PWR_FACE_TOP_GAP under the seam
+# (world-level top, so the tunnel's ceiling is level and prints as a bridge). Only the bottom edge costs blade stiffness.
+PWR_FACE_W = 8.0                     # face width (across the bar), mm
+PWR_FACE_BOT = -4.9                  # face bottom, BF z (at its +l edge): the 45 deg ramp under it sets the blade height
+PWR_FACE_TOP_GAP = 2.0               # head top this far under the seam at the tunnel's lowest end (world mm)
+PWR_FACE_PROUD = 0.8                 # face stands this far out of the wall
+PWR_SCOOP_DEPTH = 1.0                # scoop floor under the outer surface (the wall behind it keeps 1.4)
+PWR_SCOOP_MW, PWR_SCOOP_MH_B, PWR_SCOOP_MH_T = 2.5, 2.5, 0.3   # scoop floor margin round the face: sides, below, above
+PWR_PATCH_PAD = 1.0                  # smooth patch margin round the scoop (texture keep-out)
+PWR_FACE_W = 7.0                     # 8 mm and below -4.9 were tried; 7 wide with the bottom at BF -6.0 keeps the blade at 0.65
+PWR_FACE_BOT = -6.0
+PWR_TARGET_FORCE = 2.4               # N from the blade, ~4.9 N with the switch: firmer because the face is bigger and flush

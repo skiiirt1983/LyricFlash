@@ -26,6 +26,8 @@ import params as P
 from lfcase import coupons_a as A
 from lfcase import enclosure as E
 
+T = math.radians(P.TILT_DEG)
+
 
 # ------------------------------------------------------------------ frame
 def _frame():
@@ -66,8 +68,8 @@ def dims():
     sa, ca = math.sin(a), math.cos(a)
     s_face = lambda l: (x_face - tip[0] + l * sa) / ca            # where the face plane meets the axis line at offset l
     s_fm = s_face(hp)                                             # farthest point of the face (the +l edge)
-    z_top = zc + 1.0                                              # pad top: 0.4 under the shell rim (BF z 0.5)
-    z_fb = z_top - P.PWR_FACE_H                                   # face bottom (at the +l edge)
+    z_top = zc + 1.0                                              # neck top inside the case: 0.4 under the shell rim (BF z 0.5)
+    z_fb = P.PWR_FACE_BOT                                         # face bottom (at the +l edge); the head's top is set in the world
     z_bt = P.FLEX_BEAM_TOP_Z
     mz = P.PWR_BLADE_SLOPE
     t = pwr_blade_thk(s_b0=s_b0, hp=hp, s_fm=s_fm, z_fb=z_fb, xw=xw, tip=tip, a=a, z_bt=z_bt, mz=mz)
@@ -122,8 +124,11 @@ def stiffness(d=None, E_mpa=1500.0, travel=None):
 
 
 # ------------------------------------------------------------------ solids
+Z_HI = 3.4          # bar prism top (BF), trimmed to the head's world-horizontal top and the neck's BF top
+
+
 def parts_bf(d=None):
-    """(window cut, flexure to fuse) in the local frame, before placing (the face plane is trimmed in pwr_button())."""
+    """(window cut, blade + nub, bar prism) in the local frame, before placing; trimmed in pwr_button()."""
     d = d or dims()
     zc, hp = d["zc"], d["hp"]
     nz0, nz1 = P.PWR_NUB_Z
@@ -134,68 +139,108 @@ def parts_bf(d=None):
     nub = _sz([(g, nz0), (s_n, nz0 - (s_n - g)), (s_n, nz1), (g, nz1)], -P.FLEX_NUB_W / 2, P.FLEX_NUB_W / 2)
     # bar: 45 deg underside from the blade face up to the face's bottom; runs on past the face plane, trimmed later
     s_ext = d["s_fm"] + 1.5
-    pad = _sz([(d["s_p0"], d["z_ramp0"]), (s_ext, d["z_ramp0"] + (s_ext - d["s_p0"])), (s_ext, d["z_top"]), (d["s_p0"], d["z_top"])], -hp, hp)
-    flex = blade.fuse(nub).fuse(pad)
+    pad = _sz([(d["s_p0"], d["z_ramp0"]), (s_ext, d["z_ramp0"] + (s_ext - d["s_p0"])), (s_ext, Z_HI), (d["s_p0"], Z_HI)], -hp, hp)
     # tunnel through the wall round the bar: FLEX_WINDOW_CLEAR each side; its floor follows the underside, 0.5 below
     c = P.FLEX_WINDOW_CLEAR
     s0 = d["s_b1"] + P.FLEX_GAP
     off = c * math.sqrt(2)
-    zt = d["z_top"] + c + 3.0                                      # trimmed to a world-horizontal ceiling in pwr_button()
     s_end = s_ext + 3.0
     fl = lambda s_: d["z_ramp0"] + (s_ - d["s_p0"]) - off
-    window = _sz([(s0, fl(s0)), (s_end, fl(s_end)), (s_end, zt), (s0, zt)], -(hp + c), hp + c)
-    return window, flex
+    window = _sz([(s0, fl(s0)), (s_end, fl(s_end)), (s_end, Z_HI + c + 2.0), (s0, Z_HI + c + 2.0)], -(hp + c), hp + c)
+    return window, blade.fuse(nub), pad
+
+
+_G = {}
+
+
+def _seam_z(y_w, zb):
+    """World height of the seam plane (BF z = SEAM_Z) above world y."""
+    S = P.SEAM_Z
+    return zb + (y_w + S * math.sin(T)) * math.tan(T) + S * math.cos(T)
+
+
+def geometry(zb):
+    """Head top (world), the bar's head and the scoop's extent, from the case's actual size. Cached."""
+    if zb in _G:
+        return _G[zb]
+    d = dims()
+    a, tip = d["a"], d["tip"]
+    c = P.FLEX_WINDOW_CLEAR
+    ys = []
+    for l in np.linspace(-(d["hp"] + c), d["hp"] + c, 15):
+        s_ = d["s_face"](l)
+        p = E.bf_point_to_wf((tip[0] + s_ * math.cos(a) - l * math.sin(a), tip[1] + s_ * math.sin(a) + l * math.cos(a), 0.0), zb)
+        ys.append(p[1])
+    z_ht = _seam_z(min(ys), zb) - P.PWR_FACE_TOP_GAP            # head top: this far under the seam at its lowest end
+    window, flex, pad = parts_bf(d)
+    big = (-200, 200)
+    pad_w = _place(pad, zb).intersect(E._box((-200, -200, -50), (d["x_face"], 200, z_ht)))
+    neck = pad_w.intersect(E.halfspace_bf(zb, d["z_top"], above=False))
+    head = pad_w.intersect(E._box((d["xw"] - 0.02, -200, -50), (300, 200, 300)))
+    bar = neck.fuse(head)
+    hv = head.intersect(E._box((d["x1"] - 0.5, -200, -50), (300, 200, 300))).BoundingBox()
+    g = dict(z_ht=z_ht, bar=bar, y0=hv.ymin, y1=hv.ymax, z0=hv.zmin, z1=hv.zmax)
+    dep = min(P.PWR_SCOOP_DEPTH, P.CASE_WALL - P.PWR_DIMPLE_MIN_WALL)
+    g["dep"] = dep
+    g["sy"] = (g["y1"] - g["y0"]) + 2 * P.PWR_SCOOP_MW           # scoop floor: width (Y) ...
+    g["sz0"] = g["z0"] - P.PWR_SCOOP_MH_B
+    g["sz1"] = g["z1"] + P.PWR_SCOOP_MH_T
+    g["yc"] = (g["y0"] + g["y1"]) / 2
+    _G[zb] = g
+    return g
 
 
 def face_centre(zb, d=None):
-    """World point at the middle of the button face."""
-    d = d or dims()
-    a, tip = d["a"], d["tip"]
-    s_c = d["s_face"](0.0)
-    z_c = d["z_top"] - P.PWR_FACE_H / 2
-    return E.bf_point_to_wf((tip[0] + s_c * math.cos(a), tip[1] + s_c * math.sin(a), z_c), zb)
+    """World point at the middle of the button face (on the outer surface)."""
+    g = geometry(zb)
+    return np.array([(d or dims())["x1"], g["yc"], (g["z0"] + g["z1"]) / 2])
 
 
 def exit_point(zb, d=None):
     return face_centre(zb, d)
 
 
+def _scoop(zb):
+    """Finger scoop: a vertical stadium dish, floor `dep` under the outer surface, 45 deg walls out to the surface."""
+    d, g = dims(), geometry(zb)
+    dep = g["dep"]
+    x_floor = d["x1"] - dep
+    L, Wd = g["sz1"] - g["sz0"], g["sy"]
+    zc_s = (g["sz0"] + g["sz1"]) / 2
+    ext = dep + 1.5
+    wp = (cq.Workplane("YZ", origin=(x_floor, 0, 0)).center(g["yc"], zc_s).slot2D(L, Wd, 90)
+          .workplane(offset=ext).slot2D(L + 2 * ext, Wd + 2 * ext, 90).loft(ruled=True))
+    return wp.val()
+
+
 def pwr_button(b, zb):
     """Cut the tunnel and the finger scoop, then fuse the blade, nub and bar onto the base."""
     d = dims()
-    window, flex = parts_bf(d)
-    a_, tip_ = d["a"], d["tip"]
-    top_pt = E.bf_point_to_wf((tip_[0] + d["s_fm"] * math.cos(a_), tip_[1] + d["s_fm"] * math.sin(a_),
-                               d["z_top"] + P.FLEX_WINDOW_CLEAR), zb)
+    g = geometry(zb)
+    window, flex, pad = parts_bf(d)
+    c = P.FLEX_WINDOW_CLEAR
     # world-horizontal tunnel ceiling (a ceiling tilted with the board is a shallow overhang in the layer check)
-    win_w = _place(window, zb).intersect(E._box((-200, -200, -50), (200, 200, top_pt[2])))
+    win_w = _place(window, zb).intersect(E._box((-200, -200, -50), (200, 200, g["z_ht"] + c)))
     b = b.cut(win_w)
+    b = b.cut(_scoop(zb))
     body = E.base_body(zb)
-    # the bar's face is a plane parallel to the wall, PWR_FACE_PROUD out: trim the run-on beyond it
-    flex_w = _place(flex, zb).intersect(E._box((-200, -200, -50), (d["x_face"], 200, 300)))
-    flex_w = flex_w.intersect(body.fuse(E._inner_cavity()).fuse(E._box((-200, -200, -50), (d["x_face"] + 0.01, 200, 300))))
-    b = b.fuse(flex_w)
-    ex = face_centre(zb, d)
-    n = np.array([1.0, 0.0, 0.0])
-    dep = min(P.PWR_DIMPLE_DEPTH, P.CASE_WALL - P.PWR_DIMPLE_MIN_WALL)
-    p0 = np.array([d["x1"] - dep, ex[1], ex[2]])
-    cone = cq.Solid.makeCone(P.PWR_DIMPLE_D / 2 - dep, P.PWR_DIMPLE_D / 2 + 2, dep + 2, pnt=cq.Vector(*p0), dir=cq.Vector(*n))
-    b = b.cut(cone)
+    flex_w = _place(flex, zb).intersect(body.fuse(E._inner_cavity()))     # the blade's root runs into the wall: trim to the case
+    b = b.fuse(flex_w).fuse(g["bar"])
     st = stiffness(d)
-    info = dict(exit=tuple(round(float(v), 2) for v in ex), stiffness=st,
+    info = dict(exit=tuple(round(float(v), 2) for v in face_centre(zb, d)), stiffness=st,
                 blade=dict(h_at_load=round(st["h_at_load"], 2), t=d["t"], l_c=round(d["l_c"], 2)),
-                pad=dict(face=(P.PWR_FACE_W, P.PWR_FACE_H), proud=P.PWR_FACE_PROUD))
+                pad=dict(face=(round(g["y1"] - g["y0"], 1), round(g["z1"] - g["z0"], 1)), proud=P.PWR_FACE_PROUD,
+                         scoop=(round(g["sy"], 1), round(g["sz1"] - g["sz0"], 1))))
     return A.solidify(b), info
 
 
 def keepout(zb):
-    """Outside patch of the right wall kept free of ribs / panels round the window and dimple; 45 deg roof outward so
-    the texture above it starts on a printable slope."""
-    d = dims()
-    ex = face_centre(zb, d)
-    half = P.PWR_PATCH_HALF
+    """Outside patch of the right wall kept free of ribs / panels round the scoop; 45 deg roof outward so the texture
+    above it starts on a printable slope."""
+    d, g = dims(), geometry(zb)
+    half = g["sy"] / 2 + g["dep"] + 1.5 + P.PWR_PATCH_PAD
     x1 = d["x1"]
-    zlo, top = ex[2] - P.PWR_PATCH_BELOW, ex[2] + P.PWR_PATCH_ABOVE
+    zlo, top = g["sz0"] - g["dep"] - 1.5 - P.PWR_PATCH_PAD, g["sz1"] + g["dep"] + 1.5
     prof = [(x1 - 0.3, zlo), (x1 - 0.3, top), (x1 + 6.0, top + 6.3), (x1 + 6.0, zlo)]
-    w = cq.Wire.makePolygon([cq.Vector(x, ex[1] - half, z) for x, z in prof], close=True)
+    w = cq.Wire.makePolygon([cq.Vector(x, g["yc"] - half, z) for x, z in prof], close=True)
     return cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(0, 2 * half, 0))

@@ -224,6 +224,10 @@ def posts(b, zb):
         b = b.fuse(post.fuse(fin).intersect(below).intersect(body))
         # v10.1 (Paul): the M2.5 x 6 self-taps into a pilot hole along the board normal; no nut, no slot
         hole = cq.Solid.makeCylinder(P.POST_PILOT_D / 2, P.POST_HOLE_DEPTH + 1, cq.Vector(tx, ty, zu - P.POST_HOLE_DEPTH))
+        lead = getattr(P, "POST_PILOT_LEAD", 0.0)
+        if lead > 0:                                                # v11d: 45 deg funnel at the mouth, so the screw tip centres itself
+            hole = hole.fuse(cq.Solid.makeCone(P.POST_PILOT_D / 2, P.POST_PILOT_D / 2 + lead + 0.4, lead + 0.4,
+                                               cq.Vector(tx, ty, zu - lead), cq.Vector(0, 0, 1)))
         b = b.cut(E.to_wf(hole, zb))
         info.append(dict(tab=(tx, ty), wf=tuple(round(float(v), 2) for v in p), wall=side))
     return b, info
