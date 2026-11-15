@@ -1,5 +1,19 @@
 # Enclosure changelog
 
+## Phase 2 v11c (2026-11-15): the PWR button is pressed with a finger
+- Paul: it has to be a real button, pressed with a finger, not a pen. The v11 pad was 3 x 2 mm and sunk 1.5 mm in a window.
+  Now a **vertical bar like a phone's side key**: face 3.0 wide x 5.0 tall, **0.2 proud** of the wall (`PWR_FACE_*`), in a
+  10 mm finger scoop (0.8 deep). The face is a plane parallel to the wall; the bar itself still moves along the KEY2 axis
+  (34 deg to the wall), so it moves a little sideways as it goes in (the tunnel round it has 0.5 clear each side).
+- Cost: a flush face is ~1.7 mm further out and 3 mm taller than the old pad, and the 45 deg underside that keeps it
+  support-free is as long as the bar is out from the blade. So the blade is taller (~15 mm at the nub) and stiffer.
+  Its thickness is now solved from the target beam force (`PWR_TARGET_FORCE` 2.1 N, `PWR_BLADE_THK = None`): **0.67 mm**.
+  Total press force about 4.6 N with the switch's own ~2.5 N (the C6 coupon was ~4.0; v11 ~4.3). Firmer on purpose.
+  A bigger face costs blade thickness: 3.5 x 6 would need 0.62 mm, so it is 3 x 5.
+- Checks: no interference; swing PASS; shell drop PASS; base layer check flags only the known USB-C opening.
+- To check on the print (PHASE2_CHECKLIST 8): the face is easy to find and press with a fingertip, the click, the
+  force, no self-pressing. Too hard: `PWR_TARGET_FORCE` down (thinner blade, a limit near 0.62). Too small: `PWR_FACE_*`.
+
 ## Phase 2 v11b (2026-11-15): carrier tab A is a slot
 - Paul (photo): with the back screw (tab B) lined up, the front-left post's pilot sits about one pilot radius (~1.1 mm)
   toward the USB-C (-X) from the middle of tab A's 3.6 mm hole. That is a one-sided error, which the evenly enlarged

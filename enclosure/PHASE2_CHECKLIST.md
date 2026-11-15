@@ -25,8 +25,8 @@ shell onto the base: PASS), the battery drop path (PASS), the layer check, and t
   the base magnet under it. Stack the pairs before pressing them in and mark the faces that meet.
 - **No switch (v11):** the battery plugs straight into J1 and stays plugged in. The PWR button in the right wall
   turns the board on and off. Nothing to solder or press in.
-- **PWR button (v11):** it's printed into the base (blade, nub and pad), nothing to fit. Before closing the case,
-  with the board seated, press the pad through the window in the right wall: you should feel the click and the
+- **PWR button (v11):** it's printed into the base (blade, nub and a vertical bar), nothing to fit. Before closing the case,
+  with the board seated, press the bar in the right wall with a fingertip (no pen): you should feel the click and the
   board should turn on or off. At rest the nub must not touch the plunger (the board must not power on or off by
   itself). There is still no access to BOOT.
 
