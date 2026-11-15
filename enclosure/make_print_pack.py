@@ -46,6 +46,17 @@ def main():
     for i, pl in enumerate(plates, 1):
         nm = pl[0]["plate_name"].split(" (")[0].lower().replace(" - ", "_").replace(" ", "_")
         write_3mf_plates([pl], OUT / "3mf_per_plate" / f"plate{i}_{nm}.3mf", bambu_app=False)   # the proven format
+    # PLA bases (for anyone who doesn't want PETG): same six bases, magnet pockets dia 4.20 (the PLA fit). The carrier plate
+    # is the same part. Only the base changes, so only the bases are here; the top shell is already PLA.
+    PLA = {"base_ribbed_pla": "Base PLA - ribbed", "base_panels_pla": "Base PLA - panels", "base_smooth_pla": "Base PLA - smooth",
+           "base_ribbed_nocleat_pla": "Base PLA - ribbed, no cleat", "base_panels_nocleat_pla": "Base PLA - panels, no cleat",
+           "base_smooth_nocleat_pla": "Base PLA - smooth, no cleat"}
+    (OUT / "stl_pla").mkdir()
+    (OUT / "3mf_per_plate_pla").mkdir()
+    for nm, plate in PLA.items():
+        shutil.copy(STL / f"{nm}.stl", OUT / "stl_pla" / f"{nm}.stl")
+        pl = [dict(name=nm, mesh=trimesh.load(STL / f"{nm}.stl"), material="black", plate_name=plate)]
+        write_3mf_plates([pl], OUT / "3mf_per_plate_pla" / f"{nm}.3mf", bambu_app=False)
     shutil.copy(HERE / "PHASE2_CHECKLIST.md", OUT / "PHASE2_CHECKLIST.md")
     (OUT / "README.txt").write_text(
         "LyricFlash case - print pack\n\n"
@@ -59,6 +70,9 @@ def main():
         "8x 4 x 2 mm disc magnets (4 in the base corners, 4 in the shell; check they attract before pressing in).\n"
         "Cable: one turn round the cleat on the back takes any pull off the USB-C plug.\n"
         "stl/: the same parts as separate STLs, already in print orientation.\n\n"
+        "PLA bases: stl_pla/ and 3mf_per_plate_pla/ hold the same six bases for PLA. Only the base magnet pockets differ\n"
+        "(dia 4.20 instead of 4.10, from the C11 coupon). Print with X-Y hole compensation 0. Print ONE of the six. The top\n"
+        "shell and the carrier plate are the same for both (the PLA profile reuses stl/carrier_plate.stl).\n\n"
         "Base: supports off, except paint a support enforcer on the top edge of the USB-C opening.\n"
         "Everything else: supports off. 0.2 mm layers, 4 walls, 15 % gyroid.\n"
         "Assembly steps and what to check: PHASE2_CHECKLIST.md.\n")
