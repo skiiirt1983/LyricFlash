@@ -715,3 +715,7 @@ PWR_PATCH_HALF = 7.0                 # smooth patch in the texture round the but
 PWR_PATCH_BELOW, PWR_PATCH_ABOVE = 5.0, 6.0
 # PWR_DIMPLE_*: finger dimple round the pad end (cone on the wall normal); depth 1.0 -> 0.8 for the 2.4 wall
 PWR_DIMPLE_DEPTH = 0.8
+PWR_REST_GAP = 0.28                  # nub to plunger at rest. C6 coupon: 0.2. The board swings in/out vertically (0.75 mm per
+                                     # degree) and drifts 0.09 mm/deg toward the nub, so 0.2 came within 0.11 mm of it
+PWR_NUB_Z = (-1.4, -0.9)             # nub height (BF z), lower half of the plunger face (-1.3..-0.5): a shorter overlap
+                                     # with the plunger's height, so the swing is past it before the drift builds up

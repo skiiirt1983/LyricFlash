@@ -103,13 +103,12 @@ def parts_bf(d=None):
     """(window cut, flexure to fuse) in the local frame, before placing."""
     d = d or dims()
     zc, hp = d["zc"], d["hp"]
-    tz0, tz1 = P.KEY2_TIP_Z
-    nh = (tz1 - tz0 - 0.1) / 2
+    nz0, nz1 = P.PWR_NUB_Z
     blade = _lz([(d["l_root"], d["z_top"]), (d["l_free"], d["z_top"]),
                  (d["l_free"], d["z_bot_edge"]), (d["l_root"], d["z_root"])], d["s_b0"], d["s_b1"])
-    g = P.FLEX_REST_GAP
+    g = P.PWR_REST_GAP
     s_n = d["s_b0"] + 0.2                                          # nub reaches 0.2 into the blade
-    nub = _sz([(g, zc - nh), (s_n, zc - nh - (s_n - g)), (s_n, zc + nh), (g, zc + nh)], -P.FLEX_NUB_W / 2, P.FLEX_NUB_W / 2)
+    nub = _sz([(g, nz0), (s_n, nz0 - (s_n - g)), (s_n, nz1), (g, nz1)], -P.FLEX_NUB_W / 2, P.FLEX_NUB_W / 2)
     pad = _sz([(d["s_p0"], d["z_pad_bot"]), (d["s_pe"], zc - 1.0), (d["s_pe"], zc + 1.0), (d["s_p0"], zc + 1.0)], -hp, hp)
     flex = blade.fuse(nub).fuse(pad)
     # window through the wall round the pad: FLEX_WINDOW_CLEAR each side; 45 deg floor up to the pad end, then flat
@@ -117,7 +116,8 @@ def parts_bf(d=None):
     s0 = d["s_b1"] + P.FLEX_GAP
     zf = zc - 1.0 - c * math.sqrt(2)                               # floor 0.5 (normal) under the pad underside
     s_end = d["s_x"] + 4.0
-    pts = [(s0, zf - (d["s_pe"] - s0)), (d["s_pe"], zf), (s_end, zf), (s_end, zc + 1.0 + c), (s0, zc + 1.0 + c)]
+    zt = zc + 1.0 + c + 3.0                                        # trimmed to a world-horizontal ceiling in pwr_button()
+    pts = [(s0, zf - (d["s_pe"] - s0)), (d["s_pe"], zf), (s_end, zf), (s_end, zt), (s0, zt)]
     window = _sz(pts, -(hp + c), hp + c)
     return window, flex
 
@@ -133,7 +133,13 @@ def pwr_button(b, zb):
     """Cut the window and the finger dimple, then fuse the blade, nub and pad onto the base."""
     d = dims()
     window, flex = parts_bf(d)
-    b = b.cut(_place(window, zb))
+    # ceiling horizontal in the world (the board's tilt would make it a shallow sloping overhang): level with the
+    # pad's top at its outer end + the window clearance, which is the highest point of the pad
+    s_end = d["s_x"]
+    a_, tip_, zc_ = d["a"], d["tip"], d["zc"]
+    zt_w = E.bf_point_to_wf((tip_[0] + s_end * math.cos(a_), tip_[1] + s_end * math.sin(a_), zc_ + 1.0 + P.FLEX_WINDOW_CLEAR), zb)[2]
+    win_w = _place(window, zb).intersect(E._box((-200, -200, -50), (200, 200, zt_w)))
+    b = b.cut(win_w)
     body = E.base_body(zb)
     flex_w = _place(flex, zb)
     # trim the root (it was run into the wall) to the case outline

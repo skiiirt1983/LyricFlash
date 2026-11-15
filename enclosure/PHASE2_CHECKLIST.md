@@ -23,11 +23,12 @@ shell onto the base: PASS), the battery drop path (PASS), the layer check, and t
 - **Magnets:** press one into each corner pocket of the base and one into each corner pocket of the shell
   (snug fit; a drop of CA glue if one is loose). **Check polarity first:** each shell magnet must attract
   the base magnet under it. Stack the pairs before pressing them in and mark the faces that meet.
-- **Switch:** solder the SS-12D00 into the battery's red lead. From inside the case, push the body into its
-  pocket in the left wall under the USB-C, knob first through the slot. It's a firm press-fit (Paul's rule:
-  cheap parts that get handled get the best fit). The knob should stand about 1.85 mm out of the wall and slide
-  end to end.
-- There is no access to the PWR or BOOT buttons (not used). The switch is the off switch.
+- **No switch (v11):** the battery plugs straight into J1 and stays plugged in. The PWR button in the right wall
+  turns the board on and off. Nothing to solder or press in.
+- **PWR button (v11):** it's printed into the base (blade, nub and pad), nothing to fit. Before closing the case,
+  with the board seated, press the pad through the window in the right wall: you should feel the click and the
+  board should turn on or off. At rest the nub must not touch the plunger (the board must not power on or off by
+  itself). There is still no access to BOOT.
 
 ## Assembly (no pressing on the screen, ever)
 1. **Board onto the carrier plate (on the bench):** board face-down on a soft cloth. Lay the plate on its back,
@@ -61,7 +62,7 @@ out, right side first, unhooking the USB-C last.
 | 5 | Plug a cable in 20 times while holding the case | board moves (no / yes), latches hold |
 | 6 | Mics: play a song from ~1 m, LyricFlash identifies it as reliably as with the bare board | same / worse / much worse |
 | 7 | Battery goes in and comes out by hand, no forcing; doesn't rattle when closed | OK / tight where / rattles |
-| 8 | Switch: slides end to end, knob below the bottom face, cuts power | OK / rubs / sticks out |
+| 8 | PWR button: nub clear of the plunger at rest (board doesn't switch itself); a clear click on a deliberate press; turns the board on and off; springs back, no whitening at the blade root, 50 presses | click (clear / mushy / none), force (light / good / hard), self-pressing (yes / no), cracking (no / where) |
 | 9 | Cable cleat: one turn holds; a light tug from any side doesn't pull on the plug, slide or tip the case | OK / slips / too fiddly |
 | 10 | Face-down on the table: the glass doesn't touch | OK / touches |
 | 11 | Touch works right to the edge, no lit pixels hidden by the lip | OK / hidden where |

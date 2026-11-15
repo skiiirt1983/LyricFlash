@@ -1,5 +1,29 @@
 # Enclosure changelog
 
+## Phase 2 v11 (2026-11-15)
+- Paul: new Waveshare board, Rev 1.1 (standoffs measure identical), and the case needs a power button that presses
+  the board's own PWR key. **The slide switch is deleted** (pocket, knob slot, texture patch, params: `SWITCH = False`);
+  the battery stays plugged in and the button turns the board on and off.
+- **PWR button = the round-2 C6 flexure** (Paul's test: clear click, responsive; beam 0.9 thick, nub 0.2 from the
+  plunger, pad 1.5 below the outer face, window 0.5 round the pad), now in the right wall (`lfcase/pwr_button.py`).
+  KEY2 is 6 mm inside the wall, so the blade stands tangent to the board at the plunger, anchored in the wall, with the
+  nub on its inside and a 3 mm wide pad on its outside reaching out through a window in the wall, all on the plunger's
+  own axis (34 deg to the wall). A shallow finger dimple (7 mm, 0.8 deep) round the pad end; ribs/panels leave a
+  smooth patch round it.
+- Differences from the coupon, and why:
+  - The coupon blade stood on a 7.6 mm floor. Here the plunger is ~30 mm above the floor, so the blade is cut as a
+    trapezoid: 45 deg underside rising out of the wall, ~9 mm tall at the nub. No support, no floating layers.
+    That is stiffer than the coupon, so the blade is 0.72 thick (was 0.9): beam estimate 1.8 N at the deflection
+    needed against 1.5 N for the coupon (Euler-Bernoulli, PETG E 1500 MPa, `pwr_button.stiffness()`). An estimate.
+  - Rest gap 0.28 (coupon 0.2) and the nub is only 0.5 tall, in the lower half of the plunger face. The board swings
+    in 0.75 mm per degree of swing straight past the nub and drifts 0.09 mm per degree toward it, so with the 0.2 gap
+    and a full-height nub the swing check came within 0.11 mm (rule: 0.2).
+  - The window's ceiling is cut horizontal in the world (the board's tilt made it a shallow sloping overhang in the
+    layer check).
+- **To check on the first print (PHASE2_CHECKLIST 8):** click, force and self-pressing. If it's too hard: `PWR_BLADE_THK`
+  down (0.72 -> 0.65 about -30 %); if mushy or the board doesn't switch: `PWR_REST_GAP` down. Both are single numbers.
+- The assembly guide (`assembly_guide/`) still shows the switch; not regenerated yet.
+
 ## Phase 2 v10.7 (2026-11-15)
 - Paul: the front-left plate screw only went in with the board pushed toward the USB-C. Both boards (original and
   Rev 1.1) measure the same as the model (standoff spacings, USB-C to standoff, diameter), so the board isn't the

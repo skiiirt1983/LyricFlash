@@ -5,7 +5,7 @@ The design brief is PLAN.md (kept with Paul). All dimensions live in `params.py`
 
 Design rules from Paul: `DESIGN_RULES.md` (read first).
 
-Status: **Phase 2 v10 built** (board screwed to a carrier plate, magnet-held shell, switch in the left wall; 52.9 x 62.8 mm, 47.8 / 70.7 mm tall)
+Status: **Phase 2 v11** (board screwed to a carrier plate, magnet-held shell, PWR flexure button in the right wall, no slide switch; 52.9 x 62.8 mm, 47.8 / 70.7 mm tall)
 `PHASE2_CHECKLIST.md`. Phase 1 (fit tests) is in `PHASE1_CHECKLIST.md`, the USB-C tolerance stack-up in
 `USB_STACKUP.md`, and every decision in `CHANGELOG.md`.
 
