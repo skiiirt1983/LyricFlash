@@ -7,11 +7,11 @@ Surface-sample check, spacing 0.12 mm (good to about +/-0.06 mm). Rule: >= 0.2 m
 | Opened by | Closest (mm, < 1.0) | Designed | FAIL |
 |---|---|---|---|
 | 0 deg | pcb 0.0, carrier 0.0, pmma_frame 0.01, misc_back 0.27, key2 0.28 | USB-C web on the PCB edge (zero gap by design, separating); plate tabs settling onto their posts beside the hinge (printed on printed, nothing on the board) | none |
-| 0.25 deg | pcb 0.01, carrier 0.01, pmma_frame 0.02, key2 0.26, misc_back 0.28 | USB-C web on the PCB edge (zero gap by design, separating); plate tabs settling onto their posts beside the hinge (printed on printed, nothing on the board) | none |
+| 0.25 deg | pcb 0.01, pmma_frame 0.02, carrier 0.02, key2 0.26, misc_back 0.28 | USB-C web on the PCB edge (zero gap by design, separating); plate tabs settling onto their posts beside the hinge (printed on printed, nothing on the board) | none |
 | 0.5 deg | pcb 0.03, pmma_frame 0.03, carrier 0.03, key2 0.23, misc_back 0.3 | USB-C web on the PCB edge (zero gap by design, separating); plate tabs settling onto their posts beside the hinge (printed on printed, nothing on the board) | none |
 | 1 deg | carrier 0.05, pmma_frame 0.06, pcb 0.07, misc_back 0.33, key2 0.35 | USB-C web on the PCB edge (zero gap by design, separating); plate tabs settling onto their posts beside the hinge (printed on printed, nothing on the board) | none |
 | 1.5 deg | pmma_frame 0.08, carrier 0.08, pcb 0.1, key2 0.33, misc_back 0.37 | USB-C web on the PCB edge (zero gap by design, separating); plate tabs settling onto their posts beside the hinge (printed on printed, nothing on the board) | none |
-| 2 deg | pmma_frame 0.1, carrier 0.11, pcb 0.12, misc_back 0.4, usb_c 0.4 | USB-C web on the PCB edge (zero gap by design, separating); plate tabs settling onto their posts beside the hinge (printed on printed, nothing on the board) | none |
+| 2 deg | pmma_frame 0.1, carrier 0.1, pcb 0.12, misc_back 0.4, usb_c 0.4 | USB-C web on the PCB edge (zero gap by design, separating); plate tabs settling onto their posts beside the hinge (printed on printed, nothing on the board) | none |
 | 3 deg | pmma_frame 0.14, pcb 0.15, carrier 0.16, usb_c 0.4, misc_back 0.46 | USB-C web on the PCB edge (zero gap by design, separating); plate tabs settling onto their posts beside the hinge (printed on printed, nothing on the board) | none |
 | 4 deg | pmma_frame 0.18, pcb 0.19, carrier 0.22, usb_c 0.4, misc_back 0.52 | USB-C web on the PCB edge (zero gap by design, separating) | none |
 | 5 deg | pmma_frame 0.23, pcb 0.24, carrier 0.28, usb_c 0.4, misc_back 0.58 | - | none |

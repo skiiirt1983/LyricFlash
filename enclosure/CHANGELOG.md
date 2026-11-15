@@ -1,5 +1,20 @@
 # Enclosure changelog
 
+## Phase 2 v11b (2026-11-15): carrier tab A is a slot
+- Paul (photo): with the back screw (tab B) lined up, the front-left post's pilot sits about one pilot radius (~1.1 mm)
+  toward the USB-C (-X) from the middle of tab A's 3.6 mm hole. That is a one-sided error, which the evenly enlarged
+  v10.7 hole (+/-0.55 all round) can't take. Tab A's hole is now a **2.9 mm slot along X**, centres 0.6 and 1.5 mm
+  toward the USB-C from the model's hole centre: the screw axis can sit anywhere from 0.35 to 1.75 mm that way (pilot
+  measured ~1.1, the middle). The 5 mm pan head still overlaps the plate on both sides across the slot. Tab B unchanged.
+  Plate only: the printed base stays.
+- A first try also extended the tab toward the USB-C. In the swing check it came within 0.04-0.19 mm of the front post
+  and wall (and touched the base by 0.09 mm3), so there is no extension (`CARRIER_XSLOT_EXT = 0`); ~1.05 mm of plate is
+  left beyond the slot's end.
+- Checks: no interference (board, base/carrier); swing PASS; shell drop PASS; plate clean in the layer check.
+- C12 carrier coupon (plate + the two real posts) regenerated: `out/coupons/C12_carrier_coupon.3mf`. Try the screws
+  on it before printing a full plate. The offset (~1.1 mm) was read from one photo, not measured: if it sits near the
+  end of the slot instead of the middle, move `CARRIER_XSLOT_OFF0/OFF1`.
+
 ## Phase 2 v11 (2026-11-15)
 - Paul: new Waveshare board, Rev 1.1 (standoffs measure identical), and the case needs a power button that presses
   the board's own PWR key. **The slide switch is deleted** (pocket, knob slot, texture patch, params: `SWITCH = False`);
