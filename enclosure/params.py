@@ -774,3 +774,4 @@ PWR_PATCH_PAD = 1.0                  # smooth patch margin round the scoop (text
 PWR_FACE_W = 7.0                     # 8 mm and below -4.9 were tried; 7 wide with the bottom at BF -6.0 keeps the blade at 0.65
 PWR_FACE_BOT = -6.0
 PWR_TARGET_FORCE = 2.4               # N from the blade, ~4.9 N with the switch: firmer because the face is bigger and flush
+PWR_FACE_TOP_CHAMFER = 2.5           # 45 deg cut on the head's top corners (and the tunnel ceiling): shortens its bridge below 10 mm

@@ -153,6 +153,13 @@ def parts_bf(d=None):
 _G = {}
 
 
+def _roof(ylo, yhi, z_top, ch, zlo=-50.0):
+    """World prism along X: a (Y, Z) outline with its top corners cut at 45 deg by ch."""
+    pts = [(ylo, zlo), (yhi, zlo), (yhi, z_top - ch), (yhi - ch, z_top), (ylo + ch, z_top), (ylo, z_top - ch)]
+    w = cq.Wire.makePolygon([cq.Vector(-100.0, y, z) for y, z in pts], close=True)
+    return cq.Solid.extrudeLinear(cq.Face.makeFromWires(w), cq.Vector(400.0, 0, 0))
+
+
 def _seam_z(y_w, zb):
     """World height of the seam plane (BF z = SEAM_Z) above world y."""
     S = P.SEAM_Z
@@ -177,9 +184,12 @@ def geometry(zb):
     pad_w = _place(pad, zb).intersect(E._box((-200, -200, -50), (d["x_face"], 200, z_ht)))
     neck = pad_w.intersect(E.halfspace_bf(zb, d["z_top"], above=False))
     head = pad_w.intersect(E._box((d["xw"] - 0.02, -200, -50), (300, 200, 300)))
-    bar = neck.fuse(head)
     hv = head.intersect(E._box((d["x1"] - 0.5, -200, -50), (300, 200, 300))).BoundingBox()
-    g = dict(z_ht=z_ht, bar=bar, y0=hv.ymin, y1=hv.ymax, z0=hv.zmin, z1=hv.zmax)
+    ch = P.PWR_FACE_TOP_CHAMFER
+    # top corners of the head cut at 45 deg, so the tunnel's ceiling is a ~6 mm bridge, not 11 (layer check limit 10)
+    head = head.intersect(_roof(hv.ymin, hv.ymax, z_ht, ch))
+    bar = neck.fuse(head)
+    g = dict(z_ht=z_ht, bar=bar, y0=hv.ymin, y1=hv.ymax, z0=hv.zmin, z1=hv.zmax, ch=ch)
     dep = min(P.PWR_SCOOP_DEPTH, P.CASE_WALL - P.PWR_DIMPLE_MIN_WALL)
     g["dep"] = dep
     g["sy"] = (g["y1"] - g["y0"]) + 2 * P.PWR_SCOOP_MW           # scoop floor: width (Y) ...
@@ -228,7 +238,7 @@ def pwr_button(b, zb):
     window, flex, pad = parts_bf(d)
     c = P.FLEX_WINDOW_CLEAR
     # world-horizontal tunnel ceiling (a ceiling tilted with the board is a shallow overhang in the layer check)
-    win_w = _place(window, zb).intersect(E._box((-200, -200, -50), (200, 200, g["z_ht"] + c)))
+    win_w = _place(window, zb).intersect(_roof(g["y0"] - c - 0.3, g["y1"] + c + 0.3, g["z_ht"] + c, g["ch"]))
     b = b.cut(win_w)
     b = b.cut(_scoop(zb))
     body = E.base_body(zb)
