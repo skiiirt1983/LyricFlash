@@ -1,9 +1,13 @@
 #pragma once
 /* LyricFlash 1.0.0 - first stable release for the Waveshare ESP32-S3 Touch AMOLED 1.75.
  * Settings schema 16 is unchanged, so saved Wi-Fi and clock settings carry over. */
-#define LF_VERSION "1.1.0"
-#define LF_VERSION_LABEL "1.1.0"
+#define LF_VERSION "1.1.1"
+#define LF_VERSION_LABEL "1.1.1"
 /* Creator/maintainer skiiirt1983; no changes to settings, credentials or OTA partitions. */
+/* 1.1.1: Spotify lyrics no longer lag (1 s display delay cancelled, request latency halved out);
+   Wi-Fi stays connected with the screen off (modem sleep, full speed for a minute after web use);
+   PWR button: tap = sleep/wake, hold 1.5 s = power off, quick tap powers on;
+   settings backup: save/restore on the device ("sounds" LittleFS) or as a downloaded file. */
 /* 1.1.0: Spotify as a Song ID source: link once from the web page (PKCE, no secret; the LyricFlash site
    forwards Spotify's one-time code to the device), then Play reads Spotify's current song and exact
    position, so lyrics sync automatically with no microphone. AudD remains an optional fallback. */

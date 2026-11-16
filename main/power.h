@@ -11,7 +11,7 @@ typedef struct {
     int percentage;  /* -1 when unknown */
 } lf_power_state_t;
 
-/* Battery telemetry stays read-only. All AXP2101 I2C transfers run on a
+/* Battery telemetry is read-only. All AXP2101 I2C transfers run on a
    background FreeRTOS task rather than blocking the LVGL render task. */
 bool lf_power_read(lf_power_state_t *state);
 bool lf_power_background_start(void);
@@ -22,3 +22,7 @@ void lf_power_set_screen_awake(bool awake);
 const char *lf_power_cpu_profile_state(void);
 uint32_t lf_power_color(const lf_power_state_t *state);
 const char *lf_power_symbol(const lf_power_state_t *state);
+/* 1.1.1 PWR button: 0 = nothing, 1 = quick tap, 2 = held 1.5 s. Clears on read. */
+int lf_power_take_key_event(void);
+/* Cut power through the AXP2101; PWR (or USB power) turns the device on again. */
+void lf_power_off(void);

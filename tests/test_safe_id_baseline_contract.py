@@ -15,7 +15,7 @@ BASELINE={
     "main/lyric_sync.h": "ad1b55f97731c5e81ea7003c78c746a64768159a",
     "main/mic_pcm.c": "275dd3324179e099a7a082563b291997848f53b5",
     "main/mic_pcm.h": "c184c32a9c58f14056f1a3b87d9926472e22507d",
-    "main/recognition.c": "4600be4fa776a635bc84d0ff20e45153673467a2",  # 1.1.0: additive Spotify branch; AudD path unchanged
+    "main/recognition.c": "8b82c2e25915edcecd35abc1f85132b62407219b",  # 1.1.x: additive Spotify branch + timing lead; AudD path unchanged
     "main/recognition.h": "d228fa95ed6f3b266905d3db74d91148c535edad",
     "main/recognition_audio.c": "ee45dc0e2da70216a56812ca84a3ee17499e6f53",
     "main/recognition_audio.h": "8a757e7762ad8b76d3942f3b821f72fae7c36f79",

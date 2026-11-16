@@ -417,7 +417,10 @@ static void worker(void *arg)
             snprintf(result.artist,sizeof result.artist,"%s",now.artist);
             result.http_status=200;
             result.audd_api_error_code=0;
-            result.audd_timecode_ms=now.progress_ms;
+            /* 1.1.1: Spotify's position is exact, so cancel the 1 s display
+               delay tuned for microphone matches and lead by a quarter second
+               so each line appears as it is sung. */
+            result.audd_timecode_ms=now.progress_ms+LF_SYNC_DISPLAY_DELAY_MS+250U;
             result.audd_timecode_valid=true;
             result.capture_start_ms=now.received_ms; /* position measured here */
             result.captured_frames=0;

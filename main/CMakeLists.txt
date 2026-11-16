@@ -37,6 +37,7 @@ idf_component_register(
         "captive_dns_logic.c"
         "spotify.c"
         "spotify_logic.c"
+        "settings_backup.c"
         "wifi_json.c"
     INCLUDE_DIRS "."
     REQUIRES
