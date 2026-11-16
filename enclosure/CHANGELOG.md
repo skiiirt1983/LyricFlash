@@ -1,5 +1,28 @@
 # Enclosure changelog
 
+## Phase 2 v11d-f (2026-11-16)
+- **Base pilot holes were too small** (Paul: with the front screw in, the back one wouldn't start; he had to tap each screw in
+  by hand first). Printed holes come out ~0.2 smaller than modelled. Pilot 2.2 -> **2.4 mm** with a **45 deg funnel** at the
+  mouth (`POST_PILOT_D`, `POST_PILOT_LEAD`) so the tip finds the hole and a post slightly off the plate's hole is forgiven.
+  `coupon_pilot.py` -> `out/coupons/C13_pilot_gauge.3mf`: five tilted holes 2.2 .. 2.6, 1..5 notches; pick the smallest an
+  M2.5 starts in and drives without a struggle.
+- **Carrier plate back to the v10.7 round 3.6 mm front hole** (the v11b slot is off: `CARRIER_XSLOT_TABS = ()`). Paul doesn't
+  think the plate was the problem, and the slot was never printed. C12 coupon regenerated.
+- **PWR button: bigger, sticks out, bigger scoop.** Face 7 wide (`PWR_FACE_W`), bottom at BF z -6.0, head top 2.0 under the
+  seam (level in the world), **0.8 proud** (was 0.2), scoop ~16 x 16 mm and 1.0 deep (was 10 mm, 0.8). Head top corners cut
+  at 45 deg (`PWR_FACE_TOP_CHAMFER`): the tunnel's ceiling was an 11.4 mm bridge (limit 10), now ~6. Blade 0.65 mm solved for a
+  2.4 N beam force (total ~4.9 N with the switch's ~2.5 N): firmer, because the face is bigger and flush. The face is a
+  skewed shape: the plunger axis is 34 deg to the wall and the support ramp under the bar follows it, so the bottom edge
+  slants; each mm of face height below the plunger also makes the blade a mm taller (stiffer). The opening can't simply
+  move: the axis fixes where it leaves the wall.
+- **Shell rim (Paul's photos):** the right and front rim rails were in the way of the SD card's tab (socket Y -7.8..8.3 on
+  the +X side) and the display's flex folds, which stick out past the PCB edge into the rim's space (X 22.7..23.9). He
+  clipped them off and it seated better. `RIM_DROP_SIDES = ("x+", "y-")`: no rim on the right and front; left and back rims
+  plus the four corner magnets locate the shell. Bore reliefs (`FOLD_RELIEFS`): right (0 deg) 17.5 wide x 0.6 deep for the
+  SD tab (the shell wall there is only 1.6 thick, so 0.6 keeps 1.0 of skin), front (270 deg) 1.8 deep (was 1.2), back (90 deg)
+  unchanged.
+- Checks: no interference; swing PASS; shell drop PASS; base layer check flags only the known USB-C opening.
+
 ## Phase 2 v11c (2026-11-15): the PWR button is pressed with a finger
 - Paul: it has to be a real button, pressed with a finger, not a pen. The v11 pad was 3 x 2 mm and sunk 1.5 mm in a window.
   Now a **vertical bar like a phone's side key**: face 3.0 wide x 5.0 tall, **0.2 proud** of the wall (`PWR_FACE_*`), in a
