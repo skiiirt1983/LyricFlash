@@ -66,22 +66,90 @@ const char *lf_power_cpu_profile_state(void)
 }
 
 
-bool lf_power_read(lf_power_state_t *state)
+/* 0.8.124: attach the PMIC once and keep the handle; adding/removing a
+   device on the shared touch I2C bus every 4 s was needless churn. */
+static i2c_master_dev_handle_t pmic_dev(void)
 {
-    if (!state) return false;
-    memset(state, 0, sizeof(*state));
-    state->percentage = -1;
+    static i2c_master_dev_handle_t dev = NULL;
+    if (dev) return dev;
     i2c_master_bus_handle_t bus = bsp_i2c_get_handle();
-    if (!bus) return false;
+    if (!bus) return NULL;
     i2c_device_config_t cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = 0x34,
         .scl_speed_hz = 100000
     };
-    /* 0.8.124: attach the PMIC once and keep the handle; adding/removing a
-       device on the shared touch I2C bus every 4 s was needless churn. */
-    static i2c_master_dev_handle_t dev = NULL;
-    if (!dev && i2c_master_bus_add_device(bus, &cfg, &dev) != ESP_OK) { dev = NULL; return false; }
+    if (i2c_master_bus_add_device(bus, &cfg, &dev) != ESP_OK) dev = NULL;
+    return dev;
+}
+static bool pmic_read(uint8_t reg, uint8_t *value)
+{
+    i2c_master_dev_handle_t dev = pmic_dev();
+    return dev && i2c_master_transmit_receive(dev, &reg, 1, value, 1, 100) == ESP_OK;
+}
+static bool pmic_write(uint8_t reg, uint8_t value)
+{
+    i2c_master_dev_handle_t dev = pmic_dev();
+    const uint8_t frame[2] = {reg, value};
+    return dev && i2c_master_transmit(dev, frame, sizeof frame, 100) == ESP_OK;
+}
+
+/* ---- 1.1.1 PWR button (AXP2101 power key) ----
+ * Register use follows the AXP2101 map (as in XPowersLib):
+ *   0x27 key timing: bits 1:0 power-on press (00 = 128 ms), bits 3:2 hardware
+ *        power-off hold (00 = 4 s), bits 5:4 long-press report (01 = 1.5 s)
+ *   0x22 bit1 hardware long-press power-off enabled, bit0 0 = off (not restart)
+ *   0x41 / 0x49 interrupt enable / status: bit3 short press, bit2 long press
+ *   0x10 bit0 software power off
+ * A quick tap is reported as a short press (sleep / wake); holding 1.5 s is a
+ * long press (power off). The chip's own 4 s hold still cuts power if the
+ * firmware is ever stuck. */
+#define AXP_KEY_TIMING 0x27
+#define AXP_PWROFF_EN 0x22
+#define AXP_IRQ_EN2 0x41
+#define AXP_IRQ_STATUS2 0x49
+#define AXP_COMMON 0x10
+#define AXP_KEY_SHORT 0x08
+#define AXP_KEY_LONG 0x04
+static atomic_int key_event; /* 0 none, 1 short, 2 long */
+static bool key_ready;
+static void power_key_setup(void)
+{
+    uint8_t v = 0;
+    if (!pmic_read(AXP_KEY_TIMING, &v)) return;
+    if (!pmic_write(AXP_KEY_TIMING, (uint8_t)((v & 0xC0) | 0x10))) return;
+    if (pmic_read(AXP_PWROFF_EN, &v)) (void)pmic_write(AXP_PWROFF_EN, (uint8_t)((v | 0x02) & ~0x01));
+    if (!pmic_read(AXP_IRQ_EN2, &v)) return;
+    if (!pmic_write(AXP_IRQ_EN2, (uint8_t)(v | AXP_KEY_SHORT | AXP_KEY_LONG))) return;
+    /* Forget the press that switched the device on. */
+    (void)pmic_write(AXP_IRQ_STATUS2, AXP_KEY_SHORT | AXP_KEY_LONG);
+    key_ready = true;
+    ESP_LOGI("LFPower", "PWR button: tap = sleep/wake, hold 1.5 s = power off");
+}
+static void power_key_poll(void)
+{
+    if (!key_ready) { power_key_setup(); return; }
+    uint8_t status = 0;
+    if (!pmic_read(AXP_IRQ_STATUS2, &status)) return;
+    const uint8_t keys = status & (AXP_KEY_SHORT | AXP_KEY_LONG);
+    if (!keys) return;
+    (void)pmic_write(AXP_IRQ_STATUS2, keys); /* write 1 to clear */
+    atomic_store(&key_event, (keys & AXP_KEY_LONG) ? 2 : 1);
+}
+int lf_power_take_key_event(void) { return atomic_exchange(&key_event, 0); }
+void lf_power_off(void)
+{
+    uint8_t v = 0;
+    if (pmic_read(AXP_COMMON, &v)) (void)pmic_write(AXP_COMMON, (uint8_t)(v | 0x01));
+}
+
+bool lf_power_read(lf_power_state_t *state)
+{
+    if (!state) return false;
+    memset(state, 0, sizeof(*state));
+    state->percentage = -1;
+    i2c_master_dev_handle_t dev = pmic_dev();
+    if (!dev) return false;
     uint8_t status1 = 0, status2 = 0, soc = 0;
     const uint8_t r0 = 0x00, r1 = 0x01, ra = 0xA4;
     esp_err_t a = i2c_master_transmit_receive(dev, &r0, 1, &status1, 1, 100);
@@ -102,15 +170,19 @@ static TaskHandle_t power_worker;
 static void power_background_task(void *arg)
 {
     (void)arg;
-    for (;;) {
-        lf_power_state_t sample;
-        if (lf_power_read(&sample)) {
-            portENTER_CRITICAL(&power_mux);
-            latest_power = sample;
-            has_power = true;
-            portEXIT_CRITICAL(&power_mux);
+    /* Battery every 4 s; the PWR button every 100 ms (one 1-byte read). */
+    for (unsigned tick = 0;; tick++) {
+        if (tick % 40U == 0) {
+            lf_power_state_t sample;
+            if (lf_power_read(&sample)) {
+                portENTER_CRITICAL(&power_mux);
+                latest_power = sample;
+                has_power = true;
+                portEXIT_CRITICAL(&power_mux);
+            }
         }
-        vTaskDelay(pdMS_TO_TICKS(4000));
+        power_key_poll();
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 

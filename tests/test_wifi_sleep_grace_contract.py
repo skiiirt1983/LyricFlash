@@ -14,10 +14,13 @@ assert body.count("lf_network_set_idle(true);")==1
 assert "lf_network_set_idle(false);" in ui.split("static void on_wake",1)[1]
 assert "last_wifi_resume_retry_ms" in body
 assert ".sleep_seconds = 60," in prefs
-assert "if (idle && (in_ap || atomic_load(&ota_busy))) return;" in net
-assert "if (in_ap || atomic_load(&ota_busy)) break;" in net
-assert "esp_wifi_stop()" in net and "esp_wifi_start()" in net
-assert "wifi_retry_after_ms" in net and "+1000U" in net
+# 1.1.1: the radio is never stopped for screen-off; modem sleep keeps the web
+# page reachable, with full speed for a minute after any web request.
+assert "wifi_idle_worker" not in net and "Idle Wi-Fi radio suspended" not in net
+assert "static void wifi_power_apply(void)" in net and "if (in_ap) return;" in net
+assert "!atomic_load(&ota_busy))" in net and "WIFI_PS_MAX_MODEM : (int)WIFI_PS_MIN_MODEM" in net
+assert "#define LF_WEB_ACTIVE_MS 60000U" in net and "cfg.open_fn=on_http_open;" in net
+assert "esp_wifi_connect();" in net.split("WIFI_EVENT_STA_DISCONNECTED",1)[1].split("IP_EVENT_STA_GOT_IP",1)[0]
 assert "lf_network_wifi_power_state(void)" in net
 assert "ui_label_set_text_if_changed(battery_status,value);" in ui
 assert "ui_label_set_text_if_changed(network_password, text);" in ui

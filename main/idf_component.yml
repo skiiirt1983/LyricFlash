@@ -4,3 +4,6 @@ dependencies:
   lvgl/lvgl:
     version: "9.5.0"
     public: true
+  # 1.1.1: on-device settings backup lives in the "sounds" LittleFS partition.
+  joltwallet/littlefs:
+    version: "^1.20.1"

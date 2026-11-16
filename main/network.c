@@ -17,6 +17,7 @@
 #include "web_weather_html.h"
 #include "captive_dns.h"
 #include "spotify.h"
+#include "settings_backup.h"
 #include "esp_https_ota.h"
 #include "esp_crt_bundle.h"
 #include <stdatomic.h>
@@ -71,69 +72,56 @@ typedef struct {
 } lf_github_request_t;
 static bool time_sync_started;
 static void reboot_task(void *arg);
-/* Requests originate from LVGL; only this worker calls the Wi-Fi driver. */
+/* 1.1.1: Wi-Fi stays connected with the screen off, so the web page is always
+   reachable. Instead of stopping the radio, the driver's modem sleep is used:
+   - screen on, or the web page used in the last minute: light sleep (fast);
+   - screen off and no web use for a minute: deep modem sleep (the radio only
+     wakes for router beacons; a request still gets through, a little slower). */
 static atomic_bool wifi_idle_requested = false;
-static atomic_bool wifi_radio_suspended = false;
-static atomic_bool wifi_worker_running = false;
-static atomic_uint wifi_retry_after_ms;
+static atomic_bool wifi_radio_suspended = false; /* radio is never stopped now */
 static atomic_uint wifi_radio_sleep_cycles;
-static void wifi_idle_worker(void *arg)
+static atomic_uint web_activity_ms;
+static atomic_int wifi_ps_applied = -1;
+#define LF_WEB_ACTIVE_MS 60000U
+static void wifi_power_apply(void)
 {
-    (void)arg;
-    for (;;) {
-        const bool requested = atomic_load(&wifi_idle_requested);
-        const bool suspended = atomic_load(&wifi_radio_suspended);
-        if (requested == suspended) break;
-        if (requested) {
-            if (in_ap || atomic_load(&ota_busy)) break;
-            /* Mark intentional shutdown before stop triggers DISCONNECTED. */
-            atomic_store(&wifi_radio_suspended, true);
-            esp_err_t err = esp_wifi_stop();
-            if (err != ESP_OK) {
-                atomic_store(&wifi_radio_suspended, false);
-                atomic_store(&wifi_retry_after_ms,(uint32_t)(esp_timer_get_time()/1000LL)+1000U);
-                ESP_LOGW(TAG, "Idle Wi-Fi stop failed: %s", esp_err_to_name(err));
-                break;
-            }
-            if (connected_event) xEventGroupClearBits(connected_event, LF_CONNECTED);
-            atomic_fetch_add(&wifi_radio_sleep_cycles,1);
-            ESP_LOGI(TAG, "Idle Wi-Fi radio suspended");
-        } else {
-            esp_err_t err = esp_wifi_start();
-            if (err != ESP_OK) {
-                atomic_store(&wifi_retry_after_ms,(uint32_t)(esp_timer_get_time()/1000LL)+1000U);
-                ESP_LOGW(TAG, "Wake Wi-Fi start failed: %s", esp_err_to_name(err));
-                break;
-            }
-            atomic_store(&wifi_radio_suspended, false);
-            esp_wifi_connect();
-            ESP_LOGI(TAG, "Wake Wi-Fi reconnect requested");
-        }
-    }
-    atomic_store(&wifi_worker_running, false);
-    /* The UI tick retries a pending idle request; wake also retries on tick. */
-    vTaskDelete(NULL);
+    if (in_ap) return;
+    const uint32_t now = (uint32_t)(esp_timer_get_time() / 1000LL);
+    const uint32_t last = atomic_load(&web_activity_ms);
+    const bool web_recent = last && (uint32_t)(now - last) < LF_WEB_ACTIVE_MS;
+    const int want = (atomic_load(&wifi_idle_requested) && !web_recent && !atomic_load(&ota_busy))
+                     ? (int)WIFI_PS_MAX_MODEM : (int)WIFI_PS_MIN_MODEM;
+    if (want == atomic_load(&wifi_ps_applied)) return;
+    if (esp_wifi_set_ps((wifi_ps_type_t)want) != ESP_OK) return;
+    atomic_store(&wifi_ps_applied, want);
+    if (want == (int)WIFI_PS_MAX_MODEM) atomic_fetch_add(&wifi_radio_sleep_cycles, 1);
 }
+/* Any web request: full-speed Wi-Fi for the next minute. */
+static void web_activity(void)
+{
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000LL);
+    atomic_store(&web_activity_ms, now ? now : 1U);
+    wifi_power_apply();
+}
+static esp_err_t on_http_open(httpd_handle_t hd, int sockfd)
+{
+    (void)hd; (void)sockfd;
+    web_activity();
+    return ESP_OK;
+}
+/* Called from the UI: true once the screen has been off for a while. While
+   asleep the UI calls this every tick, which also ends the web-use minute. */
 void lf_network_set_idle(bool idle)
 {
-    if (idle && (in_ap || atomic_load(&ota_busy))) return;
-    const bool previous=atomic_exchange(&wifi_idle_requested,idle);
-    if(previous!=idle)atomic_store(&wifi_retry_after_ms,0);
-    if (idle == atomic_load(&wifi_radio_suspended)) return;
-    const uint32_t now=(uint32_t)(esp_timer_get_time()/1000LL);
-    if((int32_t)(now-atomic_load(&wifi_retry_after_ms))<0)return;
-    if (!atomic_exchange(&wifi_worker_running, true)) {
-        if (xTaskCreate(wifi_idle_worker, "lf_wifi_idle", 3072, NULL, 4, NULL) != pdPASS)
-            atomic_store(&wifi_worker_running, false);
-    }
+    atomic_store(&wifi_idle_requested, idle);
+    wifi_power_apply();
 }
 
 
 const char *lf_network_wifi_power_state(void)
 {
     if(in_ap)return "setup_ap";
-    if(atomic_load(&wifi_radio_suspended))return "screen_off_radio_off";
-    return atomic_load(&wifi_worker_running)?"radio_transition":"radio_on";
+    return atomic_load(&wifi_ps_applied)==(int)WIFI_PS_MAX_MODEM?"screen_off_low_power":"radio_on";
 }
 uint32_t lf_network_radio_sleep_cycles(void)
 {
@@ -287,7 +275,9 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     if(base==WIFI_EVENT && id==WIFI_EVENT_STA_DISCONNECTED && !in_ap) {
         xEventGroupClearBits(connected_event, LF_CONNECTED);
         strlcpy(address, "Offline", sizeof(address));
-        if (!atomic_load(&wifi_radio_suspended) && !atomic_load(&wifi_idle_requested)) esp_wifi_connect();
+        /* 1.1.1: Wi-Fi stays up with the screen off, so always reconnect. */
+        (void)wifi_radio_suspended;
+        esp_wifi_connect();
     }
     if(base==IP_EVENT && id==IP_EVENT_STA_GOT_IP) {
         const ip_event_got_ip_t *got=(const ip_event_got_ip_t *)data;
@@ -316,6 +306,7 @@ static esp_err_t handle_firmware_page(httpd_req_t *req)
 static esp_err_t send_json(httpd_req_t *req, cJSON *root)
 {
     if (!root) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
+    web_activity();
     char *body = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (!body) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No memory");
@@ -996,6 +987,77 @@ static esp_err_t handle_song_token(httpd_req_t *req)
     if(!reply)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
     cJSON_AddBoolToObject(reply,"configured",lf_recog_has_token());
     return send_json(req,reply);
+}
+/* ---------- 1.1.1 settings backup ---------- */
+static esp_err_t backup_reply_and_restart(httpd_req_t *req, int restored)
+{
+    if(restored<=0)
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,
+            restored<0?"That is not a LyricFlash settings backup":"The backup held no settings");
+    char body[96];
+    snprintf(body,sizeof body,"{\"restored\":%d,\"restarting\":true}",restored);
+    httpd_resp_set_type(req,"application/json");
+    httpd_resp_sendstr(req,body);
+    xTaskCreate(reboot_task,"lf_reboot",2048,NULL,3,NULL);
+    return ESP_OK;
+}
+static esp_err_t handle_backup_download(httpd_req_t *req)
+{
+    char *text=lf_backup_export();
+    if(!text)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Could not read settings");
+    web_activity();
+    httpd_resp_set_type(req,"application/json");
+    httpd_resp_set_hdr(req,"Cache-Control","no-store");
+    httpd_resp_set_hdr(req,"Content-Disposition","attachment; filename=\"lyricflash-settings.json\"");
+    const esp_err_t r=httpd_resp_sendstr(req,text);
+    memset(text,0,strlen(text));
+    free(text);
+    return r;
+}
+static esp_err_t handle_backup_status(httpd_req_t *req)
+{
+    char version[33]={0};
+    const bool have=lf_backup_device_info(version,sizeof version);
+    cJSON *reply=cJSON_CreateObject();
+    if(!reply)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    cJSON_AddBoolToObject(reply,"device_backup",have);
+    cJSON_AddStringToObject(reply,"device_backup_firmware",version);
+    return send_json(req,reply);
+}
+static esp_err_t handle_backup_device_save(httpd_req_t *req)
+{
+    if(!manual_audio_header(req))
+        return httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Manual action required");
+    if(!lf_backup_device_save())
+        return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,
+            "Could not save on the device. Download a backup file instead.");
+    return httpd_resp_sendstr(req,"{\"saved\":true}");
+}
+static esp_err_t handle_backup_device_restore(httpd_req_t *req)
+{
+    if(!manual_audio_header(req))
+        return httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Manual action required");
+    return backup_reply_and_restart(req,lf_backup_device_restore());
+}
+static esp_err_t handle_backup_upload(httpd_req_t *req)
+{
+    if(!manual_audio_header(req))
+        return httpd_resp_send_err(req,HTTPD_403_FORBIDDEN,"Manual action required");
+    if(req->content_len<20||req->content_len>96*1024)
+        return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Backup file is empty or too large");
+    char *body=heap_caps_calloc(1,(size_t)req->content_len+1U,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(!body)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"No memory");
+    int got=0,retries=0;
+    while(got<req->content_len){
+        const int n=httpd_req_recv(req,body+got,req->content_len-got);
+        if(n==HTTPD_SOCK_ERR_TIMEOUT && ++retries<4)continue;
+        if(n<=0)break;
+        retries=0;got+=n;
+    }
+    const int restored=got==req->content_len?lf_backup_import(body):-1;
+    memset(body,0,(size_t)req->content_len);
+    heap_caps_free(body);
+    return backup_reply_and_restart(req,restored);
 }
 /* ---------- 1.1.0 Spotify link ---------- */
 static bool read_small_json(httpd_req_t *req, char *body, size_t cap)
@@ -1889,11 +1951,12 @@ static bool serve(void)
 {
     httpd_config_t cfg=HTTPD_DEFAULT_CONFIG();
     cfg.server_port=80; cfg.stack_size=8192;
-    cfg.max_uri_handlers=40; /* 1.1.0: Spotify link routes */
+    cfg.max_uri_handlers=48; /* 1.1.1: settings backup routes */
     cfg.recv_wait_timeout=15; cfg.send_wait_timeout=15;
     /* 1.0.4: phones probing a captive portal open several connections at
        once; allow more and recycle the oldest idle one instead of refusing. */
     cfg.max_open_sockets=10; cfg.lru_purge_enable=true;
+    cfg.open_fn=on_http_open;
     if(httpd_start(&server,&cfg)!=ESP_OK) return false;
     const httpd_uri_t routes[]={
         {.uri="/",.method=HTTP_GET,.handler=handle_home},
@@ -1928,7 +1991,12 @@ static bool serve(void)
         {.uri="/api/spotify/client",.method=HTTP_POST,.handler=handle_spotify_client},
         {.uri="/api/spotify/link",.method=HTTP_POST,.handler=handle_spotify_link},
         {.uri="/api/spotify/unlink",.method=HTTP_POST,.handler=handle_spotify_unlink},
-        {.uri="/spotify/callback",.method=HTTP_GET,.handler=handle_spotify_callback}
+        {.uri="/spotify/callback",.method=HTTP_GET,.handler=handle_spotify_callback},
+        {.uri="/api/backup",.method=HTTP_GET,.handler=handle_backup_download},
+        {.uri="/api/backup",.method=HTTP_POST,.handler=handle_backup_upload},
+        {.uri="/api/backup/status",.method=HTTP_GET,.handler=handle_backup_status},
+        {.uri="/api/backup/device/save",.method=HTTP_POST,.handler=handle_backup_device_save},
+        {.uri="/api/backup/device/restore",.method=HTTP_POST,.handler=handle_backup_device_restore}
     };
     for(size_t i=0;i<sizeof(routes)/sizeof(routes[0]);i++)
         if(httpd_register_uri_handler(server,&routes[i])!=ESP_OK) return false;

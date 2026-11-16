@@ -120,9 +120,12 @@ static int https_call(const char *url, const char *bearer, const char *form,
     const int len = form ? (int)strlen(form) : 0;
     if (form) esp_http_client_set_header(c, "Content-Type", "application/x-www-form-urlencoded");
     if (esp_http_client_open(c, len) != ESP_OK) goto done;
+    /* The request is on the wire from here; Spotify measures the playback
+       position somewhere between now and the reply. */
+    const uint64_t sent_ms = now_ms();
     if (len && esp_http_client_write(c, form, len) != len) goto done;
     (void)esp_http_client_fetch_headers(c);
-    if (received_ms) *received_ms = now_ms();
+    if (received_ms) *received_ms = sent_ms + (now_ms() - sent_ms) / 2U;
     status = esp_http_client_get_status_code(c);
     if (out && cap) {
         const int n = esp_http_client_read_response(c, out, (int)cap - 1);

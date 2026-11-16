@@ -4179,10 +4179,25 @@ static void ui_label_set_text_if_changed(lv_obj_t *obj,const char *text)
     if(obj && strcmp(lv_label_get_text(obj),text)!=0)
         lv_label_set_text(obj,text);
 }
+/* 1.1.1 PWR button: a tap sleeps or wakes the screen (touch also wakes);
+   holding it 1.5 s powers the device off. */
+static void power_key_tick(void)
+{
+    const int key=lf_power_take_key_event();
+    if(key==2){
+        timed_profile_save_if_dirty();
+        bsp_display_brightness_set(0);
+        lf_power_off();
+    }else if(key==1){
+        if(asleep)on_wake(NULL);
+        else sleep_display();
+    }
+}
 static void on_tick_body(lv_timer_t *timer)
 {
     (void)timer;
     uint64_t current = now_ms();
+    power_key_tick();
     if (last_ui_tick_ms && current > last_ui_tick_ms) {
         uint64_t gap = current - last_ui_tick_ms;
         if (gap > max_ui_tick_gap_ms) max_ui_tick_gap_ms = (uint32_t)gap;

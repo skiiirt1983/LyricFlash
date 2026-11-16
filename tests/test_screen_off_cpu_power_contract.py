@@ -40,7 +40,7 @@ assert "lv_timer_resume(clock_sweep_timer);" in ui
 assert 'cJSON_AddStringToObject(root, "cpu_power_profile", lf_power_cpu_profile_state());' in net
 assert "lf_power_cpu_profile_state(void);" in h
 assert 'return "fixed_240";' in p and '"awake_240":"screen_off_dfs_80"' in p
-assert "esp_wifi_set_ps(" not in net
+assert net.count("esp_wifi_set_ps(")==1  # 1.1.1 modem sleep, see test_wifi_sleep_grace_contract
 assert "nvs_flash_erase" not in main
 assert "esp_deep_sleep_start();" in ui
 assert ".light_sleep_enable=true" not in p

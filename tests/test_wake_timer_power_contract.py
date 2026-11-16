@@ -20,6 +20,7 @@ assert "if(sleep_overlay){" in tick and "if(!ui_pointer_is_down() && !wake_clean
 assert "lv_timer_create(on_tick, 50, NULL);" in ui
 assert "lv_indev_get_state(wake)==LV_INDEV_STATE_PRESSED" in ui
 assert "bsp_display_brightness_set(asleep ? 1 : prefs->brightness)" in ui
-assert "esp_wifi_set_ps(" not in network
+# 1.1.1: modem sleep replaces stopping the radio; only wifi_power_apply sets it.
+assert network.count("esp_wifi_set_ps(")==1 and "WIFI_PS_MAX_MODEM" in network
 assert "lf_power_read(&sample)" in power
 print("PASS: 0.8.72 clock timer pause/resume keeps 0.8.71 touch-release wake lifecycle")
