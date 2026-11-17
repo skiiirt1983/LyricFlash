@@ -123,7 +123,7 @@ Mix of C host tests, Python "contract" tests that read source files, and Node te
 | `diagnostics.c` | Error log ring and the `/api/diagnostics` data. |
 | `web_device_html.h`, `web_basic_html.h`, `web_weather_html.h` | The three web apps (home/settings/firmware, Clock Studio, Weather). |
 
-Other folders: `components/esp32_s3_touch_amoled_1_75/` (vendored display/touch/audio board package, heavily modified), `tools/` (release packaging and validation scripts), `docs/` (the GitHub Pages site), `notes/` (old alpha-era test notes, not published), `tests/`.
+Other folders: `enclosure/` (the 3D-printed case, see section 13), `components/esp32_s3_touch_amoled_1_75/` (vendored display/touch/audio board package, heavily modified), `tools/` (release packaging and validation scripts), `docs/` (the GitHub Pages site), `notes/` (old alpha-era test notes, not published), `tests/`.
 
 ---
 
@@ -220,7 +220,12 @@ The 0.8.x series was a long fight with choppy swipes, black flashes and freezes.
    - **Flashing without BOOT:** idea, not built: a "USB flash mode" action (Device Settings and web page) that restarts the chip into the ROM download mode (set the force-download-boot bit, `esp_restart()`), so reinstalling never needs the BOOT button. Needing BOOT usually means the running firmware is crashing or sleeping while the flasher connects; it was never diagnosed on that board. The Basecamp bootloader would need the same.
    - **Quieter microphone:** unconfirmed whether sensitivity or channel mapping. Next step is the diagnostics numbers `microphone_pcm_mic1_rms/mic2_rms/peak` during music. Idea: a "Microphone sensitivity" setting (gain currently fixed at 27 dB). Less important now that Spotify is the main path.
    - Confirm LyricFlash runs and stays up on it (unknown).
-2. **Case:** the owner is redesigning the case (branch `claude/loving-heisenberg-n1judx` holds the Python-generated enclosure work in its `enclosure/` folder: a finger-pressable PWR button, no slide switch). Firmware side is done for the PWR button.
+2. **Case (3D-printed enclosure):** lives in `enclosure/` on `main` (published 2026-11-17; the owner maintains it directly from now on). Start with
+   `enclosure/CLAUDE.md` (its own handoff notes), then `README.md`, `DESIGN_RULES.md`, `CHANGELOG.md`. Current design v11i: printed PWR
+   flexure button with an engraved power symbol (firmware side is done: tap = sleep/wake, hold = power off), Bambu P2S print projects
+   with hand-painted USB supports, assembly guide (PDF), BOM (xlsx), MakerWorld covers (`enclosure/makerworld/`). The owner confirmed the
+   v11h bases print and work ("everything is perfect"); the engraving and the painted-support projects are not printed yet. The enclosure
+   has its own Python/CadQuery toolchain (`enclosure/requirements.txt`) and does not touch the firmware build (CI ignores `enclosure/**`).
 3. **True panel sleep** (put the CO5300 in its real sleep mode instead of zero brightness) for longer standby: candidate for a later release; the screen-off/wake path is where the old black-screen bugs lived, so test it on its own.
 4. **Standby battery with Wi-Fi on** is unmeasured; send a morning diagnostics (`battery_percent`, `uptime_seconds`, `wifi_radio_state`, `cpu_power_profile`).
 5. Old `alpha-build-*` prereleases still exist (they are how the updater finds builds; keep recent ones). Old releases still carry the previous history's credits; the owner chose not to scrub GitHub.
