@@ -57,10 +57,19 @@ def main():
         shutil.copy(STL / f"{nm}.stl", OUT / "stl_pla" / f"{nm}.stl")
         pl = [dict(name=nm, mesh=trimesh.load(STL / f"{nm}.stl"), material="black", plate_name=plate)]
         write_3mf_plates([pl], OUT / "3mf_per_plate_pla" / f"{nm}.3mf", bambu_app=False)
+    # the same plates with the PLA bases (shell and carrier unchanged): one multi-plate project
+    plates_pla = [[meshes["top_shell.stl"]]] + [[dict(name=nm, mesh=trimesh.load(STL / f"{nm}.stl"), material="black", plate_name=pl)]
+                                                for nm, pl in PLA.items()] + [[meshes["carrier_plate.stl"]]]
+    write_3mf_plates(plates_pla, OUT / "lyricflash_print_plates_PLA.3mf")
+    from lfcase import bambu3mf
+    for f in ("lyricflash_print_plates.3mf", "lyricflash_print_plates_PLA.3mf"):
+        problems = bambu3mf.check_plates(OUT / f)
+        print(f, "plates check:", "OK" if not problems else problems)
     shutil.copy(HERE / "PHASE2_CHECKLIST.md", OUT / "PHASE2_CHECKLIST.md")
     (OUT / "README.txt").write_text(
         "LyricFlash case - print pack\n\n"
         "lyricflash_print_plates.3mf: one Bambu Studio project, one plate per print\n"
+        "lyricflash_print_plates_PLA.3mf: the same with the six PLA bases\n"
         "(if it opens as a single plate, use the files in 3mf_per_plate/ instead):\n"
         "  1 top shell (filament 1, Iridium Gold PLA Metal), face-down\n"
         "  2-4 base with the cable cleat on the back: ribbed, panels, smooth\n"

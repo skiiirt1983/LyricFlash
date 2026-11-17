@@ -784,3 +784,6 @@ RIM_DROP_SIDES = ("x+", "y-")        # no rim on the right and the front; the le
 #   90 (back flex fold) and 270 (front flex fold, 1.8: folds stick out further than the STEP) as before;
 #   0 = the right: SD card tab at Y -7.8..8.3 (STEP). The shell's wall is only ~1.8 thick there, so 0.6 deep keeps 1.0 of skin (bore is 24.83, outer wall 26.43).
 FOLD_RELIEFS = ((90.0, 16.0, 1.2), (270.0, 16.0, 1.8), (0.0, 17.5, 0.6))
+
+# ---- C13 pilot gauge result (Paul, 2026-11-17): the hole with 4 notches (2.5 mm) was best. (C12 coupon, pilot 2.4: "perfect".)
+POST_PILOT_D = 2.5

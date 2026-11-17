@@ -256,6 +256,9 @@ def write_3mf_plates(plates: list, path: Path, bed=BED, bambu_app=True):
     every object's lowest point is exactly z = 0 (Bambu merges objects otherwise).
     bambu_app: tag the file as written by Bambu Studio; its importer only reads plate assignments from
     model_settings.config for such files (Paul's test: an untagged file opened as one plate)."""
+    if len(plates) > 1:                       # multi-plate files: see lfcase/bambu3mf.py (this writer made ONE plate in Bambu Studio)
+        from lfcase import bambu3mf
+        return bambu3mf.write_plates(plates, path, bed)
     import math
     n = len(plates)
     v = math.sqrt(n)

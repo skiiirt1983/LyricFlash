@@ -1,5 +1,16 @@
 # Enclosure changelog
 
+## Phase 2 v11g (2026-11-17)
+- Paul's results: **C13 pilot gauge: the 2.5 mm hole (4 notches) was best** -> `POST_PILOT_D = 2.5` (the funnel stays). **C12
+  coupon (plate + posts, 3.6 mm round front hole, pilot 2.4): perfect**, so the carrier plate stays as it is.
+- **Multi-plate .3mf fixed.** Bambu Studio opened the print packs as one plate with the objects scattered round it (Paul's
+  screenshot). New `lfcase/bambu3mf.py` writes the structure of the file Paul fixed in Bambu Studio 02.09.01.70 (production-
+  extension objects, full `<plate>` blocks with `identify_id`, assemble list, his project profile and project info text from
+  `assets/bambu_template/`); `write_3mf_plates` now delegates every multi-plate file to it; `check_plates()` verifies the result.
+  Tested by rebuilding his 8-plate file from its own meshes: same structure, same plate positions. Not opened in Bambu Studio
+  from here. The project text no longer lists the slide switch. New: `lyricflash_print_plates_PLA.3mf` (shell, six PLA bases,
+  plate). Notes for next time are in `CLAUDE.md`.
+
 ## Phase 2 v11d-f (2026-11-16)
 - **Base pilot holes were too small** (Paul: with the front screw in, the back one wouldn't start; he had to tap each screw in
   by hand first). Printed holes come out ~0.2 smaller than modelled. Pilot 2.2 -> **2.4 mm** with a **45 deg funnel** at the
